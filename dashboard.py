@@ -1,12 +1,15 @@
 import os
 from datetime import datetime
 import db
+from screening import classify_company_tier
 
 def generate_dashboard():
     db.init_db()
     
     # Retrieve jobs
-    shortlisted = db.get_shortlisted_jobs()
+    all_shortlisted = db.get_shortlisted_jobs()
+    shortlisted = [j for j in all_shortlisted if not classify_company_tier(j['company']).startswith("Tier 3")]
+    suppressed_unverified = len(all_shortlisted) - len(shortlisted)
     applied = db.get_applied_jobs()
     
     # Count stats
@@ -26,23 +29,8 @@ def generate_dashboard():
     strong_matches = [j for j in shortlisted if j['score'] >= 85]
     possible_matches = [j for j in shortlisted if j['score'] < 85]
 
-    # Known enterprise list for heuristic tiering
-    known_enterprises = ["novartis", "qualcomm", "munich re", "dhl", "infosys", "ust", "indium", "stripe", "amazon", "google", "microsoft", "oracle", "accenture", "tcs", "wipro", "cognizant", "capgemini", "ibm", "nuvama", "idfc", "morningstar", "solventum", "ixigo"]
-    known_agencies = [
-        "zepcruit", "hiringhood", "principle pride", "top gen ai jobs", "minute sourcing", 
-        "codepillars", "rediente", "talent", "staffing", "consulting", "services", "workforce", 
-        "recruit", "rytloop", "genesect", "rythiring", "absolutehub", "tasks expert", "zenithbyte",
-        "nexal iit", "sparks to ideas", "sourcing", "uplers", "dasp digital", "zerotwo", "solution",
-        "technologies pvt", "it private limited", "tech pvt", "jansoft"
-    ]
-
     def categorize_tier(job):
-        comp = (job['company'] or '').strip().lower()
-        if not comp or comp in ["none", "confidential", "private limited", "company name"] or any(a in comp for a in known_agencies):
-            return "Tier 3: Staffing Agency / Unverified"
-        if any(e in comp for e in known_enterprises):
-            return "Tier 2: Global Enterprise / IT Services"
-        return "Tier 1: Product Company / AI Startup"
+        return classify_company_tier(job['company'])
 
     # Separate Strong Matches by Tier
     tier1_strong = [j for j in strong_matches if categorize_tier(j) == "Tier 1: Product Company / AI Startup"]
@@ -61,6 +49,7 @@ def generate_dashboard():
   - 📋 **Tier 3 (Other / Staffing Agencies)**: {len(tier3_strong)}
 - **Applied Positions**: {total_applied}
 - **Rejected/Unfit Roles**: {total_rejected}
+- **Suppressed Unverified Shortlists**: {suppressed_unverified}
 
 ---
 

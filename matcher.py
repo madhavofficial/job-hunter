@@ -5,6 +5,7 @@ import sys
 from groq import Groq
 import db
 import config
+from screening import classify_company_tier, deterministic_hard_filter
 
 def load_resume():
     resume_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resume.md")
@@ -58,7 +59,24 @@ def run_matcher():
         print("No new unprocessed jobs found.")
         return
         
-    print(f"Found {len(unprocessed)} unprocessed jobs. Initializing Groq client...")
+    print(f"Found {len(unprocessed)} unprocessed jobs. Applying deterministic safeguards...")
+
+    eligible = []
+    prefiltered_count = 0
+    for job in unprocessed:
+        passes, reason = deterministic_hard_filter(job)
+        if passes:
+            eligible.append(job)
+            continue
+        db.update_job_match(job['job_id'], 0, "rejected", "", f"REJECTED: {reason}")
+        prefiltered_count += 1
+
+    if not eligible:
+        print(f"Deterministic safeguards rejected {prefiltered_count} jobs; no LLM matching required.")
+        return
+    unprocessed = eligible
+    print(f"Deterministic safeguards rejected {prefiltered_count}; sending {len(unprocessed)} jobs to the LLM.")
+    print("Initializing Groq client...")
     
     # Init Groq client
     # Groq API key is loaded from .env automatically if python-dotenv is used or we can load it manually
@@ -201,14 +219,17 @@ Description:
             result = json.loads(result_json)
             
             passes = result.get("passes_hard_filters", False)
-            score = result.get("compatibility_score", 0)
+            try:
+                score = max(0, min(100, int(result.get("compatibility_score", 0))))
+            except (TypeError, ValueError):
+                score = 0
             rejection_reason = result.get("rejection_reason", "")
-            company_tier = result.get("company_tier", "")
+            company_tier = classify_company_tier(company)
             evidence = result.get("evidence", [])
             notes = result.get("matching_notes", "")
             
             # If identified as an unverified/staffing agency or anonymous poster, reject immediately
-            if "Tier 3" in company_tier:
+            if company_tier.startswith("Tier 3"):
                 passes = False
                 rejection_reason = rejection_reason or "Identified as recruitment/staffing agency or unverified training consultancy."
             
