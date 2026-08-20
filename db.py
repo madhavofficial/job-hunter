@@ -84,10 +84,43 @@ def add_jobs(df: pd.DataFrame):
             if cursor.fetchone():
                 continue
 
-        # 3. Check duplicate (title + company) posted within the active database to prevent repost duplicates
+        # 3. Check duplicate (title + company) posted within the active database to prevent repost duplicates.
+        # Prefer a direct ATS record over an aggregator record when both describe the
+        # same role, so the pipeline keeps the canonical apply URL and description.
         if title and company and company.lower() not in ["none", ""]:
-            cursor.execute("SELECT 1 FROM jobs WHERE lower(title) = lower(?) AND lower(company) = lower(?)", (title, company))
-            if cursor.fetchone():
+            cursor.execute(
+                "SELECT job_id, site, status FROM jobs "
+                "WHERE lower(title) = lower(?) AND lower(company) = lower(?) LIMIT 1",
+                (title, company),
+            )
+            duplicate = cursor.fetchone()
+            if duplicate:
+                incoming_site = str(row.get('site', ''))
+                existing_site = str(duplicate['site'] or '')
+                if incoming_site.startswith('ats:') and not existing_site.startswith('ats:'):
+                    cursor.execute("""
+                    UPDATE jobs
+                    SET site = ?, job_url = ?, job_url_direct = ?, location = ?,
+                        date_posted = ?, job_type = ?, description = ?, is_remote = ?,
+                        skills = ?, experience_range = ?,
+                        status = CASE WHEN status = 'applied' THEN status ELSE 'scraped' END,
+                        score = CASE WHEN status = 'applied' THEN score ELSE 0 END,
+                        evidence = CASE WHEN status = 'applied' THEN evidence ELSE '' END,
+                        matching_notes = CASE WHEN status = 'applied' THEN matching_notes ELSE '' END
+                    WHERE job_id = ?
+                    """, (
+                        incoming_site,
+                        job_url,
+                        job_url_direct,
+                        row.get('location', ''),
+                        str(row.get('date_posted', '')),
+                        row.get('job_type', ''),
+                        row.get('description', ''),
+                        int(row.get('is_remote', 0)) if pd.notna(row.get('is_remote')) else 0,
+                        row.get('skills', ''),
+                        row.get('experience_range', ''),
+                        duplicate['job_id'],
+                    ))
                 continue
         
         # Insert

@@ -21,15 +21,18 @@ export PYTHONUNBUFFERED=1
 export JOB_HUNTER_RUN_STARTED_UTC="$(date -u '+%Y-%m-%d %H:%M:%S')"
 
 # Execute step 1: Scraping/Collection
-echo "Step 1: Running Job Collector..."
+echo "Step 1: Discovering direct ATS listings..."
+python ats_collector.py
+
+echo "Step 2: Running Job Collector..."
 python collector.py 15 72
 
-# Execute step 2: Matching
-echo "Step 2: Running Resume Matcher..."
+# Execute step 3: Matching
+echo "Step 3: Running Resume Matcher..."
 python matcher.py
 
-# Execute step 3: Generating Dashboard
-echo "Step 3: Generating Dashboard..."
+# Execute step 4: Generating Dashboard
+echo "Step 4: Generating Dashboard..."
 python dashboard.py
 
 echo "========================================="
