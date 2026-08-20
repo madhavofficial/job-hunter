@@ -1,9 +1,15 @@
 import unittest
 
 from screening import classify_company_tier, deterministic_hard_filter
+from collector import SUPPORTED_INDIA_SITES
 
 
 class ScreeningTests(unittest.TestCase):
+    def test_india_sources_exclude_unsupported_boards(self):
+        self.assertEqual(SUPPORTED_INDIA_SITES, ("indeed", "linkedin"))
+        self.assertNotIn("glassdoor", SUPPORTED_INDIA_SITES)
+        self.assertNotIn("zip_recruiter", SUPPORTED_INDIA_SITES)
+
     def test_rejects_senior_title(self):
         ok, reason = deterministic_hard_filter({"title": "Senior AI Engineer", "company": "Acme"})
         self.assertFalse(ok)

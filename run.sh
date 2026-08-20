@@ -18,6 +18,7 @@ fi
 # Activate environment
 source .venv/bin/activate
 export PYTHONUNBUFFERED=1
+export JOB_HUNTER_RUN_STARTED_UTC="$(date -u '+%Y-%m-%d %H:%M:%S')"
 
 # Execute step 1: Scraping/Collection
 echo "Step 1: Running Job Collector..."

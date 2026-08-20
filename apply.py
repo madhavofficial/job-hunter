@@ -38,8 +38,12 @@ def main():
     print("====================================================")
     print("Step 1: Generating Tailored Resume & Cover Letter...")
     
-    # Call tailor_materials to generate the files and update status
-    resume_path, cl_path = tailor.tailor_materials(job_id)
+    # Generate materials; application status is set only after user confirmation.
+    materials = tailor.tailor_materials(job_id)
+    if materials and len(materials) == 4:
+        resume_path, cl_path, resume_pdf_path, cl_pdf_path = materials
+    else:
+        resume_path = cl_path = resume_pdf_path = cl_pdf_path = None
     
     if not resume_path or not cl_path:
         print("Error: Failed to generate tailored materials. Aborting.", file=sys.stderr)
@@ -48,6 +52,8 @@ def main():
     print("\nStep 2: Review generated files:")
     print(f"-> Tailored Resume:      file://{resume_path}")
     print(f"-> Tailored Cover Letter: file://{cl_path}")
+    print(f"-> ATS Resume PDF:       file://{resume_pdf_path}")
+    print(f"-> Cover Letter PDF:     file://{cl_pdf_path}")
     print("====================================================")
     
     input("Press [Enter] to open the application form in your default browser and finalize tracking... ")
@@ -58,6 +64,23 @@ def main():
     else:
         print("Warning: No target URL available to open.")
         
+    print("\nDid you submit the application? [Y]es (mark as applied) / [S]kip / [E]xpired:")
+    while True:
+        answer = input("> ").strip().lower()
+        if answer in {"y", "s", "e"}:
+            break
+        print("Please enter Y, S, or E.")
+
+    if answer == "y":
+        db.mark_as_applied(job_id, resume_path, cl_path, resume_pdf_path, cl_pdf_path)
+        status_message = "Application marked as applied."
+    elif answer == "e":
+        db.mark_as_rejected(job_id)
+        status_message = "Listing marked as rejected (expired)."
+    else:
+        db.mark_as_shortlisted(job_id)
+        status_message = "Application skipped; job remains shortlisted."
+
     print("\n====================================================")
     print("🎉 Action Checklist:")
     print(f"1. A browser window was opened to apply for '{title}' at '{company}'.")
@@ -65,7 +88,7 @@ def main():
     print(f"   {resume_path}")
     print(f"3. Copy-paste your tailored cover letter from:")
     print(f"   {cl_path}")
-    print(f"4. The job status has been updated to 'applied' in your SQLite DB.")
+    print(f"4. {status_message}")
     print("====================================================")
 
 if __name__ == "__main__":

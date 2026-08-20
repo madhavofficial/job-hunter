@@ -5,6 +5,8 @@ import db
 
 import os
 import re
+import random
+import time
 
 DEFAULT_SEARCH_TERMS = [
     "Software Engineer Intern",
@@ -18,6 +20,12 @@ DEFAULT_SEARCH_TERMS = [
     "FastAPI Developer",
     "Associate Software Engineer"
 ]
+
+# JobSpy's Glassdoor adapter cannot resolve the country-wide "India" location
+# used by this pipeline, and its ZipRecruiter adapter only supports US/Canada.
+# Keep the source list explicit so unsupported boards do not generate noisy,
+# predictable failures on every query.
+SUPPORTED_INDIA_SITES = ("indeed", "linkedin")
 
 def get_dynamic_search_terms():
     """Dynamically parses resume.md to build relevant search queries based on the candidate's active stack and career objective."""
@@ -71,14 +79,13 @@ def run_collector(limit_per_query=15, hours_old=72):
     
     print(f"Starting job collection for the last {hours_old} hours...")
     
-    # We scrape indeed and zip_recruiter. Glassdoor and LinkedIn can be included 
-    # but we handle potential rate limiting/blocking gracefully by trying them opportunistically.
-    sites = ["indeed", "zip_recruiter", "glassdoor", "linkedin"]
+    sites = list(SUPPORTED_INDIA_SITES)
+    print(f"Using India-compatible sources: {', '.join(sites)}")
     
     search_terms = get_dynamic_search_terms()
     print(f"Loaded {len(search_terms)} dynamic search queries derived from your resume profile.")
     
-    for term in search_terms:
+    for index, term in enumerate(search_terms):
         print(f"\nSearching for: '{term}' in India...")
         try:
             # We call scrape_jobs. If LinkedIn or another site blocks, jobspy might throw an exception 
@@ -118,6 +125,9 @@ def run_collector(limit_per_query=15, hours_old=72):
                     print(f"-> [Fallback] Found {len(jobs)} jobs. Inserted {new_count} new unique jobs.")
             except Exception as fallback_err:
                 print(f"-> [Fallback Error] Failed: {fallback_err}", file=sys.stderr)
+
+        if index < len(search_terms) - 1:
+            time.sleep(random.uniform(2.5, 5.5))
 
     print(f"\nJob collection complete. Total new unique jobs stored: {total_new_jobs}")
     return total_new_jobs

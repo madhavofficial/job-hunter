@@ -34,6 +34,9 @@ def fetch_description_from_web(url, site):
                 url = f"https://www.linkedin.com/jobs/view/{match.group(1)}"
             
             res = requests.get(url, headers=headers, timeout=10)
+            if res.status_code in {401, 403, 429} or any(marker in res.text.lower() for marker in ("authwall", "captcha", "challenge")):
+                print(f"Warning: LinkedIn description unavailable ({res.status_code}); continuing without it.", file=sys.stderr)
+                return None
             if res.status_code == 200:
                 soup = BeautifulSoup(res.text, 'html.parser')
                 desc_div = soup.find(class_="show-more-less-html__markup")
@@ -41,6 +44,10 @@ def fetch_description_from_web(url, site):
                     desc_div = soup.find(class_="description__text")
                 if desc_div:
                     return desc_div.get_text(separator="\n").strip()
+                # If description container is missing but page loaded, check for closed/recommendation signs
+                page_text = soup.get_text().lower()
+                if "show more jobs like this" in page_text or "similar jobs" in page_text or "no longer accepting applications" in page_text:
+                    return "EXPIRED_OR_CLOSED"
     except Exception as e:
         print(f"Warning: Failed to fetch description from {url}: {e}", file=sys.stderr)
     return None
@@ -159,7 +166,17 @@ You MUST respond with a JSON object. Use the following structure:
         if not description:
             print(f"Description empty for '{title}' at '{company}'. Fetching from web...")
             fetched_desc = fetch_description_from_web(job_url, site)
-            if fetched_desc:
+            if fetched_desc == "EXPIRED_OR_CLOSED":
+                print(f"-> REJECTED: Listing closed / expired on {site.upper()}.")
+                db.update_job_match(
+                    job_id=job_id,
+                    score=0,
+                    status="rejected",
+                    evidence="",
+                    matching_notes=f"REJECTED: Listing is closed / no longer accepting applications on {site.upper()}."
+                )
+                continue
+            elif fetched_desc:
                 description = fetched_desc
                 # Update in DB
                 conn = db.get_db_connection()

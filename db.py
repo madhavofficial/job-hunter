@@ -33,9 +33,18 @@ def init_db():
         matching_notes TEXT,
         tailored_resume_path TEXT,
         tailored_cover_letter_path TEXT,
+        tailored_resume_pdf_path TEXT,
+        tailored_cover_letter_pdf_path TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """)
+    # Add columns when upgrading an existing local database created by an older version.
+    for column in ("tailored_resume_pdf_path", "tailored_cover_letter_pdf_path"):
+        try:
+            cursor.execute(f"ALTER TABLE jobs ADD COLUMN {column} TEXT")
+        except sqlite3.OperationalError as exc:
+            if "duplicate column name" not in str(exc).lower():
+                raise
     conn.commit()
     conn.close()
 
@@ -148,14 +157,32 @@ def get_applied_jobs():
     conn.close()
     return [dict(r) for r in rows]
 
-def mark_as_applied(job_id: str, tailored_resume_path: str = None, tailored_cover_letter_path: str = None):
+def store_tailored_materials(job_id: str, tailored_resume_path: str, tailored_cover_letter_path: str,
+                             tailored_resume_pdf_path: str, tailored_cover_letter_pdf_path: str):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+    UPDATE jobs
+    SET tailored_resume_path = ?, tailored_cover_letter_path = ?,
+        tailored_resume_pdf_path = ?, tailored_cover_letter_pdf_path = ?
+    WHERE job_id = ?
+    """, (tailored_resume_path, tailored_cover_letter_path, tailored_resume_pdf_path,
+          tailored_cover_letter_pdf_path, job_id))
+    conn.commit()
+    conn.close()
+
+
+def mark_as_applied(job_id: str, tailored_resume_path: str = None, tailored_cover_letter_path: str = None,
+                    tailored_resume_pdf_path: str = None, tailored_cover_letter_pdf_path: str = None):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
     UPDATE jobs 
-    SET status = 'applied', tailored_resume_path = ?, tailored_cover_letter_path = ?
+    SET status = 'applied', tailored_resume_path = ?, tailored_cover_letter_path = ?,
+        tailored_resume_pdf_path = ?, tailored_cover_letter_pdf_path = ?
     WHERE job_id = ?
-    """, (tailored_resume_path, tailored_cover_letter_path, job_id))
+    """, (tailored_resume_path, tailored_cover_letter_path, tailored_resume_pdf_path,
+          tailored_cover_letter_pdf_path, job_id))
     conn.commit()
     conn.close()
 
@@ -167,5 +194,13 @@ def mark_as_rejected(job_id: str):
     SET status = 'rejected'
     WHERE job_id = ?
     """, (job_id,))
+    conn.commit()
+    conn.close()
+
+
+def mark_as_shortlisted(job_id: str):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE jobs SET status = 'shortlisted' WHERE job_id = ?", (job_id,))
     conn.commit()
     conn.close()

@@ -3,6 +3,7 @@ import sys
 from groq import Groq
 import db
 import config
+from pdf_utils import markdown_to_pdf
 
 def tailor_materials(job_id: str):
     db.init_db()
@@ -11,7 +12,7 @@ def tailor_materials(job_id: str):
     resume_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resume.md")
     if not os.path.exists(resume_path):
         print(f"Error: resume.md not found.", file=sys.stderr)
-        return None, None
+        return None
         
     with open(resume_path, "r", encoding="utf-8") as f:
         resume_text = f.read()
@@ -25,7 +26,7 @@ def tailor_materials(job_id: str):
     
     if not job:
         print(f"Error: Job ID {job_id} not found in database.", file=sys.stderr)
-        return None, None
+        return None
         
     title = job['title']
     company = job['company']
@@ -39,7 +40,7 @@ def tailor_materials(job_id: str):
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         print("Error: GROQ_API_KEY not found.", file=sys.stderr)
-        return None, None
+        return None
         
     client = Groq(api_key=api_key)
     model_name = config.get_best_model(client)
@@ -155,24 +156,32 @@ Please output the cover letter in Markdown.
         
         resume_filepath = os.path.join(tailored_dir, resume_filename)
         cl_filepath = os.path.join(tailored_dir, cl_filename)
+        resume_pdf_filepath = os.path.join(tailored_dir, f"{clean_company}_{clean_title}_Resume.pdf")
+        cl_pdf_filepath = os.path.join(tailored_dir, f"{clean_company}_{clean_title}_CoverLetter.pdf")
         
         with open(resume_filepath, "w", encoding="utf-8") as f:
             f.write(tailored_resume)
             
         with open(cl_filepath, "w", encoding="utf-8") as f:
             f.write(tailored_cl)
+
+        markdown_to_pdf(tailored_resume, resume_pdf_filepath)
+        markdown_to_pdf(tailored_cl, cl_pdf_filepath)
             
         print(f"-> Tailored Resume saved to: {resume_filepath}")
         print(f"-> Cover Letter saved to: {cl_filepath}")
+        print(f"-> ATS Resume PDF saved to: {resume_pdf_filepath}")
+        print(f"-> Cover Letter PDF saved to: {cl_pdf_filepath}")
         
-        # Update db
-        db.mark_as_applied(job_id, resume_filepath, cl_filepath)
+        # Store generated materials without claiming the application was submitted.
+        db.store_tailored_materials(job_id, resume_filepath, cl_filepath,
+                                    resume_pdf_filepath, cl_pdf_filepath)
         
-        return resume_filepath, cl_filepath
+        return resume_filepath, cl_filepath, resume_pdf_filepath, cl_pdf_filepath
         
     except Exception as e:
         print(f"Error generating tailored materials: {e}", file=sys.stderr)
-        return None, None
+        return None
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

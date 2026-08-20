@@ -2,3 +2,4 @@ python-jobspy==1.1.82
 groq==1.6.0
 python-dotenv==1.2.2
 pydantic==2.13.4
+reportlab==4.4.9

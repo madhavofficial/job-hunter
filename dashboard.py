@@ -1,4 +1,6 @@
 import os
+import subprocess
+import sys
 from datetime import datetime
 import db
 from screening import classify_company_tier
@@ -28,6 +30,13 @@ def generate_dashboard():
     # Sort shortlisted into Strong (>=85) and Possible (75-84)
     strong_matches = [j for j in shortlisted if j['score'] >= 85]
     possible_matches = [j for j in shortlisted if j['score'] < 85]
+
+    run_started = os.getenv("JOB_HUNTER_RUN_STARTED_UTC")
+    new_shortlisted = []
+    if run_started:
+        new_shortlisted = [j for j in shortlisted if (j['created_at'] or '') >= run_started]
+    new_tier1 = [j for j in new_shortlisted if classify_company_tier(j['company']) == "Tier 1: Product Company / AI Startup"]
+    new_tier2 = [j for j in new_shortlisted if classify_company_tier(j['company']) == "Tier 2: Global Enterprise / IT Services"]
 
     def categorize_tier(job):
         return classify_company_tier(job['company'])
@@ -177,7 +186,42 @@ def generate_dashboard():
         
     print(f"Latest Dashboard saved at: {dashboard_path}")
     print(f"Dated Archive saved at: {dated_path}")
+    send_macos_notification(len(new_shortlisted), len(new_tier1), len(new_tier2), dashboard_path)
     return dashboard_path
+
+
+def send_macos_notification(new_matches: int, tier1: int, tier2: int, dashboard_path: str):
+    """Show a native notification; failures never make the pipeline fail."""
+    title = "🎯 Job Hunter — Daily Report Ready"
+    message = f"Found {new_matches} new matches: {tier1} Tier-1 AI/Startups, {tier2} Tier-2 Enterprises"
+    if sys_platform_is_macos():
+        def applescript_escape(value):
+            return value.replace("\\", "\\\\").replace('"', '\\"')
+        script = (
+            f'display notification "{applescript_escape(message)}" '
+            f'with title "{applescript_escape(title)}" subtitle "Open dashboard.md: {applescript_escape(dashboard_path)}" '
+            'sound name "Glass"'
+        )
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", script], check=False, timeout=10,
+                capture_output=True, text=True,
+            )
+            if result.returncode:
+                detail = (result.stderr or result.stdout).strip().splitlines()
+                if detail:
+                    print(f"Warning: macOS notification unavailable: {detail[-1]}", file=sys.stderr)
+            if os.getenv("JOB_HUNTER_OPEN_DASHBOARD") == "1":
+                subprocess.run(["open", dashboard_path], check=False, timeout=10)
+        except (OSError, subprocess.SubprocessError) as exc:
+            print(f"Warning: macOS notification unavailable: {exc}", file=sys.stderr)
+    print(f"Daily report: {message}")
+    print(f"Open dashboard: file://{dashboard_path}")
+
+
+def sys_platform_is_macos():
+    import platform
+    return platform.system() == "Darwin"
 
 if __name__ == "__main__":
     generate_dashboard()
