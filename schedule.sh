@@ -1,25 +1,28 @@
 #!/bin/bash
+set -euo pipefail
 # ==============================================================================
 # Schedule Daily Job Hunter via macOS launchd
 # ==============================================================================
 
 PLIST_NAME="com.madhav.jobhunter.plist"
+LABEL="com.madhav.jobhunter"
 LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
 PLIST_PATH="$LAUNCH_AGENTS_DIR/$PLIST_NAME"
 PROJECT_DIR="/Users/madhavjayam/job-hunter"
 RUN_SCRIPT="$PROJECT_DIR/run.sh"
 LOG_DIR="$PROJECT_DIR/logs"
+USER_ID="$(id -u)"
 
-# Default time: 09:00 AM (Hour: 9, Minute: 0)
-HOUR=${1:-9}
-MINUTE=${2:-0}
+# Default time: 06:30 PM (Hour: 18, Minute: 30)
+HOUR=${1:-18}
+MINUTE=${2:-30}
 
 # Parse action if provided
 ACTION=${1:-"install"}
 
 if [ "$ACTION" == "uninstall" ] || [ "$ACTION" == "remove" ]; then
     echo "Uninstalling Job Hunter scheduled task..."
-    launchctl unload "$PLIST_PATH" 2>/dev/null || true
+    launchctl bootout "gui/$USER_ID/$LABEL" 2>/dev/null || true
     rm -f "$PLIST_PATH"
     echo "✓ Scheduled task removed successfully."
     exit 0
@@ -29,7 +32,9 @@ if [ "$ACTION" == "status" ]; then
     echo "Checking Job Hunter scheduled task status..."
     if [ -f "$PLIST_PATH" ]; then
         echo "✓ Job Hunter launchd service is registered at: $PLIST_PATH"
-        launchctl list | grep "com.madhav.jobhunter" || echo "Note: Service loaded, waiting for scheduled trigger."
+        launchctl print "gui/$USER_ID/$LABEL" >/dev/null 2>&1 \
+            && echo "Note: Service loaded, waiting for scheduled trigger." \
+            || echo "Note: Plist exists but service is not loaded."
     else
         echo "✗ Job Hunter is not currently scheduled."
     fi
@@ -93,9 +98,9 @@ cat <<EOF > "$PLIST_PATH"
 </plist>
 EOF
 
-# Unload previous instance if exists, then load new configuration
-launchctl unload "$PLIST_PATH" 2>/dev/null || true
-launchctl load "$PLIST_PATH"
+# Replace the current per-user LaunchAgent using the modern launchctl API.
+launchctl bootout "gui/$USER_ID/$LABEL" 2>/dev/null || true
+launchctl bootstrap "gui/$USER_ID" "$PLIST_PATH"
 
 echo ""
 echo "✓ Successfully scheduled to run daily at $(printf "%02d:%02d" $HOUR $MINUTE)!"
