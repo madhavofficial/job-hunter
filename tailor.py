@@ -4,6 +4,7 @@ from groq import Groq
 import db
 import config
 from pdf_utils import markdown_to_pdf
+import github_portfolio
 
 def tailor_materials(job_id: str):
     db.init_db()
@@ -16,6 +17,19 @@ def tailor_materials(job_id: str):
         
     with open(resume_path, "r", encoding="utf-8") as f:
         resume_text = f.read()
+
+    # Auto-ingest if job_id is a URL
+    if job_id.startswith("http://") or job_id.startswith("https://"):
+        import custom_job
+        resolved_id = custom_job.ingest_custom_job(job_id)
+        if not resolved_id:
+            return None
+        job_id = resolved_id
+
+    # Fetch GitHub portfolio
+    print("-> Fetching candidate's GitHub portfolio for dynamic project alignment...")
+    portfolio = github_portfolio.fetch_github_portfolio()
+    portfolio_text = github_portfolio.format_github_portfolio_for_prompt(portfolio)
         
     # Get job details
     conn = db.get_db_connection()
@@ -50,134 +64,101 @@ def tailor_materials(job_id: str):
     tailored_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tailored")
     os.makedirs(tailored_dir, exist_ok=True)
     
-    # 1. Tailor Resume Prompt
-    resume_prompt = f"""You are an expert resume optimizer. Your task is to adapt the candidate's resume for a specific job posting.
-Rules:
-1. DO NOT cut down, summarize, or compress the descriptions. Preserve all technical details, hard metrics (e.g., 8,700 tickets, 500,000 samples, 70% coverage), and specific technologies (Pydantic, Splunk, Playwright, allenai-specter, FAISS, PyTorch, etc.).
-2. Do not delete projects or experience bullet points. The tailored resume must remain as comprehensive and detailed as the original. Only re-order, re-prioritize, or slightly rephrase the bullets to align with the job posting's keywords.
-3. DO NOT fabricate any experience, company, duration, graduation date, GPA, project, or credential. The resume must remain completely truthful.
-4. Keep the markdown formatting neat and clean.
+    # Tailor Resume Prompt
+    resume_prompt = f"""You are an expert resume optimizer and technical hiring specialist. Your task is to adapt the candidate's resume for a specific job posting.
 
-Candidate Resume:
+Instructions & Rules:
+1. PROFESSIONAL EXPERIENCE: Preserve all professional internships (Qualcomm, O.C. Tanner) with all hard metrics (8,700 tickets, 15+ skills, 50+ tickets, 70% coverage), technical depth, and guardrails. Do not compress or delete these experiences.
+2. DYNAMIC PROJECT REPLACEMENT & ALIGNMENT:
+   - Carefully review the Job Posting requirements (required languages, frameworks, domain, e.g. DevOps, TypeScript, Full-Stack Web, Backend, Distributed Systems, AI/ML, Data Science, Databases).
+   - Compare the candidate's Current Resume Projects with the candidate's Verified GitHub Project Portfolio.
+   - Select the 3 to 4 BEST-FITTING projects from the combined pool of projects (Current Resume + GitHub Portfolio).
+   - REPLACE less relevant projects on the base resume with stronger-matching GitHub projects where appropriate:
+     * For DevOps / Cloud / Automation / Tooling roles -> prioritize 'job-hunter'.
+     * For Full-Stack / TypeScript / FinTech / Database roles -> prioritize 'Ultimate-Trader-Dashboard' or 'University-DBMS-Management-'.
+     * For AI / RAG / Agent / NLP roles -> prioritize 'evidence-grounded-clinical-literature-synthesis', 'CareerTime', or 'neuro_capstone'.
+     * For Computer Vision / Deep Learning -> prioritize 'Sketch Recognition System'.
+     * For Data Science / Regression / Analytics -> prioritize 'Forecasting-Bike-Rental-Demand'.
+   - FIRST BULLET EXPLAINS WHAT THE PROJECT DOES: For EVERY project on the resume, the FIRST bullet point MUST clearly state WHAT the project is and WHAT it does (its core product capability, user function, and problem solved). The remaining bullets should then detail the deep engineering architecture, database design, concurrency models, performance optimizations, and quantitative metrics.
+   - For each selected project, write 3 to 4 detailed, highly technical bullet points demonstrating real engineering architecture, libraries, and design patterns from its verified documentation.
+3. SKILLS SECTION: Update the Technical Skills section to highlight the exact languages and tools used across the selected projects and experience (e.g., add TypeScript, Docker, Prisma, etc. if featuring TypeScript/Full-Stack projects).
+4. ZERO FABRICATION: Do NOT invent non-existent projects, companies, durations, graduation date (May 2027), or credentials. Rely strictly on facts in the candidate's resume and GitHub portfolio. Do NOT include GPA on the resume.
+5. FORMATTING & TYPOGRAPHY:
+   - Heavily utilize markdown bolding (**bold**) for all key metrics, numbers, core technologies, and frameworks across every bullet point (e.g. **8,700** tickets, **70%** coverage, **40%** latency reduction, **TypeScript**, **PostgreSQL**, **Prisma ORM**, **Docker**).
+   - Format project titles as: `### Project Name (Core Technologies)` followed immediately by `*GitHub: <url>*`.
+   - Output the COMPLETE tailored resume in clean, professional Markdown.
+
+Candidate Base Resume:
 {resume_text}
+
+Candidate's Verified GitHub Project Portfolio:
+{portfolio_text}
 
 Job Posting:
 Company: {company}
 Title: {title}
 Description:
-{description[:5000]}
+{description[:3500]}
 
 Please output the COMPLETE tailored resume in Markdown.
-"""
-
-    # 2. Cover Letter Prompt
-    cover_prompt = f"""You are an expert career consultant. Write a professional, concise, and compelling Cover Letter (max 300 words) for the candidate.
-Rules:
-1. Adapt the letter to show genuine interest in the company and explain why their skills match.
-2. Rely strictly on existing experiences in the candidate's resume. Do not invent any projects or roles.
-3. Do not include placeholders like [Date]. Keep it ready to send, using a modern business format.
-
-Candidate Resume:
-{resume_text}
-
-Job Posting:
-Company: {company}
-Title: {title}
-Description:
-{description[:5000]}
-
-Please output the cover letter in Markdown.
 """
 
     try:
         # Generate Resume
         tailored_resume = None
-        retries = 0
-        max_retries = config.key_manager.get_num_keys()
+        candidate_models = [model_name] + [m for m in config.get_fallback_models() if m != model_name]
         
-        print("-> Generating tailored resume...")
-        while retries < max_retries:
-            try:
-                res_response = client.chat.completions.create(
-                    model=model_name,
-                    messages=[{"role": "user", "content": resume_prompt}],
-                    temperature=0.2
-                )
-                tailored_resume = res_response.choices[0].message.content
+        print("-> Generating tailored resume with deep project alignment...")
+        for active_model in candidate_models:
+            retries = 0
+            max_retries = max(1, config.key_manager.get_num_keys())
+            while retries < max_retries:
+                try:
+                    res_response = client.chat.completions.create(
+                        model=active_model,
+                        messages=[{"role": "user", "content": resume_prompt}],
+                        temperature=0.2
+                    )
+                    tailored_resume = res_response.choices[0].message.content
+                    break
+                except Exception as e:
+                    err_str = str(e).lower()
+                    if any(term in err_str for term in ["rate_limit", "429", "limit_exceeded", "tokens per day"]):
+                        print(f"Rate limit hit on {active_model} during resume tailoring: {e}")
+                        retries += 1
+                        if retries < max_retries:
+                            client = config.cycle_groq_client()
+                            continue
+                        else:
+                            print(f"-> All keys exhausted for {active_model}. Falling back to next model...")
+                            break
+                    raise e
+            if tailored_resume:
                 break
-            except Exception as e:
-                err_str = str(e).lower()
-                if any(term in err_str for term in ["rate_limit", "429", "limit_exceeded", "tokens per day"]):
-                    print(f"Rate limit hit during resume tailoring: {e}")
-                    retries += 1
-                    if retries < max_retries:
-                        client = config.cycle_groq_client()
-                        model_name = config.get_best_model(client)
-                        continue
-                raise e
                 
         if not tailored_resume:
-            raise ValueError("Failed to generate tailored resume.")
-        
-        # Generate Cover Letter
-        tailored_cl = None
-        retries = 0
-        
-        print("-> Generating tailored cover letter...")
-        while retries < max_retries:
-            try:
-                cl_response = client.chat.completions.create(
-                    model=model_name,
-                    messages=[{"role": "user", "content": cover_prompt}],
-                    temperature=0.2
-                )
-                tailored_cl = cl_response.choices[0].message.content
-                break
-            except Exception as e:
-                err_str = str(e).lower()
-                if any(term in err_str for term in ["rate_limit", "429", "limit_exceeded", "tokens per day"]):
-                    print(f"Rate limit hit during cover letter tailoring: {e}")
-                    retries += 1
-                    if retries < max_retries:
-                        client = config.cycle_groq_client()
-                        model_name = config.get_best_model(client)
-                        continue
-                raise e
-                
-        if not tailored_cl:
-            raise ValueError("Failed to generate tailored cover letter.")
+            raise ValueError("Failed to generate tailored resume after trying all keys and fallback models.")
         
         # Save files
         clean_company = "".join([c for c in company if c.isalnum() or c in (' ', '_')]).replace(' ', '_')
         clean_title = "".join([c for c in title if c.isalnum() or c in (' ', '_')]).replace(' ', '_')
         
         resume_filename = f"{clean_company}_{clean_title}_Resume.md"
-        cl_filename = f"{clean_company}_{clean_title}_CoverLetter.md"
-        
         resume_filepath = os.path.join(tailored_dir, resume_filename)
-        cl_filepath = os.path.join(tailored_dir, cl_filename)
         resume_pdf_filepath = os.path.join(tailored_dir, f"{clean_company}_{clean_title}_Resume.pdf")
-        cl_pdf_filepath = os.path.join(tailored_dir, f"{clean_company}_{clean_title}_CoverLetter.pdf")
         
         with open(resume_filepath, "w", encoding="utf-8") as f:
             f.write(tailored_resume)
             
-        with open(cl_filepath, "w", encoding="utf-8") as f:
-            f.write(tailored_cl)
-
         markdown_to_pdf(tailored_resume, resume_pdf_filepath)
-        markdown_to_pdf(tailored_cl, cl_pdf_filepath)
             
         print(f"-> Tailored Resume saved to: {resume_filepath}")
-        print(f"-> Cover Letter saved to: {cl_filepath}")
         print(f"-> ATS Resume PDF saved to: {resume_pdf_filepath}")
-        print(f"-> Cover Letter PDF saved to: {cl_pdf_filepath}")
         
-        # Store generated materials without claiming the application was submitted.
-        db.store_tailored_materials(job_id, resume_filepath, cl_filepath,
-                                    resume_pdf_filepath, cl_pdf_filepath)
+        # Store generated materials in database
+        db.store_tailored_materials(job_id, resume_filepath, None, resume_pdf_filepath, None)
         
-        return resume_filepath, cl_filepath, resume_pdf_filepath, cl_pdf_filepath
+        return resume_filepath, resume_pdf_filepath
         
     except Exception as e:
         print(f"Error generating tailored materials: {e}", file=sys.stderr)

@@ -1,24 +1,51 @@
+"""Dashboard Generator for Job Hunter.
+
+Generates a clean, date-aware Markdown and PDF dashboard prioritizing:
+1. 🔥 Fresh Today (Discovered in Today's run / Past 24h)
+2. 📅 Yesterday's Matches (Past 24-48h)
+3. 📁 Active Backlog (Past 3-5 Days)
+
+Automatically auto-archives unapplied listings older than 5 days so the active table
+stays ultra-clean and relevant.
+"""
+
 import os
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
+
 import db
-from screening import classify_company_tier
+from quality import classify_job_tier
+
+
+def auto_archive_stale_jobs(days: int = 5):
+    """Move unapplied shortlisted jobs older than `days` to rejected to keep shortlist fresh."""
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+    conn = db.get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+    UPDATE jobs
+    SET status = 'rejected'
+    WHERE status = 'shortlisted' AND (created_at < ? OR created_at IS NULL)
+    """, (cutoff,))
+    archived_count = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return archived_count
+
 
 def generate_dashboard():
     db.init_db()
-    
-    # Retrieve jobs
+
+    # 1. Auto-archive older backlog
+    archived_stale = auto_archive_stale_jobs(days=5)
+
+    # 2. Retrieve active shortlisted jobs
     all_shortlisted = db.get_shortlisted_jobs()
-    shortlisted = [j for j in all_shortlisted if not classify_company_tier(j['company']).startswith("Tier 3")]
-    suppressed_unverified = len(all_shortlisted) - len(shortlisted)
+    shortlisted = [j for j in all_shortlisted if not classify_job_tier(j).startswith("Tier 3")]
     applied = db.get_applied_jobs()
-    
-    # Count stats
-    total_shortlisted = len(shortlisted)
-    total_applied = len(applied)
-    
-    # Connect to count total rejected
+
+    # Database stats
     conn = db.get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM jobs WHERE status = 'rejected'")
@@ -26,202 +53,163 @@ def generate_dashboard():
     cursor.execute("SELECT COUNT(*) FROM jobs WHERE status = 'scraped'")
     total_scraped = cursor.fetchone()[0]
     conn.close()
-    
-    # Sort shortlisted into Strong (>=85) and Possible (75-84)
-    strong_matches = [j for j in shortlisted if j['score'] >= 85]
-    possible_matches = [j for j in shortlisted if j['score'] < 85]
 
-    run_started = os.getenv("JOB_HUNTER_RUN_STARTED_UTC")
-    new_shortlisted = []
-    if run_started:
-        new_shortlisted = [j for j in shortlisted if (j['created_at'] or '') >= run_started]
-    new_tier1 = [j for j in new_shortlisted if classify_company_tier(j['company']) == "Tier 1: Product Company / AI Startup"]
-    new_tier2 = [j for j in new_shortlisted if classify_company_tier(j['company']) == "Tier 2: Global Enterprise / IT Services"]
+    # Date buckets
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    yesterday_str = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    freshness_cutoff = (datetime.now() - timedelta(hours=48)).strftime("%Y-%m-%d %H:%M:%S")
 
-    def categorize_tier(job):
-        return classify_company_tier(job['company'])
-
-    # Separate Strong Matches by Tier
-    tier1_strong = [j for j in strong_matches if categorize_tier(j) == "Tier 1: Product Company / AI Startup"]
-    tier2_strong = [j for j in strong_matches if categorize_tier(j) == "Tier 2: Global Enterprise / IT Services"]
-    tier3_strong = [j for j in strong_matches if categorize_tier(j) == "Tier 3: Staffing Agency / Unverified"]
+    today_jobs = [j for j in shortlisted if (j.get("created_at") or "").startswith(today_str)]
+    yesterday_jobs = [j for j in shortlisted if (j.get("created_at") or "").startswith(yesterday_str)]
+    earlier_jobs = [j for j in shortlisted if j not in today_jobs and j not in yesterday_jobs]
+    fresh_48h = [j for j in shortlisted if (j.get("created_at") or "") >= freshness_cutoff]
 
     now_str = datetime.now().strftime("%d %b %Y, %I:%M %p")
-    
+
     md_content = f"""# Job Hunter Dashboard — {now_str}
 
 ## 📊 Summary Statistics
-- **Total Scraped (Pending Match)**: {total_scraped}
-- **Shortlisted Matches**: {total_shortlisted} (🔥 Strong: {len(strong_matches)} | 🟡 Possible: {len(possible_matches)})
-  - 🌟 **Tier 1 (Product Companies & AI Startups)**: {len(tier1_strong)}
-  - 🏢 **Tier 2 (Global Enterprises / Tech Services)**: {len(tier2_strong)}
-  - 📋 **Tier 3 (Other / Staffing Agencies)**: {len(tier3_strong)}
-- **Applied Positions**: {total_applied}
-- **Rejected/Unfit Roles**: {total_rejected}
-- **Suppressed Unverified Shortlists**: {suppressed_unverified}
+- **🔥 Fresh (Past 48h)**: {len(fresh_48h)} new opportunities
+- **📅 Yesterday ({yesterday_str})**: {len(yesterday_jobs)} active opportunities
+- **📁 Earlier This Week**: {len(earlier_jobs)} active opportunities
+- **✅ Applied Roles**: {len(applied)}
+- **🧹 Auto-Archived (>5d Old)**: {archived_stale}
 
 ---
 
-## 🌟 Tier 1: Product Companies & Verified AI Startups (High Priority)
-*Direct engineering teams building AI, developer tooling, and modern backend systems.*
-
-"""
-    if not tier1_strong:
-        md_content += "*No Tier 1 strong matches found in today's scrape.*\n\n"
-    else:
-        md_content += "| Score | Job ID | Company | Job Title | Location | Direct ATS Link | Source |\n"
-        md_content += "| :---: | :--- | :--- | :--- | :--- | :---: | :--- |\n"
-        for job in tier1_strong:
-            url = job['job_url_direct'] or job['job_url'] or "#"
-            url_text = "[Apply Direct ↗]" if job['job_url_direct'] else "[View Listing ↗]"
-            md_content += f"| **{job['score']}%** | `{job['job_id']}` | **{job['company']}** | {job['title']} | {job['location']} | [{url_text}]({url}) | {job['site'].upper()} |\n"
-
-    md_content += """
----
-
-## 🏢 Tier 2: Global Enterprises & Established Tech Services
-*Reputable MNCs, tech organizations, and global service firms.*
-
-"""
-    if not tier2_strong:
-        md_content += "*No Tier 2 strong matches found.*\n\n"
-    else:
-        md_content += "| Score | Job ID | Company | Job Title | Location | Direct ATS Link | Source |\n"
-        md_content += "| :---: | :--- | :--- | :--- | :--- | :---: | :--- |\n"
-        for job in tier2_strong:
-            url = job['job_url_direct'] or job['job_url'] or "#"
-            url_text = "[Apply Direct ↗]" if job['job_url_direct'] else "[View Listing ↗]"
-            md_content += f"| **{job['score']}%** | `{job['job_id']}` | **{job['company']}** | {job['title']} | {job['location']} | [{url_text}]({url}) | {job['site'].upper()} |\n"
-
-    if tier3_strong:
-        md_content += """
----
-
-<details>
-<summary>📋 <b>Tier 3: Staffing Agencies & Unverified Aggregators (Click to expand)</b></summary>
-
-| Score | Job ID | Company | Job Title | Location | Source |
-| :---: | :--- | :--- | :--- | :--- | :--- |
-"""
-        for job in tier3_strong:
-            md_content += f"| {job['score']}% | `{job['job_id']}` | {job['company']} | {job['title']} | {job['location']} | {job['site'].upper()} |\n"
-        md_content += "\n</details>\n"
-
-    md_content += "\n### 📝 Strong Matches — Technical Evidence & Notes\n"
-    for job in tier1_strong + tier2_strong:
-        url = job['job_url_direct'] or job['job_url'] or "#"
-        md_content += f"""#### 💻 {job['title']} — **{job['company']}** ({job['location']})
-- **Job ID**: `{job['job_id']}`
-- **Compatibility Score**: **{job['score']}%**
-- **ATS Apply Link**: {url}
-- **Source**: {job['site'].upper()} | **Job Type**: {job['job_type'] or 'N/A'}
-- **Matching Notes**:
-  {job['matching_notes']}
-- **Evidence**:
-  {job['evidence']}
-  
----
 """
 
-    md_content += """
-## 🟡 Possible Matches (Score 75% - 84%)
-*These are general CSE roles that may not match your resume perfectly, but are solid entry-level/intern opportunities.*
+    def render_job_table(job_list, section_title, section_desc, icon="🔥"):
+        if not job_list:
+            return f"## {icon} {section_title}\n*{section_desc}*\n\n*No opportunities in this bucket.*\n\n---\n\n"
 
-"""
-    if not possible_matches:
-        md_content += "No possible matches found today.\n\n"
-    else:
-        md_content += "| Score | Job ID | Company | Job Title | Location | Direct ATS Link | Source |\n"
-        md_content += "| :---: | :--- | :--- | :--- | :--- | :---: | :--- |\n"
-        for job in possible_matches:
-            url = job['job_url_direct'] or job['job_url'] or "#"
-            url_text = "[Apply Direct ↗]" if job['job_url_direct'] else "[View Listing ↗]"
-            md_content += f"| **{job['score']}%** | `{job['job_id']}` | {job['company']} | {job['title']} | {job['location']} | [{url_text}]({url}) | {job['site'].upper()} |\n"
-        
-        md_content += "\n### Details & Matching Evidence\n"
-        for job in possible_matches:
-            url = job['job_url_direct'] or job['job_url'] or "#"
-            md_content += f"""#### 💻 {job['title']} — **{job['company']}** ({job['location']})
-- **Job ID**: `{job['job_id']}`
-- **Compatibility Score**: **{job['score']}%**
-- **ATS Apply Link**: {url}
-- **Source**: {job['site'].upper()}
-- **Matching Notes**:
-  {job['matching_notes']}
-- **Evidence**:
-  {job['evidence']}
-  
----
-"""
+        tier1 = [j for j in job_list if classify_job_tier(j) == "Tier 1: Product Company / AI Startup"]
+        tier2 = [j for j in job_list if classify_job_tier(j) == "Tier 2: Global Enterprise / IT Services"]
+        other = [j for j in job_list if j not in tier1 and j not in tier2]
 
-    md_content += """
-## 📁 Applied Positions
-*A complete record of the positions you have submitted applications for.*
+        out = f"## {icon} {section_title} ({len(job_list)} Positions)\n*{section_desc}*\n\n"
 
-"""
-    if not applied:
-        md_content += "*No positions marked as applied yet.*\n"
-    else:
-        md_content += "| Date Applied | Company | Job Title | Location | Tailored Materials |\n"
-        md_content += "| :--- | :--- | :--- | :--- | :--- |\n"
-        for job in applied:
-            resume_link = f"[Tailored Resume]({job['tailored_resume_path']})" if job['tailored_resume_path'] else "Original"
-            cover_link = f"[Cover Letter]({job['tailored_cover_letter_path']})" if job['tailored_cover_letter_path'] else "N/A"
-            materials = f"{resume_link} | {cover_link}"
-            md_content += f"| {job['created_at'][:10]} | {job['company']} | {job['title']} | {job['location']} | {materials} |\n"
+        if tier1:
+            out += "### 🌟 Tier 1: Product Companies & Verified AI Startups\n\n"
+            out += "| Score | Job ID | Company | Job Title | Location | Direct ATS Link | ⚡ Auto-Apply | ✕ Dismiss |\n"
+            out += "| :---: | :--- | :--- | :--- | :--- | :---: | :---: | :---: |\n"
+            for j in tier1:
+                url = j["job_url_direct"] or j["job_url"] or "#"
+                url_text = "[Apply Direct ↗]" if j["job_url_direct"] else "[View Listing ↗]"
+                apply_link = f"http://127.0.0.1:8765/apply?id={j['job_id']}"
+                dismiss_link = f"http://127.0.0.1:8765/dismiss?id={j['job_id']}"
+                out += f"| **{j['score']}%** | `{j['job_id']}` | **{j['company']}** | {j['title']} | {j['location'] or 'India / Remote'} | [{url_text}]({url}) | [[⚡ Apply ↗]]({apply_link}) | [[✕ Do Not Consider]]({dismiss_link}) |\n"
+            out += "\n"
 
-    # Write latest dashboard file and dated archive
+        if tier2:
+            out += "### 🏢 Tier 2: Global Enterprises & IT Services\n\n"
+            out += "| Score | Job ID | Company | Job Title | Location | Direct ATS Link | ⚡ Auto-Apply | ✕ Dismiss |\n"
+            out += "| :---: | :--- | :--- | :--- | :--- | :---: | :---: | :---: |\n"
+            for j in tier2:
+                url = j["job_url_direct"] or j["job_url"] or "#"
+                url_text = "[Apply Direct ↗]" if j["job_url_direct"] else "[View Listing ↗]"
+                apply_link = f"http://127.0.0.1:8765/apply?id={j['job_id']}"
+                dismiss_link = f"http://127.0.0.1:8765/dismiss?id={j['job_id']}"
+                out += f"| **{j['score']}%** | `{j['job_id']}` | **{j['company']}** | {j['title']} | {j['location'] or 'India / Remote'} | [{url_text}]({url}) | [[⚡ Apply ↗]]({apply_link}) | [[✕ Do Not Consider]]({dismiss_link}) |\n"
+            out += "\n"
+
+        if other:
+            out += "<details><summary><b>Other Matched Roles (Click to expand)</b></summary>\n\n"
+            out += "| Score | Job ID | Company | Job Title | Location | Direct ATS Link | ⚡ Auto-Apply | ✕ Dismiss |\n"
+            out += "| :---: | :--- | :--- | :--- | :--- | :---: | :---: | :---: |\n"
+            for j in other:
+                url = j["job_url_direct"] or j["job_url"] or "#"
+                url_text = "[Apply Direct ↗]" if j["job_url_direct"] else "[View Listing ↗]"
+                apply_link = f"http://127.0.0.1:8765/apply?id={j['job_id']}"
+                dismiss_link = f"http://127.0.0.1:8765/dismiss?id={j['job_id']}"
+                out += f"| {j['score']}% | `{j['job_id']}` | {j['company']} | {j['title']} | {j['location'] or 'India / Remote'} | [{url_text}]({url}) | [[⚡ Apply ↗]]({apply_link}) | [[✕ Do Not Consider]]({dismiss_link}) |\n"
+            out += "\n</details>\n\n"
+
+        out += "---\n\n"
+        return out
+
+    # Render Sections
+    md_content += render_job_table(today_jobs, f"Fresh Today — {today_str}", "Discovered during today's scraping and AI evaluation run.", "🔥")
+    md_content += render_job_table(yesterday_jobs, f"Yesterday's Opportunities — {yesterday_str}", "High-fit roles discovered in the previous 24-48 hours.", "📅")
+    if earlier_jobs:
+        md_content += render_job_table(earlier_jobs, "Earlier This Week (Active Backlog)", "Roles from 2-4 days ago still open for applications.", "📁")
+
+    # Render Evidence Highlights for Today's Top Matches
+    if today_jobs:
+        md_content += "## 📝 Today's Top Matches — Technical Evidence\n\n"
+        for j in today_jobs[:15]:
+            url = j["job_url_direct"] or j["job_url"] or "#"
+            apply_link = f"http://127.0.0.1:8765/apply?id={j['job_id']}"
+            dismiss_link = f"http://127.0.0.1:8765/dismiss?id={j['job_id']}"
+            md_content += f"#### 💻 {j['title']} — **{j['company']}** ({j['location'] or 'India / Remote'})\n"
+            md_content += f"- **Job ID**: `{j['job_id']}` | **Match Score**: **{j['score']}%**\n"
+            md_content += f"- **Links**: [Portal Listing ↗]({url}) | [[⚡ 1-Click Apply ↗]]({apply_link}) | [[✕ Dismiss]]({dismiss_link})\n"
+            if j.get("matching_notes"):
+                md_content += f"- **Analysis**: {j['matching_notes']}\n"
+            if j.get("evidence"):
+                md_content += f"- **Evidence**: {j['evidence']}\n"
+            md_content += "\n---\n\n"
+
+    # Save Markdown Dashboard
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    dashboard_path = os.path.join(base_dir, "dashboard.md")
-    with open(dashboard_path, "w", encoding="utf-8") as f:
+    latest_md_path = os.path.join(base_dir, "dashboard.md")
+    with open(latest_md_path, "w", encoding="utf-8") as f:
         f.write(md_content)
-        
-    # Save dated copy in dashboards/ directory
+
+    # Save Dated Archive
     dashboards_dir = os.path.join(base_dir, "dashboards")
     os.makedirs(dashboards_dir, exist_ok=True)
-    date_filename = f"dashboard-{datetime.now().strftime('%Y-%m-%d')}.md"
-    dated_path = os.path.join(dashboards_dir, date_filename)
-    with open(dated_path, "w", encoding="utf-8") as f:
+    dated_md_path = os.path.join(dashboards_dir, f"dashboard-{today_str}.md")
+    with open(dated_md_path, "w", encoding="utf-8") as f:
         f.write(md_content)
-        
-    print(f"Latest Dashboard saved at: {dashboard_path}")
-    print(f"Dated Archive saved at: {dated_path}")
-    send_macos_notification(len(new_shortlisted), len(new_tier1), len(new_tier2), dashboard_path)
-    return dashboard_path
+
+    # Compile PDF Dashboard
+    try:
+        from pdf_utils import markdown_to_pdf
+        pdf_path = os.path.join(base_dir, "dashboard.pdf")
+        markdown_to_pdf(md_content, pdf_path)
+    except Exception as e:
+        print(f"Warning: PDF generation failed: {e}", file=sys.stderr)
+
+    tier1_fresh = sum(classify_job_tier(j).startswith("Tier 1") for j in fresh_48h)
+    tier2_fresh = sum(classify_job_tier(j).startswith("Tier 2") for j in fresh_48h)
+    send_macos_notification(len(fresh_48h), tier1_fresh, tier2_fresh, latest_md_path)
+    print(f"Latest Dashboard saved at: {latest_md_path}")
+    print(f"Dated Archive saved at: {dated_md_path}")
+    print(f"Daily report: Found {len(today_jobs)} fresh opportunities today ({today_str}).")
+    print(f"Open dashboard: file://{latest_md_path}")
 
 
 def send_macos_notification(new_matches: int, tier1: int, tier2: int, dashboard_path: str):
-    """Show a native notification; failures never make the pipeline fail."""
+    """Show the daily report notification without making the pipeline fail."""
     title = "🎯 Job Hunter — Daily Report Ready"
     message = f"Found {new_matches} new matches: {tier1} Tier-1 AI/Startups, {tier2} Tier-2 Enterprises"
-    if sys_platform_is_macos():
-        def applescript_escape(value):
-            return value.replace("\\", "\\\\").replace('"', '\\"')
-        script = (
-            f'display notification "{applescript_escape(message)}" '
-            f'with title "{applescript_escape(title)}" subtitle "Open dashboard.md: {applescript_escape(dashboard_path)}" '
-            'sound name "Glass"'
+    if sys.platform != "darwin":
+        print(f"Daily report: {message}")
+        return
+
+    def applescript_escape(value):
+        return str(value).replace("\\", "\\\\").replace('"', '\\"')
+
+    script = (
+        f'display notification "{applescript_escape(message)}" '
+        f'with title "{applescript_escape(title)}" '
+        f'subtitle "Open dashboard.md: {applescript_escape(dashboard_path)}" '
+        'sound name "Glass"'
+    )
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script], check=False, timeout=10,
+            capture_output=True, text=True,
         )
-        try:
-            result = subprocess.run(
-                ["osascript", "-e", script], check=False, timeout=10,
-                capture_output=True, text=True,
-            )
-            if result.returncode:
-                detail = (result.stderr or result.stdout).strip().splitlines()
-                if detail:
-                    print(f"Warning: macOS notification unavailable: {detail[-1]}", file=sys.stderr)
-            if os.getenv("JOB_HUNTER_OPEN_DASHBOARD") == "1":
-                subprocess.run(["open", dashboard_path], check=False, timeout=10)
-        except (OSError, subprocess.SubprocessError) as exc:
-            print(f"Warning: macOS notification unavailable: {exc}", file=sys.stderr)
+        if result.returncode:
+            detail = (result.stderr or result.stdout).strip().splitlines()
+            if detail:
+                print(f"Warning: macOS notification unavailable: {detail[-1]}", file=sys.stderr)
+    except (OSError, subprocess.SubprocessError) as exc:
+        print(f"Warning: macOS notification unavailable: {exc}", file=sys.stderr)
     print(f"Daily report: {message}")
-    print(f"Open dashboard: file://{dashboard_path}")
 
-
-def sys_platform_is_macos():
-    import platform
-    return platform.system() == "Darwin"
 
 if __name__ == "__main__":
     generate_dashboard()

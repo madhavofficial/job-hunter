@@ -37,5 +37,7 @@ python dashboard.py
 
 echo "========================================="
 echo "Pipeline execution finished successfully!"
-echo "View your dashboard at: file://$DIR/dashboard.md"
+echo "📄 Markdown Dashboard: file://$DIR/dashboard.md"
+echo "📄 Printable PDF:      file://$DIR/dashboard.pdf"
+echo "🚀 Interactive UI:      python web_dashboard.py"
 echo "========================================="

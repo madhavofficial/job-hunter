@@ -6,6 +6,7 @@ import pandas as pd
 
 import db
 from pdf_utils import markdown_to_pdf
+from quality import classify_job_tier, has_usable_description
 
 
 class QualityOfLifeTests(unittest.TestCase):
@@ -48,6 +49,16 @@ class QualityOfLifeTests(unittest.TestCase):
                 "description": "canonical description",
             })
         db.DB_PATH = original_db_path
+
+    def test_unknown_aggregator_is_not_presented_as_tier_one(self):
+        self.assertTrue(classify_job_tier({"company": "Mystery Labs", "site": "linkedin"}).startswith("Tier 3"))
+        self.assertTrue(classify_job_tier({"company": "OpenAI", "site": "linkedin"}).startswith("Tier 1"))
+        self.assertTrue(classify_job_tier({"company": "New ATS Company", "site": "ats:greenhouse"}).startswith("Tier 1"))
+        self.assertTrue(classify_job_tier({"company": "TrustFabric", "site": "indeed"}).startswith("Tier 3"))
+
+    def test_short_descriptions_are_not_matchable(self):
+        self.assertFalse(has_usable_description({"description": "Backend engineer"}))
+        self.assertTrue(has_usable_description({"description": "x" * 120}))
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ resume.md
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.github_portfolio_cache.json
 .DS_Store
 
 # Local database and runtime logs

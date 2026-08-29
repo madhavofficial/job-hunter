@@ -64,36 +64,46 @@ def cycle_groq_client() -> Groq:
     key_manager.cycle_key()
     return get_groq_client()
 
+def get_fallback_models(client: Groq = None) -> list[str]:
+    """Dynamically discover and rank all available active chat models on the user's Groq account."""
+    if client is None:
+        try:
+            client = get_groq_client()
+        except Exception:
+            return ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.6-27b", "groq/compound-mini"]
+
+    try:
+        available = [m.id for m in client.models.list().data]
+    except Exception:
+        available = []
+
+    # Exclude audio and guardrail-only models from general reasoning
+    excluded = {"whisper", "guard", "orpheus", "prompt-guard"}
+    chat_models = [m for m in available if not any(x in m.lower() for x in excluded)]
+
+    # Scoring heuristic: prefer larger reasoning models first, then fast models
+    def model_rank(m_name: str) -> int:
+        name = m_name.lower()
+        if "120b" in name or "r1" in name:
+            return 100
+        if "70b" in name or "nemotron" in name or "kimi" in name or "moonshot" in name:
+            return 90
+        if "27b" in name or "qwen" in name:
+            return 80
+        if "20b" in name or "compound" in name:
+            return 70
+        if "8b" in name or "7b" in name or "mini" in name:
+            return 60
+        return 50
+
+    ranked = sorted(chat_models, key=model_rank, reverse=True)
+    return ranked if ranked else ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.6-27b", "groq/compound-mini"]
+
+
 def get_best_model(client: Groq) -> str:
-    # Check if a model is explicitly specified in the environment
     env_model = os.getenv("GROQ_MODEL")
     if env_model:
         return env_model
-        
-    # Order of preference for Groq models
-    preferred_models = [
-        "openai/gpt-oss-120b",
-        "llama-3.3-70b-versatile",
-        "llama-3.1-70b-versatile",
-        "openai/gpt-oss-20b",
-        "llama3-70b-8192",
-        "llama-3.1-8b-instant"
-    ]
-    
-    try:
-        available_models = [m.id for m in client.models.list().data]
-        for model in preferred_models:
-            if model in available_models:
-                return model
-        
-        for model in available_models:
-            if any(term in model.lower() for term in ["120b", "70b", "20b", "8b"]):
-                return model
-                
-        if available_models:
-            return available_models[0]
-            
-    except Exception as e:
-        print(f"Warning: Failed to fetch available Groq models ({e}). Using default: openai/gpt-oss-120b", file=sys.stderr)
-        
-    return "openai/gpt-oss-120b"
+
+    fallback_list = get_fallback_models(client)
+    return fallback_list[0] if fallback_list else "openai/gpt-oss-120b"

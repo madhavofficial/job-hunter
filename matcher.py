@@ -5,7 +5,8 @@ import sys
 from groq import Groq
 import db
 import config
-from screening import classify_company_tier, deterministic_hard_filter
+from screening import deterministic_hard_filter
+from quality import classify_job_tier, has_usable_description
 
 def load_resume():
     resume_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resume.md")
@@ -186,7 +187,25 @@ You MUST respond with a JSON object. Use the following structure:
                 conn.close()
                 print(f"-> Successfully fetched and saved description ({len(description)} chars)")
             else:
-                print("-> Failed to fetch description. Matching on title only.")
+                print("-> Failed to fetch description. Rejecting listing because title-only matching is unreliable.")
+                db.update_job_match(
+                    job_id=job_id,
+                    score=0,
+                    status="rejected",
+                    evidence="",
+                    matching_notes="REJECTED: No usable job description was available for a reliable match.",
+                )
+                continue
+
+        if not has_usable_description({"description": description}):
+            db.update_job_match(
+                job_id=job_id,
+                score=0,
+                status="rejected",
+                evidence="",
+                matching_notes="REJECTED: Job description is too short for a reliable match.",
+            )
+            continue
         
         print(f"\nProcessing: '{title}' at '{company}' ({location})...")
         
@@ -203,34 +222,41 @@ Description:
 
         try:
             response = None
-            retries = 0
-            max_retries = config.key_manager.get_num_keys()
+            candidate_models = [model_name] + [m for m in config.get_fallback_models() if m != model_name]
             
-            while retries < max_retries:
-                try:
-                    response = client.chat.completions.create(
-                        model=model_name,
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_prompt}
-                        ],
-                        temperature=0.0,
-                        response_format={"type": "json_object"}
-                    )
+            for active_model in candidate_models:
+                retries = 0
+                max_retries = max(1, config.key_manager.get_num_keys())
+
+                while retries < max_retries:
+                    try:
+                        response = client.chat.completions.create(
+                            model=active_model,
+                            messages=[
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": user_prompt}
+                            ],
+                            temperature=0.0,
+                            response_format={"type": "json_object"}
+                        )
+                        break
+                    except Exception as e:
+                        err_str = str(e).lower()
+                        if any(term in err_str for term in ["rate_limit", "429", "limit_exceeded", "tokens per day"]):
+                            print(f"Rate limit hit on {active_model}: {e}")
+                            retries += 1
+                            if retries < max_retries:
+                                client = config.cycle_groq_client()
+                                continue
+                            else:
+                                print(f"-> All keys exhausted for {active_model}. Falling back to next model...")
+                                break
+                        raise e
+                if response is not None:
                     break
-                except Exception as e:
-                    err_str = str(e).lower()
-                    if any(term in err_str for term in ["rate_limit", "429", "limit_exceeded", "tokens per day"]):
-                        print(f"Rate limit hit: {e}")
-                        retries += 1
-                        if retries < max_retries:
-                            client = config.cycle_groq_client()
-                            model_name = config.get_best_model(client)
-                            continue
-                    raise e
                     
             if response is None:
-                raise ValueError("Failed to get response after cycling through all keys.")
+                raise ValueError("Failed to get response after cycling through all keys and fallback models.")
             
             result_json = response.choices[0].message.content
             result = json.loads(result_json)
@@ -241,7 +267,7 @@ Description:
             except (TypeError, ValueError):
                 score = 0
             rejection_reason = result.get("rejection_reason", "")
-            company_tier = classify_company_tier(company)
+            company_tier = classify_job_tier(job)
             evidence = result.get("evidence", [])
             notes = result.get("matching_notes", "")
             

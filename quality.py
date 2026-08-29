@@ -1,0 +1,45 @@
+"""Additional job-quality rules for ranking and presentation.
+
+The deterministic screening safeguards in ``screening.py`` remain unchanged. This
+module adds a conservative presentation/matching policy: unknown aggregator
+companies are not presented as verified Tier 1 companies, while jobs fetched from
+official ATS sources remain eligible for Tier 1 discovery.
+"""
+
+import re
+
+from screening import AGENCY_MARKERS, KNOWN_ENTERPRISES
+
+
+KNOWN_PRODUCT_COMPANIES = {
+    "anthropic", "openai", "postman", "razorpay", "zerodha", "swiggy",
+    "zomato", "cred", "meesho", "phonepe", "flipkart", "browserbase",
+    "sarvam ai", "microsoft", "google", "amazon", "stripe", "qualcomm",
+    "ixigo", "fancode", "pocket fm", "galaxeye", "darwinbox", "freshworks",
+}
+
+
+def classify_job_tier(job: dict) -> str:
+    """Classify a job conservatively using both company and source metadata."""
+    company = (job.get("company") or "").strip().lower()
+    source = (job.get("site") or "").strip().lower()
+
+    if (
+        not company
+        or company in {"none", "confidential", "private limited", "company name"}
+        or any(marker in company for marker in AGENCY_MARKERS)
+    ):
+        return "Tier 3: Staffing Agency / Unverified"
+    # Match company aliases on word boundaries. A raw substring check mislabels
+    # companies such as "TrustFabric" as "UST".
+    if any(re.search(rf"\b{re.escape(name)}\b", company) for name in KNOWN_ENTERPRISES):
+        return "Tier 2: Global Enterprise / IT Services"
+    if company in KNOWN_PRODUCT_COMPANIES or source.startswith("ats:"):
+        return "Tier 1: Product Company / AI Startup"
+    return "Tier 3: Staffing Agency / Unverified"
+
+
+def has_usable_description(job: dict) -> bool:
+    """Require enough listing text for a meaningful compatibility decision."""
+    description = str(job.get("description") or "").strip().lower()
+    return len(description) >= 120 and description not in {"nan", "none", "null"}
