@@ -53,3 +53,25 @@ def is_reviewable_job(job: dict) -> bool:
     if any(marker in company for marker in AGENCY_MARKERS):
         return False
     return has_usable_description(job)
+
+
+def apply_skill_gap_penalty(score: int, job: dict, resume_text: str) -> tuple[int, str | None]:
+    """Cap scores when the job headline requires a technology absent from the resume."""
+    title = (job.get("title") or "").lower()
+    resume = (resume_text or "").lower()
+    headline_only_skills = {
+        "angular": "Angular",
+        "typescript": "TypeScript",
+        "vue": "Vue",
+        ".net": ".NET",
+        "c#": "C#",
+        "golang": "Go",
+        "rust": "Rust",
+        "ruby": "Ruby",
+        "php": "PHP",
+    }
+    missing = [label for token, label in headline_only_skills.items() if token in title and token not in resume]
+    if not missing:
+        return score, None
+    capped_score = min(score, 68)
+    return capped_score, f"Missing headline technology: {', '.join(missing)} is not present in the candidate resume."

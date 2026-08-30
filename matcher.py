@@ -6,7 +6,7 @@ from groq import Groq
 import db
 import config
 from screening import deterministic_hard_filter
-from quality import classify_job_tier, has_usable_description
+from quality import apply_skill_gap_penalty, classify_job_tier, has_usable_description
 
 def load_resume():
     resume_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resume.md")
@@ -266,6 +266,7 @@ Description:
                 score = max(0, min(100, int(result.get("compatibility_score", 0))))
             except (TypeError, ValueError):
                 score = 0
+            score, skill_gap_note = apply_skill_gap_penalty(score, job, resume_text)
             rejection_reason = result.get("rejection_reason", "")
             company_tier = classify_job_tier(job)
             evidence = result.get("evidence", [])
@@ -290,6 +291,8 @@ Description:
             else:
                 status = "rejected"
                 score = 0
+                if skill_gap_note:
+                    rejection_reason = skill_gap_note
                 if rejection_reason:
                     notes = f"REJECTED: {rejection_reason}\n\n{notes}"
                 print(f"-> REJECTED: {rejection_reason or 'Low compatibility score'}")

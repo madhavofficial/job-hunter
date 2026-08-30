@@ -6,7 +6,7 @@ import pandas as pd
 
 import db
 from pdf_utils import markdown_to_pdf
-from quality import classify_job_tier, has_usable_description
+from quality import apply_skill_gap_penalty, classify_job_tier, has_usable_description
 
 
 class QualityOfLifeTests(unittest.TestCase):
@@ -59,6 +59,15 @@ class QualityOfLifeTests(unittest.TestCase):
     def test_short_descriptions_are_not_matchable(self):
         self.assertFalse(has_usable_description({"description": "Backend engineer"}))
         self.assertTrue(has_usable_description({"description": "x" * 120}))
+
+    def test_missing_headline_technology_caps_match_score(self):
+        score, note = apply_skill_gap_penalty(
+            90,
+            {"title": "Java FS Angular Developer"},
+            "Python, Java, JavaScript, React, Node.js",
+        )
+        self.assertEqual(score, 68)
+        self.assertIn("Angular", note)
 
 
 if __name__ == "__main__":
