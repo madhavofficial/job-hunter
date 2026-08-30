@@ -15,7 +15,7 @@ import sys
 from datetime import datetime, timedelta
 
 import db
-from quality import classify_job_tier
+from quality import classify_job_tier, is_reviewable_job
 
 
 def auto_archive_stale_jobs(days: int = 5):
@@ -43,6 +43,7 @@ def generate_dashboard():
     # 2. Retrieve active shortlisted jobs
     all_shortlisted = db.get_shortlisted_jobs()
     shortlisted = [j for j in all_shortlisted if not classify_job_tier(j).startswith("Tier 3")]
+    review_jobs = [j for j in all_shortlisted if classify_job_tier(j).startswith("Tier 3") and is_reviewable_job(j)]
     applied = db.get_applied_jobs()
 
     # Database stats
@@ -69,7 +70,8 @@ def generate_dashboard():
     md_content = f"""# Job Hunter Dashboard — {now_str}
 
 ## 📊 Summary Statistics
-- **🔥 Fresh (Past 48h)**: {len(fresh_48h)} new opportunities
+- **🔥 Fresh (Past 48h)**: {len(fresh_48h)} verified opportunities
+- **🔎 Review Queue**: {len(review_jobs)} promising but unverified opportunities
 - **📅 Yesterday ({yesterday_str})**: {len(yesterday_jobs)} active opportunities
 - **📁 Earlier This Week**: {len(earlier_jobs)} active opportunities
 - **✅ Applied Roles**: {len(applied)}
@@ -133,6 +135,13 @@ def generate_dashboard():
     md_content += render_job_table(yesterday_jobs, f"Yesterday's Opportunities — {yesterday_str}", "High-fit roles discovered in the previous 24-48 hours.", "📅")
     if earlier_jobs:
         md_content += render_job_table(earlier_jobs, "Earlier This Week (Active Backlog)", "Roles from 2-4 days ago still open for applications.", "📁")
+
+    md_content += render_job_table(
+        review_jobs[:30],
+        "Potential Matches — Review Before Applying",
+        "Concrete listings from companies not yet verified by the quality policy.",
+        "🔎",
+    )
 
     # Render Evidence Highlights for Today's Top Matches
     if today_jobs:

@@ -43,3 +43,13 @@ def has_usable_description(job: dict) -> bool:
     """Require enough listing text for a meaningful compatibility decision."""
     description = str(job.get("description") or "").strip().lower()
     return len(description) >= 120 and description not in {"nan", "none", "null"}
+
+
+def is_reviewable_job(job: dict) -> bool:
+    """Allow an unknown but concrete company into the clearly labeled review queue."""
+    company = (job.get("company") or "").strip().lower()
+    if not company or company in {"none", "confidential", "private limited", "company name"}:
+        return False
+    if any(marker in company for marker in AGENCY_MARKERS):
+        return False
+    return has_usable_description(job)

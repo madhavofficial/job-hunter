@@ -271,10 +271,10 @@ Description:
             evidence = result.get("evidence", [])
             notes = result.get("matching_notes", "")
             
-            # If identified as an unverified/staffing agency or anonymous poster, reject immediately
-            if company_tier.startswith("Tier 3"):
-                passes = False
-                rejection_reason = rejection_reason or "Identified as recruitment/staffing agency or unverified training consultancy."
+            # Agency markers were already rejected by the deterministic filter. An
+            # otherwise concrete but unknown company remains visible as Review, not
+            # as a falsely verified Tier 1 result.
+            review_required = company_tier.startswith("Tier 3")
             
             # Format evidence list as a string
             evidence_str = "\n".join([f"- {ev}" for ev in evidence])
@@ -283,6 +283,8 @@ Description:
             # If passes hard filters and score >= 75, we shortlist it. Otherwise rejected.
             if passes and score >= 75:
                 status = "shortlisted"
+                if review_required:
+                    notes = f"REVIEW: Company is not yet verified as a product company or enterprise.\n\n{notes}"
                 shortlisted_count += 1
                 print(f"-> SHORTLISTED ({company_tier}): Score={score}%")
             else:

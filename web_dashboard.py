@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 
 import db
 import tailor
-from quality import classify_job_tier
+from quality import classify_job_tier, is_reviewable_job
 
 PORT = 8765
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -34,7 +34,7 @@ def get_dashboard_data():
     # Query all shortlisted jobs
     cursor.execute("""
     SELECT job_id, site, job_url, job_url_direct, title, company, location,
-           date_posted, job_type, is_remote, skills, score, evidence,
+           date_posted, job_type, description, is_remote, skills, score, evidence,
            matching_notes, tailored_resume_pdf_path, created_at, status
     FROM jobs
     WHERE status = 'shortlisted'
@@ -63,12 +63,17 @@ def get_dashboard_data():
 
     # Filter out unverified agencies
     valid_shortlisted = []
+    review_jobs = []
     for j in all_shortlisted:
         tier = classify_job_tier(j)
         if not tier.startswith("Tier 3"):
             j["tier"] = tier
             j["apply_url"] = j["job_url_direct"] or j["job_url"]
             valid_shortlisted.append(j)
+        elif is_reviewable_job(j):
+            j["tier"] = "Review: Company Not Yet Verified"
+            j["apply_url"] = j["job_url_direct"] or j["job_url"]
+            review_jobs.append(j)
 
     # Calculate 48h Freshness cutoff
     cutoff_48h = (datetime.now() - timedelta(hours=48)).strftime("%Y-%m-%d %H:%M:%S")
@@ -82,6 +87,7 @@ def get_dashboard_data():
     return {
         "stats": {
             "total_shortlisted": len(valid_shortlisted),
+            "review_count": len(review_jobs),
             "fresh_48h": len(fresh_jobs),
             "tier1_count": len(tier1_jobs),
             "tier2_count": len(tier2_jobs),
@@ -93,6 +99,7 @@ def get_dashboard_data():
         "fresh_jobs": fresh_jobs[:30],
         "tier1_jobs": tier1_jobs[:35],
         "tier2_jobs": tier2_jobs[:25],
+        "review_jobs": review_jobs[:35],
         "all_shortlisted": valid_shortlisted[:50],
         "applied_jobs": applied,
     }
@@ -181,7 +188,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 </div>
                 <div>
                     <div class="text-2xl font-bold text-white" id="stat-total">0</div>
-                    <div class="text-xs font-medium text-slate-400">Total Shortlisted</div>
+                    <div class="text-xs font-medium text-slate-400">Verified Shortlisted</div>
                 </div>
             </div>
         </div>
@@ -196,6 +203,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             </button>
             <button onclick="switchTab('tier2')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-2" id="tab-btn-tier2">
                 <i class="fa-solid fa-building text-slate-400"></i> Enterprise & Global <span class="text-xs px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300" id="badge-tier2">0</span>
+            </button>
+            <button onclick="switchTab('review')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-2" id="tab-btn-review">
+                <i class="fa-solid fa-magnifying-glass text-amber-400"></i> Review Queue <span class="text-xs px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300" id="badge-review">0</span>
             </button>
             <button onclick="switchTab('all')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-2" id="tab-btn-all">
                 <i class="fa-solid fa-list-check"></i> All Shortlisted <span class="text-xs px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300" id="badge-all">0</span>
@@ -254,6 +264,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             document.getElementById('badge-fresh').innerText = s.fresh_48h;
             document.getElementById('badge-tier1').innerText = s.tier1_count;
             document.getElementById('badge-tier2').innerText = s.tier2_count;
+            document.getElementById('badge-review').innerText = s.review_count;
             document.getElementById('badge-all').innerText = s.total_shortlisted;
             document.getElementById('badge-applied').innerText = s.total_applied;
         }
@@ -273,6 +284,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             if (currentTab === 'fresh') list = rawData.fresh_jobs;
             else if (currentTab === 'tier1') list = rawData.tier1_jobs;
             else if (currentTab === 'tier2') list = rawData.tier2_jobs;
+            else if (currentTab === 'review') list = rawData.review_jobs;
             else if (currentTab === 'all') list = rawData.all_shortlisted;
             else if (currentTab === 'applied') list = rawData.applied_jobs;
 
