@@ -10,12 +10,10 @@ stays ultra-clean and relevant.
 """
 
 import os
-import subprocess
-import sys
 from datetime import datetime, timedelta
 
 import db
-from quality import classify_job_tier
+from screening import classify_company_tier
 
 
 def auto_archive_stale_jobs(days: int = 5):
@@ -42,7 +40,7 @@ def generate_dashboard():
 
     # 2. Retrieve active shortlisted jobs
     all_shortlisted = db.get_shortlisted_jobs()
-    shortlisted = [j for j in all_shortlisted if not classify_job_tier(j).startswith("Tier 3")]
+    shortlisted = [j for j in all_shortlisted if not classify_company_tier(j["company"]).startswith("Tier 3")]
     applied = db.get_applied_jobs()
 
     # Database stats
@@ -83,8 +81,8 @@ def generate_dashboard():
         if not job_list:
             return f"## {icon} {section_title}\n*{section_desc}*\n\n*No opportunities in this bucket.*\n\n---\n\n"
 
-        tier1 = [j for j in job_list if classify_job_tier(j) == "Tier 1: Product Company / AI Startup"]
-        tier2 = [j for j in job_list if classify_job_tier(j) == "Tier 2: Global Enterprise / IT Services"]
+        tier1 = [j for j in job_list if classify_company_tier(j["company"]) == "Tier 1: Product Company / AI Startup"]
+        tier2 = [j for j in job_list if classify_company_tier(j["company"]) == "Tier 2: Global Enterprise / IT Services"]
         other = [j for j in job_list if j not in tier1 and j not in tier2]
 
         out = f"## {icon} {section_title} ({len(job_list)} Positions)\n*{section_desc}*\n\n"
@@ -171,44 +169,11 @@ def generate_dashboard():
     except Exception as e:
         print(f"Warning: PDF generation failed: {e}", file=sys.stderr)
 
-    tier1_fresh = sum(classify_job_tier(j).startswith("Tier 1") for j in fresh_48h)
-    tier2_fresh = sum(classify_job_tier(j).startswith("Tier 2") for j in fresh_48h)
-    send_macos_notification(len(fresh_48h), tier1_fresh, tier2_fresh, latest_md_path)
     print(f"Latest Dashboard saved at: {latest_md_path}")
     print(f"Dated Archive saved at: {dated_md_path}")
     print(f"Daily report: Found {len(today_jobs)} fresh opportunities today ({today_str}).")
     print(f"Open dashboard: file://{latest_md_path}")
 
-
-def send_macos_notification(new_matches: int, tier1: int, tier2: int, dashboard_path: str):
-    """Show the daily report notification without making the pipeline fail."""
-    title = "🎯 Job Hunter — Daily Report Ready"
-    message = f"Found {new_matches} new matches: {tier1} Tier-1 AI/Startups, {tier2} Tier-2 Enterprises"
-    if sys.platform != "darwin":
-        print(f"Daily report: {message}")
-        return
-
-    def applescript_escape(value):
-        return str(value).replace("\\", "\\\\").replace('"', '\\"')
-
-    script = (
-        f'display notification "{applescript_escape(message)}" '
-        f'with title "{applescript_escape(title)}" '
-        f'subtitle "Open dashboard.md: {applescript_escape(dashboard_path)}" '
-        'sound name "Glass"'
-    )
-    try:
-        result = subprocess.run(
-            ["osascript", "-e", script], check=False, timeout=10,
-            capture_output=True, text=True,
-        )
-        if result.returncode:
-            detail = (result.stderr or result.stdout).strip().splitlines()
-            if detail:
-                print(f"Warning: macOS notification unavailable: {detail[-1]}", file=sys.stderr)
-    except (OSError, subprocess.SubprocessError) as exc:
-        print(f"Warning: macOS notification unavailable: {exc}", file=sys.stderr)
-    print(f"Daily report: {message}")
 
 
 if __name__ == "__main__":

@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 
 import db
 import tailor
-from quality import classify_job_tier
+from screening import classify_company_tier
 
 PORT = 8765
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -52,7 +52,7 @@ def get_dashboard_data():
     """)
     applied = [dict(r) for r in cursor.fetchall()]
     cursor.execute("SELECT COUNT(*) FROM jobs WHERE status = 'applied'")
-    total_applied = cursor.fetchone()[0]
+    total_applied = len(applied)
 
     # Total counts
     cursor.execute("SELECT COUNT(*) FROM jobs WHERE status = 'rejected'")
@@ -64,7 +64,7 @@ def get_dashboard_data():
     # Filter out unverified agencies
     valid_shortlisted = []
     for j in all_shortlisted:
-        tier = classify_job_tier(j)
+        tier = classify_company_tier(j["company"])
         if not tier.startswith("Tier 3"):
             j["tier"] = tier
             j["apply_url"] = j["job_url_direct"] or j["job_url"]

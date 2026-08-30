@@ -25,7 +25,10 @@ DEFAULT_SEARCH_TERMS = [
 # used by this pipeline, and its ZipRecruiter adapter only supports US/Canada.
 # Keep the source list explicit so unsupported boards do not generate noisy,
 # predictable failures on every query.
-SUPPORTED_INDIA_SITES = ("indeed", "linkedin")
+# JobSpy supports Naukri directly. Glassdoor and Monster are intentionally not
+# listed here: this installed JobSpy release has no reliable India Monster
+# adapter, and Glassdoor currently returns 400s for this pipeline's query shape.
+SUPPORTED_INDIA_SITES = ("indeed", "linkedin", "naukri")
 
 def get_dynamic_search_terms():
     """Dynamically parses resume.md to build relevant search queries based on the candidate's active stack and career objective."""

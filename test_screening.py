@@ -6,7 +6,7 @@ from collector import SUPPORTED_INDIA_SITES
 
 class ScreeningTests(unittest.TestCase):
     def test_india_sources_exclude_unsupported_boards(self):
-        self.assertEqual(SUPPORTED_INDIA_SITES, ("indeed", "linkedin"))
+        self.assertEqual(SUPPORTED_INDIA_SITES, ("indeed", "linkedin", "naukri"))
         self.assertNotIn("glassdoor", SUPPORTED_INDIA_SITES)
         self.assertNotIn("zip_recruiter", SUPPORTED_INDIA_SITES)
 

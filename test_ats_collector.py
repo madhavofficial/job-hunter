@@ -1,6 +1,6 @@
 import unittest
 
-from ats_collector import discover_board_refs, html_to_text
+from ats_collector import CAREER_BOARD_DOMAINS, discover_board_refs, html_to_text
 
 
 class ATSCollectorTests(unittest.TestCase):
@@ -15,6 +15,11 @@ class ATSCollectorTests(unittest.TestCase):
 
     def test_strips_html_descriptions(self):
         self.assertEqual(html_to_text("<p>Python &amp; FastAPI</p><ul><li>Backend</li></ul>"), "Python & FastAPI Backend")
+
+    def test_career_discovery_is_provider_based_not_company_configured(self):
+        self.assertIn("myworkdayjobs.com", CAREER_BOARD_DOMAINS)
+        self.assertIn("oraclecloud.com", CAREER_BOARD_DOMAINS)
+        self.assertIn("monster.com", CAREER_BOARD_DOMAINS)
 
 
 if __name__ == "__main__":

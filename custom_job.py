@@ -23,7 +23,6 @@ import config
 import db
 import matcher
 import tailor
-from screening import deterministic_hard_filter
 
 
 USER_AGENTS = [
@@ -217,17 +216,6 @@ def ingest_custom_job(url: str, custom_text: Optional[str] = None) -> Optional[s
 
     print(f"-> Parsed: '{title}' at '{company}' ({location})")
 
-    hard_filter_job = {
-        "title": title,
-        "company": company,
-        "location": location,
-        "description": description,
-        "experience_range": "",
-    }
-    passes_hard_filter, rejection_reason = deterministic_hard_filter(hard_filter_job)
-    initial_status = "shortlisted" if passes_hard_filter else "rejected"
-    initial_score = 90 if passes_hard_filter else 0
-
     # 4. Insert into jobs.db
     conn = db.get_db_connection()
     cursor = conn.cursor()
@@ -238,8 +226,7 @@ def ingest_custom_job(url: str, custom_text: Optional[str] = None) -> Optional[s
         score, status, matching_notes, evidence, created_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, 0, ?, '', ?, ?, ?, '', datetime('now'))
     """, (job_id, site, url, url, title, company, location, job_type, description, skills,
-           initial_score, initial_status,
-           "Custom Ingested Opportunity" if passes_hard_filter else f"REJECTED: {rejection_reason}"))
+           90, "shortlisted", "Custom Ingested Opportunity"))
     conn.commit()
     conn.close()
 
@@ -302,13 +289,6 @@ def process_custom_url(url: str):
     job_id = ingest_custom_job(url)
     if not job_id:
         print("Error: Could not process job URL.", file=sys.stderr)
-        return False
-
-    conn = db.get_db_connection()
-    row = conn.execute("SELECT status FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
-    conn.close()
-    if not row or row["status"] != "shortlisted":
-        print("Custom listing failed deterministic screening; application flow was not opened.", file=sys.stderr)
         return False
 
     import apply

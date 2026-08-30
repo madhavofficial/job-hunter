@@ -29,6 +29,19 @@ ATS_HOSTS = {
     "jobs.lever.co": "lever",
 }
 
+# These are public, indexable career-board hosts rather than a company
+# allowlist. Google is used only to discover current listing URLs; the URL and
+# company name returned by the listing are retained for direct application.
+CAREER_BOARD_DOMAINS = (
+    "myworkdayjobs.com",
+    "taleo.net",
+    "oraclecloud.com",
+    "jobs.smartrecruiters.com",
+    "jobs.jobvite.com",
+    "apply.workable.com",
+    "monster.com",
+)
+
 
 class _HTMLTextParser(HTMLParser):
     def __init__(self):
@@ -173,6 +186,35 @@ def discover_ats_urls() -> list[str]:
     return urls
 
 
+def discover_career_board_jobs(limit_per_domain: int = 50) -> pd.DataFrame:
+    """Discover dynamic Workday/Oracle/other board listings via Google Jobs.
+
+    These providers do not share one stable unauthenticated API. Querying the
+    public index keeps discovery dynamic and avoids maintaining company slugs.
+    A failure for one provider is isolated from the remaining domains.
+    """
+    terms = get_dynamic_search_terms()
+    keyword_query = " OR ".join(f'"{term}"' for term in terms[:6])
+    rows = []
+    for domain in CAREER_BOARD_DOMAINS:
+        query = f"site:{domain} ({keyword_query}) India OR remote"
+        try:
+            results = scrape_jobs(
+                site_name=["google"], google_search_term=query,
+                location="India", results_wanted=limit_per_domain,
+                country_indeed="india",
+            )
+            if results.empty:
+                continue
+            results = results.copy()
+            results["site"] = f"career:{domain}"
+            rows.append(results)
+            print(f"Career discovery {domain}: {len(results)} indexed listings.")
+        except Exception as exc:
+            print(f"Warning: career-board discovery failed for {domain}: {exc}", file=sys.stderr)
+    return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
+
+
 def run_ats_collector() -> int:
     db.init_db()
     refs = discover_board_refs(discover_ats_urls())
@@ -186,6 +228,11 @@ def run_ats_collector() -> int:
             print(f"ATS {ats}/{board}: {len(jobs)} India/remote jobs, {added} new.")
         except Exception as exc:
             print(f"Warning: ATS board {ats}/{board} failed: {exc}", file=sys.stderr)
+    career_jobs = discover_career_board_jobs()
+    if not career_jobs.empty:
+        added = db.add_jobs(career_jobs)
+        total += added
+        print(f"Dynamic career boards: {len(career_jobs)} indexed jobs, {added} new.")
     print(f"ATS collection complete. New direct jobs stored: {total}")
     return total
 

@@ -5,8 +5,7 @@ import sys
 from groq import Groq
 import db
 import config
-from screening import deterministic_hard_filter
-from quality import classify_job_tier, has_usable_description
+from screening import classify_company_tier, deterministic_hard_filter
 
 def load_resume():
     resume_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resume.md")
@@ -187,25 +186,7 @@ You MUST respond with a JSON object. Use the following structure:
                 conn.close()
                 print(f"-> Successfully fetched and saved description ({len(description)} chars)")
             else:
-                print("-> Failed to fetch description. Rejecting listing because title-only matching is unreliable.")
-                db.update_job_match(
-                    job_id=job_id,
-                    score=0,
-                    status="rejected",
-                    evidence="",
-                    matching_notes="REJECTED: No usable job description was available for a reliable match.",
-                )
-                continue
-
-        if not has_usable_description({"description": description}):
-            db.update_job_match(
-                job_id=job_id,
-                score=0,
-                status="rejected",
-                evidence="",
-                matching_notes="REJECTED: Job description is too short for a reliable match.",
-            )
-            continue
+                print("-> Could not fetch description. Proceeding with title-only matching.")
         
         print(f"\nProcessing: '{title}' at '{company}' ({location})...")
         
@@ -267,7 +248,7 @@ Description:
             except (TypeError, ValueError):
                 score = 0
             rejection_reason = result.get("rejection_reason", "")
-            company_tier = classify_job_tier(job)
+            company_tier = classify_company_tier(company)
             evidence = result.get("evidence", [])
             notes = result.get("matching_notes", "")
             
