@@ -299,7 +299,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             }
 
             list.forEach(j => {
-                const scoreColor = (j.score >= 90) ? 'text-amber-400 bg-amber-400/10 border-amber-400/20' : 'text-sky-400 bg-sky-400/10 border-sky-400/20';
+                const isReview = j.tier && j.tier.startsWith('Review:');
+                const scoreColor = isReview ? 'text-amber-400 bg-amber-400/10 border-amber-400/20' : ((j.score >= 90) ? 'text-amber-400 bg-amber-400/10 border-amber-400/20' : 'text-sky-400 bg-sky-400/10 border-sky-400/20');
                 const tierBadge = j.tier ? `<span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">${j.tier.split(':')[0]}</span>` : '';
                 const datePosted = j.date_posted && j.date_posted !== 'nan' ? j.date_posted : 'Recent';
                 const hasPdf = j.tailored_resume_pdf_path ? true : false;
@@ -337,7 +338,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                                     <p class="text-sm font-medium text-slate-300">${j.company} <span class="text-xs text-slate-400">&bull; ${j.location || 'India / Remote'}</span></p>
                                 </div>
                                 <div class="px-2.5 py-1 text-xs font-extrabold rounded-lg border ${scoreColor} shrink-0">
-                                    ${j.score}% Match
+                                    ${isReview && !j.score ? 'Review' : `${j.score}% Match`}
                                 </div>
                             </div>
                             ${j.matching_notes ? `<p class="text-xs text-slate-400 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/60 leading-relaxed"><i class="fa-solid fa-circle-info text-sky-400 mr-1"></i> ${j.matching_notes}</p>` : ''}

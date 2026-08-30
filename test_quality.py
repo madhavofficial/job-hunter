@@ -6,7 +6,7 @@ import pandas as pd
 
 import db
 from pdf_utils import markdown_to_pdf
-from quality import apply_skill_gap_penalty, classify_job_tier, has_usable_description
+from quality import apply_skill_gap_penalty, classify_job_tier, has_usable_description, passes_shortlist_policy
 
 
 class QualityOfLifeTests(unittest.TestCase):
@@ -68,6 +68,12 @@ class QualityOfLifeTests(unittest.TestCase):
         )
         self.assertEqual(score, 68)
         self.assertIn("Angular", note)
+
+    def test_shortlist_policy_prioritizes_large_product_companies(self):
+        self.assertTrue(passes_shortlist_policy({"company": "OpenAI"}, True, 42))
+        self.assertTrue(passes_shortlist_policy({"company": "Small Product Labs"}, True, 70))
+        self.assertFalse(passes_shortlist_policy({"company": "Small Product Labs"}, True, 69))
+        self.assertFalse(passes_shortlist_policy({"company": "OpenAI"}, False, 99))
 
 
 if __name__ == "__main__":

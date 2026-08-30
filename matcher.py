@@ -6,7 +6,7 @@ from groq import Groq
 import db
 import config
 from screening import deterministic_hard_filter
-from quality import apply_skill_gap_penalty, classify_job_tier, has_usable_description
+from quality import apply_skill_gap_penalty, classify_job_tier, has_usable_description, passes_shortlist_policy
 
 def load_resume():
     resume_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resume.md")
@@ -282,7 +282,7 @@ Description:
             
             # Determine status
             # If passes hard filters and score >= 75, we shortlist it. Otherwise rejected.
-            if passes and score >= 75:
+            if passes_shortlist_policy(job, passes, score):
                 status = "shortlisted"
                 if review_required:
                     notes = f"REVIEW: Company is not yet verified as a product company or enterprise.\n\n{notes}"

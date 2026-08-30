@@ -18,6 +18,12 @@ KNOWN_PRODUCT_COMPANIES = {
     "ixigo", "fancode", "pocket fm", "galaxeye", "darwinbox", "freshworks",
 }
 
+LARGE_REPUTABLE_PRODUCT_COMPANIES = {
+    "amazon", "anthropic", "flipkart", "freshworks", "google", "meesho",
+    "microsoft", "openai", "phonepe", "postman", "razorpay", "stripe",
+    "swiggy", "zerodha", "zomato",
+}
+
 
 def classify_job_tier(job: dict) -> str:
     """Classify a job conservatively using both company and source metadata."""
@@ -37,6 +43,21 @@ def classify_job_tier(job: dict) -> str:
     if company in KNOWN_PRODUCT_COMPANIES or source.startswith("ats:"):
         return "Tier 1: Product Company / AI Startup"
     return "Tier 3: Staffing Agency / Unverified"
+
+
+def is_large_reputable_product_company(job: dict) -> bool:
+    """Return whether a role belongs to a known large product company."""
+    company = (job.get("company") or "").strip().lower()
+    return any(re.search(rf"\b{re.escape(name)}\b", company) for name in LARGE_REPUTABLE_PRODUCT_COMPANIES)
+
+
+def passes_shortlist_policy(job: dict, passes_hard_filters: bool, score: int) -> bool:
+    """Apply the user-facing policy after hard filters and compatibility scoring."""
+    if not passes_hard_filters:
+        return False
+    if is_large_reputable_product_company(job):
+        return True
+    return score >= 70
 
 
 def has_usable_description(job: dict) -> bool:

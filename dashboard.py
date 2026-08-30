@@ -91,6 +91,9 @@ def generate_dashboard():
 
         out = f"## {icon} {section_title} ({len(job_list)} Positions)\n*{section_desc}*\n\n"
 
+        def score_label(job):
+            return "Review" if classify_job_tier(job).startswith("Tier 3") and not job.get("score") else f"{job['score']}%"
+
         if tier1:
             out += "### 🌟 Tier 1: Product Companies & Verified AI Startups\n\n"
             out += "| Score | Job ID | Company | Job Title | Location | Direct ATS Link | ⚡ Auto-Apply | ✕ Dismiss |\n"
@@ -100,7 +103,7 @@ def generate_dashboard():
                 url_text = "[Apply Direct ↗]" if j["job_url_direct"] else "[View Listing ↗]"
                 apply_link = f"http://127.0.0.1:8765/apply?id={j['job_id']}"
                 dismiss_link = f"http://127.0.0.1:8765/dismiss?id={j['job_id']}"
-                out += f"| **{j['score']}%** | `{j['job_id']}` | **{j['company']}** | {j['title']} | {j['location'] or 'India / Remote'} | [{url_text}]({url}) | [[⚡ Apply ↗]]({apply_link}) | [[✕ Do Not Consider]]({dismiss_link}) |\n"
+                out += f"| **{score_label(j)}** | `{j['job_id']}` | **{j['company']}** | {j['title']} | {j['location'] or 'India / Remote'} | [{url_text}]({url}) | [[⚡ Apply ↗]]({apply_link}) | [[✕ Do Not Consider]]({dismiss_link}) |\n"
             out += "\n"
 
         if tier2:
@@ -112,7 +115,7 @@ def generate_dashboard():
                 url_text = "[Apply Direct ↗]" if j["job_url_direct"] else "[View Listing ↗]"
                 apply_link = f"http://127.0.0.1:8765/apply?id={j['job_id']}"
                 dismiss_link = f"http://127.0.0.1:8765/dismiss?id={j['job_id']}"
-                out += f"| **{j['score']}%** | `{j['job_id']}` | **{j['company']}** | {j['title']} | {j['location'] or 'India / Remote'} | [{url_text}]({url}) | [[⚡ Apply ↗]]({apply_link}) | [[✕ Do Not Consider]]({dismiss_link}) |\n"
+                out += f"| **{score_label(j)}** | `{j['job_id']}` | **{j['company']}** | {j['title']} | {j['location'] or 'India / Remote'} | [{url_text}]({url}) | [[⚡ Apply ↗]]({apply_link}) | [[✕ Do Not Consider]]({dismiss_link}) |\n"
             out += "\n"
 
         if other:
@@ -124,7 +127,7 @@ def generate_dashboard():
                 url_text = "[Apply Direct ↗]" if j["job_url_direct"] else "[View Listing ↗]"
                 apply_link = f"http://127.0.0.1:8765/apply?id={j['job_id']}"
                 dismiss_link = f"http://127.0.0.1:8765/dismiss?id={j['job_id']}"
-                out += f"| {j['score']}% | `{j['job_id']}` | {j['company']} | {j['title']} | {j['location'] or 'India / Remote'} | [{url_text}]({url}) | [[⚡ Apply ↗]]({apply_link}) | [[✕ Do Not Consider]]({dismiss_link}) |\n"
+                out += f"| {score_label(j)} | `{j['job_id']}` | {j['company']} | {j['title']} | {j['location'] or 'India / Remote'} | [{url_text}]({url}) | [[⚡ Apply ↗]]({apply_link}) | [[✕ Do Not Consider]]({dismiss_link}) |\n"
             out += "\n</details>\n\n"
 
         out += "---\n\n"
