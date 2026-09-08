@@ -132,14 +132,69 @@ def run_collector(limit_per_query=15, hours_old=72):
         if index < len(search_terms) - 1:
             time.sleep(random.uniform(2.5, 5.5))
 
-    print(f"\nJob collection complete. Total new unique jobs stored: {total_new_jobs}")
+    # Run dedicated remote job collection
+    remote_jobs_count = run_remote_collector(limit_per_query=limit_per_query, hours_old=hours_old)
+    total_new_jobs += remote_jobs_count
+
+    print(f"\nJob collection complete. Total new unique jobs stored: {total_new_jobs} (including {remote_jobs_count} remote)")
     return total_new_jobs
+
+
+def run_remote_collector(limit_per_query=15, hours_old=72):
+    """Dedicated scraper for remote and work-from-anywhere software opportunities."""
+    db.init_db()
+    total_remote = 0
+    sites = ["indeed", "linkedin"]
+
+    remote_queries = [
+        "Software Engineer Intern",
+        "Python Developer",
+        "Backend Developer",
+        "Junior AI Engineer",
+        "Machine Learning Intern",
+        "Full Stack Developer"
+    ]
+
+    print(f"\n====================================================")
+    print(f"🌐 INITIATING DEDICATED REMOTE JOB SCRAPER")
+    print(f"====================================================")
+
+    for idx, term in enumerate(remote_queries):
+        print(f"\nSearching Remote: '{term}'...")
+        try:
+            jobs = scrape_jobs(
+                site_name=sites,
+                search_term=term,
+                location="India",
+                is_remote=True,
+                results_wanted=limit_per_query,
+                hours_old=hours_old,
+                country_indeed='india'
+            )
+            if not jobs.empty:
+                new_cnt = db.add_jobs(jobs)
+                total_remote += new_cnt
+                print(f"-> [Remote Scrape] Found {len(jobs)} candidates. Inserted {new_cnt} new listings.")
+            else:
+                print("-> No remote jobs found for this query.")
+        except Exception as e:
+            print(f"-> Remote query warning for '{term}': {e}", file=sys.stderr)
+
+        if idx < len(remote_queries) - 1:
+            time.sleep(random.uniform(2.0, 4.0))
+
+    print(f"\nRemote collection complete. New remote jobs stored: {total_remote}")
+    return total_remote
+
 
 if __name__ == "__main__":
     limit = 15
     hours = 72
-    if len(sys.argv) > 1:
-        limit = int(sys.argv[1])
-    if len(sys.argv) > 2:
-        hours = int(sys.argv[2])
-    run_collector(limit, hours)
+    if "--remote" in sys.argv:
+        run_remote_collector(limit, hours)
+    else:
+        if len(sys.argv) > 1 and sys.argv[1].isdigit():
+            limit = int(sys.argv[1])
+        if len(sys.argv) > 2 and sys.argv[2].isdigit():
+            hours = int(sys.argv[2])
+        run_collector(limit, hours)

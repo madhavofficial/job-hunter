@@ -13,7 +13,7 @@ import os
 from datetime import datetime, timedelta
 
 import db
-from screening import classify_company_tier
+from screening import classify_company_tier, is_job_truly_remote
 
 
 def auto_archive_stale_jobs(days: int = 5):
@@ -60,6 +60,7 @@ def generate_dashboard():
     today_jobs = [j for j in shortlisted if (j.get("created_at") or "").startswith(today_str)]
     yesterday_jobs = [j for j in shortlisted if (j.get("created_at") or "").startswith(yesterday_str)]
     earlier_jobs = [j for j in shortlisted if j not in today_jobs and j not in yesterday_jobs]
+    remote_jobs = [j for j in shortlisted if is_job_truly_remote(j)]
     fresh_48h = [j for j in shortlisted if (j.get("created_at") or "") >= freshness_cutoff]
 
     now_str = datetime.now().strftime("%d %b %Y, %I:%M %p")
@@ -68,6 +69,7 @@ def generate_dashboard():
 
 ## 📊 Summary Statistics
 - **🔥 Fresh (Past 48h)**: {len(fresh_48h)} new opportunities
+- **🌐 Remote Roles**: {len(remote_jobs)} active opportunities
 - **📅 Yesterday ({yesterday_str})**: {len(yesterday_jobs)} active opportunities
 - **📁 Earlier This Week**: {len(earlier_jobs)} active opportunities
 - **✅ Applied Roles**: {len(applied)}
@@ -96,7 +98,7 @@ def generate_dashboard():
                 url_text = "[Apply Direct ↗]" if j["job_url_direct"] else "[View Listing ↗]"
                 apply_link = f"http://127.0.0.1:8765/apply?id={j['job_id']}"
                 dismiss_link = f"http://127.0.0.1:8765/dismiss?id={j['job_id']}"
-                out += f"| **{j['score']}%** | `{j['job_id']}` | **{j['company']}** | {j['title']} | {j['location'] or 'India / Remote'} | [{url_text}]({url}) | [[⚡ Apply ↗]]({apply_link}) | [[✕ Do Not Consider]]({dismiss_link}) |\n"
+                out += f"| **{j['score']}%** | `{j['job_id']}` | **{j['company']}** | {j['title']} | {j['location'] or 'India'} | [{url_text}]({url}) | [[⚡ Apply ↗]]({apply_link}) | [[✕ Do Not Consider]]({dismiss_link}) |\n"
             out += "\n"
 
         if tier2:
@@ -108,7 +110,7 @@ def generate_dashboard():
                 url_text = "[Apply Direct ↗]" if j["job_url_direct"] else "[View Listing ↗]"
                 apply_link = f"http://127.0.0.1:8765/apply?id={j['job_id']}"
                 dismiss_link = f"http://127.0.0.1:8765/dismiss?id={j['job_id']}"
-                out += f"| **{j['score']}%** | `{j['job_id']}` | **{j['company']}** | {j['title']} | {j['location'] or 'India / Remote'} | [{url_text}]({url}) | [[⚡ Apply ↗]]({apply_link}) | [[✕ Do Not Consider]]({dismiss_link}) |\n"
+                out += f"| **{j['score']}%** | `{j['job_id']}` | **{j['company']}** | {j['title']} | {j['location'] or 'India'} | [{url_text}]({url}) | [[⚡ Apply ↗]]({apply_link}) | [[✕ Do Not Consider]]({dismiss_link}) |\n"
             out += "\n"
 
         if other:
@@ -120,7 +122,7 @@ def generate_dashboard():
                 url_text = "[Apply Direct ↗]" if j["job_url_direct"] else "[View Listing ↗]"
                 apply_link = f"http://127.0.0.1:8765/apply?id={j['job_id']}"
                 dismiss_link = f"http://127.0.0.1:8765/dismiss?id={j['job_id']}"
-                out += f"| {j['score']}% | `{j['job_id']}` | {j['company']} | {j['title']} | {j['location'] or 'India / Remote'} | [{url_text}]({url}) | [[⚡ Apply ↗]]({apply_link}) | [[✕ Do Not Consider]]({dismiss_link}) |\n"
+                out += f"| {j['score']}% | `{j['job_id']}` | {j['company']} | {j['title']} | {j['location'] or 'India'} | [{url_text}]({url}) | [[⚡ Apply ↗]]({apply_link}) | [[✕ Do Not Consider]]({dismiss_link}) |\n"
             out += "\n</details>\n\n"
 
         out += "---\n\n"
@@ -128,6 +130,8 @@ def generate_dashboard():
 
     # Render Sections
     md_content += render_job_table(today_jobs, f"Fresh Today — {today_str}", "Discovered during today's scraping and AI evaluation run.", "🔥")
+    if remote_jobs:
+        md_content += render_job_table(remote_jobs, "Remote Opportunities", "Work-from-anywhere & remote-first roles matched to your stack.", "🌐")
     md_content += render_job_table(yesterday_jobs, f"Yesterday's Opportunities — {yesterday_str}", "High-fit roles discovered in the previous 24-48 hours.", "📅")
     if earlier_jobs:
         md_content += render_job_table(earlier_jobs, "Earlier This Week (Active Backlog)", "Roles from 2-4 days ago still open for applications.", "📁")
@@ -139,7 +143,7 @@ def generate_dashboard():
             url = j["job_url_direct"] or j["job_url"] or "#"
             apply_link = f"http://127.0.0.1:8765/apply?id={j['job_id']}"
             dismiss_link = f"http://127.0.0.1:8765/dismiss?id={j['job_id']}"
-            md_content += f"#### 💻 {j['title']} — **{j['company']}** ({j['location'] or 'India / Remote'})\n"
+            md_content += f"#### 💻 {j['title']} — **{j['company']}** ({j['location'] or 'India'})\n"
             md_content += f"- **Job ID**: `{j['job_id']}` | **Match Score**: **{j['score']}%**\n"
             md_content += f"- **Links**: [Portal Listing ↗]({url}) | [[⚡ 1-Click Apply ↗]]({apply_link}) | [[✕ Dismiss]]({dismiss_link})\n"
             if j.get("matching_notes"):

@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 
 import db
 import tailor
-from screening import classify_company_tier
+from screening import classify_company_tier, is_job_truly_remote
 
 PORT = 8765
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -68,6 +68,7 @@ def get_dashboard_data():
         if not tier.startswith("Tier 3"):
             j["tier"] = tier
             j["apply_url"] = j["job_url_direct"] or j["job_url"]
+            j["is_remote_verified"] = is_job_truly_remote(j)
             valid_shortlisted.append(j)
 
     # Calculate 48h Freshness cutoff
@@ -75,6 +76,7 @@ def get_dashboard_data():
     cutoff_7d = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
 
     fresh_jobs = [j for j in valid_shortlisted if (j.get("created_at") or "") >= cutoff_48h]
+    remote_jobs = [j for j in valid_shortlisted if j["is_remote_verified"]]
     tier1_jobs = [j for j in valid_shortlisted if j["tier"] == "Tier 1: Product Company / AI Startup"]
     tier2_jobs = [j for j in valid_shortlisted if j["tier"] == "Tier 2: Global Enterprise / IT Services"]
     older_jobs = [j for j in valid_shortlisted if (j.get("created_at") or "") < cutoff_7d]
@@ -83,6 +85,7 @@ def get_dashboard_data():
         "stats": {
             "total_shortlisted": len(valid_shortlisted),
             "fresh_48h": len(fresh_jobs),
+            "remote_count": len(remote_jobs),
             "tier1_count": len(tier1_jobs),
             "tier2_count": len(tier2_jobs),
             "total_applied": total_applied,
@@ -91,6 +94,7 @@ def get_dashboard_data():
             "older_count": len(older_jobs),
         },
         "fresh_jobs": fresh_jobs[:30],
+        "remote_jobs": remote_jobs[:40],
         "tier1_jobs": tier1_jobs[:35],
         "tier2_jobs": tier2_jobs[:25],
         "all_shortlisted": valid_shortlisted[:50],
@@ -147,7 +151,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <!-- Main Container -->
     <main class="max-w-7xl mx-auto px-4 py-6 sm:px-6 space-y-6">
         <!-- Metrics Ribbon -->
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4" id="stats-ribbon">
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3" id="stats-ribbon">
             <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center gap-4">
                 <div class="w-12 h-12 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 text-xl">
                     <i class="fa-solid fa-fire-flame-curved"></i>
@@ -155,6 +159,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 <div>
                     <div class="text-2xl font-bold text-white" id="stat-fresh">0</div>
                     <div class="text-xs font-medium text-slate-400">Fresh (Past 48h)</div>
+                </div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center gap-4">
+                <div class="w-12 h-12 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 text-xl">
+                    <i class="fa-solid fa-globe"></i>
+                </div>
+                <div>
+                    <div class="text-2xl font-bold text-white" id="stat-remote">0</div>
+                    <div class="text-xs font-medium text-slate-400">Remote Roles</div>
                 </div>
             </div>
             <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center gap-4">
@@ -190,6 +203,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <div class="flex items-center gap-6 border-b border-slate-800 text-sm overflow-x-auto pb-px">
             <button onclick="switchTab('fresh')" class="tab-btn active pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-2" id="tab-btn-fresh">
                 <i class="fa-solid fa-bolt text-amber-400"></i> Fresh Drops (48h) <span class="text-xs px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300" id="badge-fresh">0</span>
+            </button>
+            <button onclick="switchTab('remote')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-2" id="tab-btn-remote">
+                <i class="fa-solid fa-globe text-cyan-400"></i> Remote <span class="text-xs px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300" id="badge-remote">0</span>
             </button>
             <button onclick="switchTab('tier1')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-2" id="tab-btn-tier1">
                 <i class="fa-solid fa-rocket text-sky-400"></i> Tier 1 Product Startups <span class="text-xs px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300" id="badge-tier1">0</span>
@@ -247,11 +263,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         function renderMetrics() {
             const s = rawData.stats;
             document.getElementById('stat-fresh').innerText = s.fresh_48h;
+            document.getElementById('stat-remote').innerText = s.remote_count || 0;
             document.getElementById('stat-tier1').innerText = s.tier1_count;
             document.getElementById('stat-applied').innerText = s.total_applied;
             document.getElementById('stat-total').innerText = s.total_shortlisted;
 
             document.getElementById('badge-fresh').innerText = s.fresh_48h;
+            document.getElementById('badge-remote').innerText = s.remote_count || 0;
             document.getElementById('badge-tier1').innerText = s.tier1_count;
             document.getElementById('badge-tier2').innerText = s.tier2_count;
             document.getElementById('badge-all').innerText = s.total_shortlisted;
@@ -271,6 +289,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
             let list = [];
             if (currentTab === 'fresh') list = rawData.fresh_jobs;
+            else if (currentTab === 'remote') list = rawData.remote_jobs;
             else if (currentTab === 'tier1') list = rawData.tier1_jobs;
             else if (currentTab === 'tier2') list = rawData.tier2_jobs;
             else if (currentTab === 'all') list = rawData.all_shortlisted;
@@ -289,6 +308,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             list.forEach(j => {
                 const scoreColor = (j.score >= 90) ? 'text-amber-400 bg-amber-400/10 border-amber-400/20' : 'text-sky-400 bg-sky-400/10 border-sky-400/20';
                 const tierBadge = j.tier ? `<span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">${j.tier.split(':')[0]}</span>` : '';
+                const isRemote = j.is_remote_verified;
+                const remoteBadge = isRemote ? `<span class="text-[10px] px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-medium flex items-center gap-1"><i class="fa-solid fa-globe text-[9px]"></i> Remote</span>` : '';
                 const datePosted = j.date_posted && j.date_posted !== 'nan' ? j.date_posted : 'Recent';
                 const hasPdf = j.tailored_resume_pdf_path ? true : false;
 
@@ -319,10 +340,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                                 <div class="space-y-1">
                                     <div class="flex items-center gap-2">
                                         ${tierBadge}
+                                        ${remoteBadge}
                                         <span class="text-[10px] text-slate-400"><i class="fa-regular fa-clock"></i> ${datePosted}</span>
                                     </div>
                                     <h3 class="text-base font-bold text-white leading-snug">${j.title}</h3>
-                                    <p class="text-sm font-medium text-slate-300">${j.company} <span class="text-xs text-slate-400">&bull; ${j.location || 'India / Remote'}</span></p>
+                                    <p class="text-sm font-medium text-slate-300">${j.company} <span class="text-xs text-slate-400">&bull; ${j.location || 'India'}</span></p>
                                 </div>
                                 <div class="px-2.5 py-1 text-xs font-extrabold rounded-lg border ${scoreColor} shrink-0">
                                     ${j.score}% Match
@@ -414,10 +436,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             } catch (e) {
                 showToast('Failed to archive: ' + e, true);
             }
+        }
+
         async function addCustomJob() {
             const url = prompt("Paste any Job Listing URL (LinkedIn, Greenhouse, Lever, Workday, etc.):");
             if (!url || !url.trim()) return;
-            showToast("Scraping & analyzing custom job link with AI...");
+            showToast("Scraping & analyzing custom job link with AI... Please wait 5-10s.");
             try {
                 const res = await fetch('/api/custom', {
                     method: 'POST',
@@ -426,8 +450,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 });
                 const data = await res.json();
                 if (data.success && data.job_id) {
-                    showToast("Custom job added! Redirecting to 1-Click Apply...");
-                    window.location.href = '/apply?id=' + data.job_id;
+                    showToast("Custom job added! Starting tailored ATS resume generation...");
+                    window.location.href = '/apply?id=' + encodeURIComponent(data.job_id);
                 } else {
                     showToast("Failed to add job: " + (data.error || "Unknown error"), true);
                 }

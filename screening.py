@@ -53,3 +53,43 @@ def deterministic_hard_filter(job: dict) -> tuple[bool, str | None]:
     if re.search(outside_india, location, re.I) and not re.search(r"\bindia\b|\bremote\b", location, re.I):
         return False, "Location is outside India and is not remote."
     return True, None
+
+
+def is_job_truly_remote(job: dict) -> bool:
+    """Strictly validates whether a job is verified Remote / Work-From-Home.
+    
+    Rejects on-site and hybrid roles located in physical cities/offices even if
+    an aggregator marked them with a remote flag.
+    """
+    loc = str(job.get("location") or "").lower().strip()
+    title = str(job.get("title") or "").lower().strip()
+    desc = str(job.get("description") or "").lower()
+
+    # 1. Negative Disqualifiers: Explicit On-Site or Hybrid terms
+    if any(term in loc for term in ("on-site", "onsite", "in-office", "hybrid", "office only")):
+        return False
+    if any(term in title for term in ("on-site", "onsite", "in-office", "hybrid")):
+        return False
+
+    # 2. Strict Positive Confirmation in Location or Title
+    remote_markers = ("remote", "work from home", "wfh", "anywhere", "telecommute")
+    if any(m in loc for m in remote_markers) or any(m in title for m in remote_markers):
+        return True
+
+    # 3. Disqualify physical city/state locations (e.g. 'KA, IN', 'MH, IN', 'Bengaluru', 'Navi Mumbai', 'Mohali')
+    physical_indicators = (
+        ", in", "karnataka", "bangalore", "bengaluru", "mumbai", "pune", "delhi", "hyderabad",
+        "chennai", "noida", "gurgaon", "gurugram", "ahmedabad", "kolkata", "kochi", "kerala",
+        "tamil nadu", "maharashtra", "telangana", "andhra", "punjab", "haryana", "uttar pradesh",
+        "gujarat", "west bengal", "district"
+    )
+    if any(p in loc for p in physical_indicators):
+        if "100% remote" in desc or "fully remote" in desc or "work from anywhere" in desc:
+            return True
+        return False
+
+    if "100% remote" in desc or "fully remote" in desc or "work from anywhere" in desc:
+        return True
+
+    return False
+

@@ -1,10 +1,74 @@
 import os
+import re
 import sys
 from groq import Groq
 import db
 import config
 from pdf_utils import markdown_to_pdf
 import github_portfolio
+
+
+def is_job_description_ambiguous(title: str, description: str) -> tuple[bool, str]:
+    """Detects if a job description is ambiguous, multi-track, general development centre,
+    or early-career talent pool requiring a broad portfolio presentation.
+    """
+    t = (title or "").lower()
+    d = (description or "").lower()
+
+    # 1. Explicit multi-role, talent pool, or general listing markers
+    pooling_markers = [
+        "multiple potential roles", "outlines multiple", "multiple roles across",
+        "various roles across", "various roles", "considered as openings arise", "general listing",
+        "talent pool", "talent pooling", "rotational", "development centre", "development center",
+        "idc", "various teams", "multiple teams", "future openings", "early career program",
+        "campus hiring", "graduate trainee", "general software engineer", "rotational program",
+        "explore different areas", "multiple engineering disciplines"
+    ]
+    for marker in pooling_markers:
+        if marker in d or marker in t:
+            return True, f'Explicit multi-role/general marker found: "{marker}"'
+
+    # 2. Cross-disciplinary multi-domain check (touching 3+ disjoint engineering pillars)
+    domain_keywords = {
+        "Embedded/Mobile/Systems": [
+            "android", "aosp", "embedded", "soc", "firmware", "kernel", "sensor", "iot",
+            "qualcomm", "device security", "keystore", "selinux", "hardware"
+        ],
+        "AI/ML/ComputerVision": [
+            "deep learning", "computer vision", "nlp", "machine learning", "pytorch",
+            "tensorflow", "llm", "generative ai", "gemini", "neural network"
+        ],
+        "Distributed/BigData/Cloud": [
+            "kafka", "spark", "distributed system", "data streaming", "batch processing",
+            "hadoop", "microservice", "distributed systems"
+        ],
+        "FullStack/Web/Backend": [
+            "full stack", "fullstack", "react", "node.js", "typescript", "fastapi",
+            "flask", "django", "rest api", "web application"
+        ],
+        "DevOps/Automation/Tooling": [
+            "ci/cd", "docker", "kubernetes", "playwright", "automation", "test automation",
+            "testing automation", "devops"
+        ]
+    }
+    matched_domains = []
+    for domain, kw_list in domain_keywords.items():
+        if any(re.search(r"\b" + re.escape(kw) + r"\b", d) for kw in kw_list):
+            matched_domains.append(domain)
+
+    if len(matched_domains) >= 3:
+        return True, f"Cross-disciplinary role touching {len(matched_domains)} domains: {', '.join(matched_domains)}"
+
+    # 3. Vague/Sparse Description with generic title
+    generic_titles = [
+        "software engineer", "software developer", "member of technical staff", "associate software engineer",
+        "engineering intern", "sde intern", "technology intern", "graduate engineer", "technology analyst"
+    ]
+    if any(gt in t for gt in generic_titles) and len(d.strip()) < 350:
+        return True, f'Vague/sparse description ({len(d.strip())} chars) with generic title "{title}"'
+
+    return False, "Targeted/domain-specific posting"
+
 
 def tailor_materials(job_id: str):
     db.init_db()
@@ -47,6 +111,40 @@ def tailor_materials(job_id: str):
     description = job['description'] or ""
     
     print(f"Tailoring application materials for: '{title}' at '{company}'...")
+
+    is_ambiguous, ambiguity_reason = is_job_description_ambiguous(title, description)
+    if is_ambiguous:
+        print(f"-> Ambiguous / multi-track role detected: {ambiguity_reason}")
+        print("-> Applying Broad Versatility Strategy: Maximizing viable projects across diverse domains...")
+        project_strategy = f"""2. DYNAMIC PROJECT SELECTION & ALIGNMENT — AMBIGUOUS / MULTI-TRACK / GENERAL JD STRATEGY:
+   - DETECTED CONTEXT: The Job Posting is AMBIGUOUS, MULTI-TRACK, or a GENERAL HIRING POOL ({ambiguity_reason}).
+   - CORE DIRECTIVE: INCLUDE AS MANY HIGH-SIGNAL, VIABLE PROJECTS AS POSSIBLE (INCLUDE 4 TO 5 DIVERSE PROJECTS) from the candidate's verified pool (Base Resume + GitHub Portfolio).
+   - DO NOT limit the resume to a single narrow track or only 2-3 projects. Showcase broad engineering versatility across multiple technical domains:
+      * Pillar 1 (Computer Vision / Deep Learning / Embedded AI): 'Sketch Recognition System' (Hierarchical CNN, Squeeze-and-Excitation attention, PyTorch, multi-worker out-of-core streaming)
+      * Pillar 2 (Distributed Systems / Big Data / Streaming / Concurrency): '153_Project3_BD' (Distributed Stream & Image Processing with Apache Kafka, Docker, Python)
+      * Pillar 3 (Full-Stack / Systems Architecture / Web): 'Ultimate-Trader-Dashboard' (TypeScript, Next.js, WebSockets, PostgreSQL, Docker) or 'University-DBMS-Management-'
+      * Pillar 4 (AI Agents / Tooling / Workflow Automation): 'job-hunter' (Agentic automation, multi-source scraping, Pydantic guardrails) or 'CareerTime' (Groq LPU, LangChain)
+      * Pillar 5 (Neuro-Symbolic / RAG / Complex Algorithms): 'neuro_capstone' or 'evidence-grounded-clinical-literature-synthesis'
+   - STRICT SINGLE-PAGE FIT RULES:
+     * To fit 4 to 5 projects cleanly on ONE page, write EXACTLY 2 to 3 concise, punchy, high-density bullet points per project.
+     * Bullet 1: MUST state WHAT the project is and WHAT it does (core product capability and problem solved).
+     * Bullets 2-3: Detail deep technical architecture, libraries, concurrency/data flow, performance optimizations, and quantitative metrics (accuracy, latency, throughput, scale).
+   - EXPANDED SKILLS: Ensure the Technical Skills section covers the full breadth of languages, frameworks, and tools across all included projects (e.g. Python, TypeScript, Java, C, Kotlin, Scala, PyTorch, Apache Kafka, Next.js, PostgreSQL, Docker, Android)."""
+    else:
+        print("-> Targeted role detected. Applying Deep Specialization Strategy...")
+        project_strategy = """2. DYNAMIC PROJECT SELECTION & ALIGNMENT — TARGETED / SPECIALIZED JD STRATEGY:
+   - Carefully review the Job Posting requirements (required languages, frameworks, domain, e.g. DevOps, TypeScript, Full-Stack Web, Backend, Distributed Systems, AI/ML, Data Science, Databases).
+   - Compare the candidate's Current Resume Projects with the candidate's Verified GitHub Project Portfolio.
+   - Select the 3 to 4 BEST-FITTING projects from the combined pool of projects (Current Resume + GitHub Portfolio).
+   - REPLACE less relevant projects on the base resume with stronger-matching GitHub projects where appropriate:
+      * For DevOps / Cloud / Automation / Tooling roles -> prioritize 'job-hunter'.
+      * For Big Data / Data Engineering / Streaming / Spark / Kafka / Distributed Systems / Batch Processing -> prioritize '153_Project3_BD' (Distributed Stream & Image Processing with Apache Kafka, Docker, Python) and 'Forecasting-Bike-Rental-Demand'.
+      * For Full-Stack / TypeScript / FinTech / Database roles -> prioritize 'Ultimate-Trader-Dashboard' or 'University-DBMS-Management-'.
+      * For AI / RAG / Agent / NLP roles -> prioritize 'evidence-grounded-clinical-literature-synthesis', 'CareerTime', or 'neuro_capstone'.
+      * For Computer Vision / Deep Learning -> prioritize 'Sketch Recognition System'.
+      * For Data Science / Regression / Analytics -> prioritize 'Forecasting-Bike-Rental-Demand'.
+   - FIRST BULLET EXPLAINS WHAT THE PROJECT DOES: For EVERY project on the resume, the FIRST bullet point MUST clearly state WHAT the project is and WHAT it does (its core product capability, user function, and problem solved). The remaining bullets should then detail the deep engineering architecture, database design, concurrency models, performance optimizations, and quantitative metrics.
+   - For each selected project, write 3 to 4 detailed, highly technical bullet points demonstrating real engineering architecture, libraries, and design patterns from its verified documentation."""
     
     # Init Groq
     from dotenv import load_dotenv
@@ -69,18 +167,8 @@ def tailor_materials(job_id: str):
 
 Instructions & Rules:
 1. PROFESSIONAL EXPERIENCE: Preserve all professional internships (Qualcomm, O.C. Tanner) with all hard metrics (8,700 tickets, 15+ skills, 50+ tickets, 70% coverage), technical depth, and guardrails. Do not compress or delete these experiences.
-2. DYNAMIC PROJECT REPLACEMENT & ALIGNMENT:
-   - Carefully review the Job Posting requirements (required languages, frameworks, domain, e.g. DevOps, TypeScript, Full-Stack Web, Backend, Distributed Systems, AI/ML, Data Science, Databases).
-   - Compare the candidate's Current Resume Projects with the candidate's Verified GitHub Project Portfolio.
-   - Select the 3 to 4 BEST-FITTING projects from the combined pool of projects (Current Resume + GitHub Portfolio).
-   - REPLACE less relevant projects on the base resume with stronger-matching GitHub projects where appropriate:
-     * For DevOps / Cloud / Automation / Tooling roles -> prioritize 'job-hunter'.
-     * For Full-Stack / TypeScript / FinTech / Database roles -> prioritize 'Ultimate-Trader-Dashboard' or 'University-DBMS-Management-'.
-     * For AI / RAG / Agent / NLP roles -> prioritize 'evidence-grounded-clinical-literature-synthesis', 'CareerTime', or 'neuro_capstone'.
-     * For Computer Vision / Deep Learning -> prioritize 'Sketch Recognition System'.
-     * For Data Science / Regression / Analytics -> prioritize 'Forecasting-Bike-Rental-Demand'.
-   - FIRST BULLET EXPLAINS WHAT THE PROJECT DOES: For EVERY project on the resume, the FIRST bullet point MUST clearly state WHAT the project is and WHAT it does (its core product capability, user function, and problem solved). The remaining bullets should then detail the deep engineering architecture, database design, concurrency models, performance optimizations, and quantitative metrics.
-   - For each selected project, write 3 to 4 detailed, highly technical bullet points demonstrating real engineering architecture, libraries, and design patterns from its verified documentation.
+{project_strategy}
+   - AUTONOMOUS AMBIGUITY EVALUATION: If the prompt marked this as targeted, but YOU evaluate from the Job Description that the role is actually broad, multi-track, general development centre (e.g. IDC), rotational, or lacks specific single-domain constraints, OVERRIDE and apply the AMBIGUOUS / BROAD JOB DIRECTIVE: include 4 to 5 diverse projects with 2-3 concise, high-density bullets per project to showcase maximum engineering breadth.
 3. SKILLS SECTION: Update the Technical Skills section to highlight the exact languages and tools used across the selected projects and experience (e.g., add TypeScript, Docker, Prisma, etc. if featuring TypeScript/Full-Stack projects).
 4. ZERO FABRICATION: Do NOT invent non-existent projects, companies, durations, graduation date (May 2027), or credentials. Rely strictly on facts in the candidate's resume and GitHub portfolio. Do NOT include GPA on the resume.
 5. FORMATTING & TYPOGRAPHY:

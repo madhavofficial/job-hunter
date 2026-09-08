@@ -1,6 +1,6 @@
 import unittest
 
-from screening import classify_company_tier, deterministic_hard_filter
+from screening import classify_company_tier, deterministic_hard_filter, is_job_truly_remote
 from collector import SUPPORTED_INDIA_SITES
 
 
@@ -39,6 +39,22 @@ class ScreeningTests(unittest.TestCase):
         ok, reason = deterministic_hard_filter({"title": "Backend Developer", "company": "Acme", "location": "Toronto, Canada"})
         self.assertFalse(ok)
         self.assertIn("outside India", reason)
+
+    def test_truly_remote_filtering(self):
+        # Genuine remote roles
+        self.assertTrue(is_job_truly_remote({"title": "Python Developer", "location": "Remote, IN"}))
+        self.assertTrue(is_job_truly_remote({"title": "Full Stack Engineer (Remote)", "location": "India"}))
+        self.assertTrue(is_job_truly_remote({"title": "Backend Intern", "location": "Work From Home"}))
+        self.assertTrue(is_job_truly_remote({"title": "AI Intern", "location": "India", "description": "This is a 100% remote position."}))
+
+        # Reject on-site/hybrid despite aggregator or title
+        self.assertFalse(is_job_truly_remote({"title": "Full Stack Developer", "location": "Navi Mumbai, Maharashtra, India"}))
+        self.assertFalse(is_job_truly_remote({"title": "Backend Developer", "location": "Ahmedabad, Gujarat, India"}))
+        self.assertFalse(is_job_truly_remote({"title": "Python Developer", "location": "Bengaluru, Karnataka, India"}))
+        self.assertFalse(is_job_truly_remote({"title": "Full Stack Developer (Hybrid)", "location": "Remote, IN"}))
+        self.assertFalse(is_job_truly_remote({"title": "Software Engineer", "location": "Delhi (On-site)"}))
+        self.assertFalse(is_job_truly_remote({"title": "Data Engineer", "location": "TS, IN"}))
+        self.assertFalse(is_job_truly_remote({"title": "Software Developer", "location": ""}))
 
 
 if __name__ == "__main__":

@@ -20,7 +20,7 @@ class TestCustomJob(unittest.TestCase):
         self.assertIsNone(custom_job.extract_linkedin_id(url3))
 
     def test_ingest_custom_job_direct(self):
-        custom_url = "https://careers.example.com/jobs/test-lead-ai-eng-999"
+        custom_url = "https://careers.example.com/jobs/test-unique-unit-12345"
         custom_text = """
         Company: TestCorp AI
         Title: Senior AI Platform Engineer
@@ -28,6 +28,12 @@ class TestCustomJob(unittest.TestCase):
         Requirements: Python, LangChain, Distributed Systems, FastAPI, PostgreSQL.
         Responsibilities: Build scalable LLM microservices and agent workflows.
         """
+        # Clean previous if any
+        conn = db.get_db_connection()
+        conn.execute("DELETE FROM jobs WHERE job_url = ?", (custom_url,))
+        conn.commit()
+        conn.close()
+
         job_id = custom_job.ingest_custom_job(custom_url, custom_text=custom_text)
         self.assertTrue(job_id.startswith("custom-") or job_id.startswith("li-"))
         conn = db.get_db_connection()

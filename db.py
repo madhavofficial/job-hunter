@@ -123,6 +123,10 @@ def add_jobs(df: pd.DataFrame):
                     ))
                 continue
         
+        # Strictly validate remote status to avoid false-positive on-site listings
+        from screening import is_job_truly_remote
+        is_remote_val = 1 if is_job_truly_remote(row) else 0
+
         # Insert
         try:
             cursor.execute("""
@@ -142,7 +146,7 @@ def add_jobs(df: pd.DataFrame):
                 str(row.get('date_posted', '')),
                 row.get('job_type', ''),
                 row.get('description', ''),
-                int(row.get('is_remote', 0)) if pd.notna(row.get('is_remote')) else 0,
+                is_remote_val,
                 row.get('skills', ''),
                 row.get('experience_range', ''),
             ))

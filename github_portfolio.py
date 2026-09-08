@@ -9,6 +9,7 @@ import base64
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import requests
@@ -112,14 +113,18 @@ def inspect_remote_repository(username: str, repo_name: str, headers: dict) -> d
         readme_url = f"https://api.github.com/repos/{username}/{repo_name}/readme"
         res = requests.get(readme_url, headers=headers, timeout=6)
         if res.status_code == 200:
-            raw = res.json().get("content", "")
-            readme_text = base64.b64decode(raw).decode("utf-8", errors="ignore")[:3000]
+            res_data = res.json()
+            if isinstance(res_data, dict):
+                raw = res_data.get("content", "")
+                if raw:
+                    readme_text = base64.b64decode(raw).decode("utf-8", errors="ignore")[:3000]
 
         # Fetch git tree
         tree_url = f"https://api.github.com/repos/{username}/{repo_name}/git/trees/HEAD?recursive=1"
         res = requests.get(tree_url, headers=headers, timeout=8)
         if res.status_code == 200:
-            tree_data = res.json().get("tree", [])
+            res_tree = res.json()
+            tree_data = res_tree.get("tree", []) if isinstance(res_tree, dict) else []
             for item in tree_data:
                 path = item.get("path", "")
                 if not any(ign in path.split("/") for ign in IGNORED_DIRS):
@@ -130,8 +135,11 @@ def inspect_remote_repository(username: str, repo_name: str, headers: dict) -> d
                         f_url = f"https://api.github.com/repos/{username}/{repo_name}/contents/{path}"
                         f_res = requests.get(f_url, headers=headers, timeout=6)
                         if f_res.status_code == 200:
-                            f_raw = f_res.json().get("content", "")
-                            manifests[path] = base64.b64decode(f_raw).decode("utf-8", errors="ignore")[:1200]
+                            f_data = f_res.json()
+                            if isinstance(f_data, dict):
+                                f_raw = f_data.get("content", "")
+                                if f_raw:
+                                    manifests[path] = base64.b64decode(f_raw).decode("utf-8", errors="ignore")[:1200]
     except Exception as e:
         print(f"Warning: Failed remote inspection for '{repo_name}': {e}", file=sys.stderr)
 
@@ -165,66 +173,85 @@ def fetch_github_portfolio(username: str = None, force_refresh: bool = False) ->
     if github_token:
         headers["Authorization"] = f"Bearer {github_token}"
 
+    # 1. Try gh CLI first for full collaborator & org repo access
+    repos = []
     try:
-        url = f"https://api.github.com/users/{username}/repos?per_page=100&sort=updated"
-        res = requests.get(url, headers=headers, timeout=10)
-        if res.status_code != 200:
-            print(f"Warning: GitHub API returned status {res.status_code} for user '{username}'.", file=sys.stderr)
-            return []
+        gh_res = subprocess.run(
+            ["gh", "api", "user/repos?affiliation=owner,collaborator,organization_member", "--paginate"],
+            capture_output=True,
+            text=True,
+            timeout=12
+        )
+        if gh_res.returncode == 0:
+            repos = json.loads(gh_res.stdout)
+    except Exception:
+        pass
 
-        repos = res.json()
-        portfolio = []
-
-        for r in repos:
-            if r.get("fork", False):
-                continue
-            name = r.get("name", "")
-            if is_repo_excluded(name):
-                continue
-
-            description = r.get("description") or ""
-            language = r.get("language") or ""
-            topics = r.get("topics") or []
-            html_url = r.get("html_url") or f"https://github.com/{username}/{name}"
-
-            # Check if repo exists locally on disk
-            local_path = os.path.join(USER_HOME, name)
-            if os.path.isdir(local_path):
-                inspection = inspect_local_repository(local_path)
-                source_type = "local_filesystem"
-            else:
-                inspection = inspect_remote_repository(username, name, headers)
-                source_type = "remote_github"
-
-            project_item = {
-                "name": name,
-                "url": html_url,
-                "language": language,
-                "description": description,
-                "topics": topics,
-                "source_type": source_type,
-                "file_tree": inspection.get("file_tree", []),
-                "manifests": inspection.get("manifests", {}),
-                "readme_content": inspection.get("readme_text", ""),
-            }
-            portfolio.append(project_item)
-
-        # Save to cache
+    # 2. Fallback to standard GitHub REST API
+    if not repos:
         try:
-            with open(CACHE_FILE, "w", encoding="utf-8") as f:
-                json.dump({
-                    "username": username,
-                    "timestamp": time.time(),
-                    "repositories": portfolio
-                }, f, indent=2)
+            url = f"https://api.github.com/users/{username}/repos?per_page=100&sort=updated"
+            res = requests.get(url, headers=headers, timeout=10)
+            if res.status_code == 200:
+                repos = res.json()
         except Exception as e:
-            print(f"Warning: Failed to save GitHub portfolio cache: {e}", file=sys.stderr)
+            print(f"Warning: GitHub API error: {e}", file=sys.stderr)
 
-        return portfolio
+    portfolio = []
+    seen_names = set()
 
+    for r in repos:
+        if r.get("fork", False):
+            continue
+        name = r.get("name", "")
+        full_name = r.get("full_name", f"{username}/{name}")
+        owner_login = r.get("owner", {}).get("login", username)
+        
+        if is_repo_excluded(name) or name in seen_names:
+            continue
+        seen_names.add(name)
+
+        description = r.get("description") or ""
+        language = r.get("language") or ""
+        topics = r.get("topics") or []
+        html_url = r.get("html_url") or f"https://github.com/{full_name}"
+
+        # Check if repo exists locally on disk
+        local_path = os.path.join(USER_HOME, name)
+        if os.path.isdir(local_path):
+            inspection = inspect_local_repository(local_path)
+            source_type = "local_filesystem"
+        else:
+            inspection = inspect_remote_repository(owner_login, name, headers)
+            source_type = "remote_github"
+
+        project_item = {
+            "name": name,
+            "full_name": full_name,
+            "owner": owner_login,
+            "url": html_url,
+            "language": language,
+            "description": description,
+            "topics": topics,
+            "source_type": source_type,
+            "file_tree": inspection.get("file_tree", []),
+            "manifests": inspection.get("manifests", {}),
+            "readme_content": inspection.get("readme_text", ""),
+        }
+        portfolio.append(project_item)
+
+    # Save to cache
+    try:
+        with open(CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump({
+                "username": username,
+                "timestamp": time.time(),
+                "repositories": portfolio
+            }, f, indent=2)
     except Exception as e:
-        print(f"Warning: Error fetching GitHub portfolio for '{username}': {e}", file=sys.stderr)
-        return []
+        print(f"Warning: Failed to save GitHub portfolio cache: {e}", file=sys.stderr)
+
+    return portfolio
 
 
 def format_github_portfolio_for_prompt(portfolio: list[dict]) -> str:

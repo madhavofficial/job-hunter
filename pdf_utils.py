@@ -196,8 +196,9 @@ def _build_flowables(markdown_text: str):
     while i < total and not lines[i]:
         i += 1
 
-    if i < total and lines[i].startswith("# "):
-        name_line = lines[i].lstrip("# ").strip()
+    if i < total and (lines[i].startswith("#") or "madhav" in lines[i].lower() or (i + 1 < total and any(k in lines[i+1].lower() for k in ["email", "phone", "@", "linkedin"]))):
+        name_line = re.sub(r"^#+\s*", "", lines[i]).strip()
+        name_line = re.sub(r"^\*\*([^*]+)\*\*$", r"\1", name_line)
         flow.append(Paragraph(_format_inline(name_line), title_style))
         i += 1
 
