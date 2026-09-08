@@ -35,6 +35,10 @@ python matcher.py
 echo "Step 4: Generating Dashboard..."
 python dashboard.py
 
+# Execute step 5: Notion Sync
+echo "Step 5: Synchronizing applications with Notion tracker..."
+python notion_sync.py
+
 echo "========================================="
 echo "Pipeline execution finished successfully!"
 echo "📄 Markdown Dashboard: file://$DIR/dashboard.md"
