@@ -1,6 +1,26 @@
 # Secrets and personal data
 .env
+*.env
 resume.md
+*resume*.md
+*resume*.pdf
+*.docx
+
+# Generated reports, tailored applications, and live job findings
+jobs.db
+*.db
+*.sqlite
+*.sqlite3
+*.csv
+dashboard.md
+dashboard.pdf
+dashboards/
+tailored/
+tailored/**
+logs/
+*.log
+scraped/
+cache/
 
 # Local Python environments and caches
 .venv/
@@ -9,13 +29,4 @@ __pycache__/
 .pytest_cache/
 .github_portfolio_cache.json
 .DS_Store
-
-# Local database and runtime logs
-jobs.db
-logs/
-
-# Generated reports and application materials
-dashboard.md
-dashboard.pdf
-dashboards/
-tailored/
+*.pdf
