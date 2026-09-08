@@ -16,6 +16,7 @@ import json
 import os
 import re
 import socketserver
+import subprocess
 import sys
 import threading
 import urllib.parse
@@ -324,6 +325,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                     <a id="modal-pdf-link" href="#" target="_blank" class="hidden px-4 py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-sky-400 rounded-lg border border-slate-700 flex items-center gap-1.5 transition">
                         <i class="fa-solid fa-file-pdf"></i> View PDF
                     </a>
+                    <button id="modal-reveal-btn" onclick="revealInFinder(currentModalPdfPath)" class="hidden px-3 py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 flex items-center gap-1.5 transition" title="Reveal PDF in Finder & copy path">
+                        <i class="fa-regular fa-folder-open text-amber-400"></i> Finder
+                    </button>
                     <button id="modal-apply-btn" class="px-5 py-2 text-xs font-bold bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white rounded-lg shadow-md shadow-sky-500/20 flex items-center gap-1.5 transition">
                         <i class="fa-solid fa-bolt"></i> 1-Click Tailor & Apply
                     </button>
@@ -398,6 +402,29 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         let searchTerm = '';
         let currentSort = 'match_desc';
         let toastTimer = null;
+        let currentModalPdfPath = '';
+
+        async function revealInFinder(pdfPath) {
+            if (!pdfPath) return;
+            try {
+                await navigator.clipboard.writeText(pdfPath);
+            } catch (_) {}
+            try {
+                const res = await fetch('/api/reveal', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: pdfPath })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Revealed in Finder & path copied to clipboard!');
+                } else {
+                    showToast('Path copied to clipboard: ' + pdfPath);
+                }
+            } catch (_) {
+                showToast('Path copied: ' + pdfPath);
+            }
+        }
 
         function escapeHtml(str) {
             if (!str) return '';
@@ -614,7 +641,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                             <div class="flex items-center gap-2">
                                 ${portalUrl ? `<a href="${portalUrl}" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg shadow-sm flex items-center gap-1.5 transition" title="Open candidate application status tracking portal"><i class="fa-solid fa-id-card"></i> Check Status (${j.platform || 'Portal'})</a>` : ''}
                                 ${listingUrl ? `<a href="${listingUrl}" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 text-xs font-medium bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg border border-slate-700 flex items-center gap-1.5 transition"><i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-sky-400"></i> View Listing</a>` : ''}
-                                ${hasPdf ? `<a href="/pdf?path=${encodeURIComponent(j.tailored_resume_pdf_path)}" target="_blank" class="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-sky-400 rounded-lg border border-slate-700 flex items-center gap-1.5 transition"><i class="fa-solid fa-file-pdf"></i> View PDF</a>` : ''}
+                                ${hasPdf ? `
+                                <button onclick="revealInFinder('${escapeHtml(j.tailored_resume_pdf_path)}')" class="px-2.5 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg border border-slate-700 flex items-center gap-1 transition" title="Reveal PDF in Finder & copy path"><i class="fa-regular fa-folder-open text-amber-400"></i></button>
+                                <a href="/pdf?path=${encodeURIComponent(j.tailored_resume_pdf_path)}" target="_blank" class="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-sky-400 rounded-lg border border-slate-700 flex items-center gap-1.5 transition"><i class="fa-solid fa-file-pdf"></i> View PDF</a>` : ''}
                             </div>
                         </div>
                     `;
@@ -654,7 +683,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                                 </a>` : ''}
                             </div>
                             <div class="flex items-center gap-2">
-                                ${hasPdf ? `<a href="/pdf?path=${encodeURIComponent(j.tailored_resume_pdf_path)}" target="_blank" class="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-sky-400 rounded-lg border border-slate-700 flex items-center gap-1.5 transition" title="Open Tailored Resume PDF"><i class="fa-solid fa-file-pdf"></i> PDF</a>` : ''}
+                                ${hasPdf ? `
+                                <button onclick="revealInFinder('${escapeHtml(j.tailored_resume_pdf_path)}')" class="px-2.5 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg border border-slate-700 flex items-center gap-1 transition" title="Reveal PDF in Finder & copy path"><i class="fa-regular fa-folder-open text-amber-400"></i></button>
+                                <a href="/pdf?path=${encodeURIComponent(j.tailored_resume_pdf_path)}" target="_blank" class="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-sky-400 rounded-lg border border-slate-700 flex items-center gap-1.5 transition" title="Open Tailored Resume PDF"><i class="fa-solid fa-file-pdf"></i> PDF</a>` : ''}
                                 <button onclick="applyJob('${j.job_id}', this)" class="px-4 py-1.5 text-xs font-bold bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white rounded-lg shadow-md shadow-sky-500/20 flex items-center gap-1.5 transition">
                                     <i class="fa-solid fa-bolt"></i> 1-Click Tailor & Apply
                                 </button>
@@ -758,12 +789,16 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 listingLink.classList.add('hidden');
             }
 
+            currentModalPdfPath = job.tailored_resume_pdf_path || '';
             const pdfLink = document.getElementById('modal-pdf-link');
-            if (job.tailored_resume_pdf_path) {
-                pdfLink.href = `/pdf?path=${encodeURIComponent(job.tailored_resume_pdf_path)}`;
+            const revealBtn = document.getElementById('modal-reveal-btn');
+            if (currentModalPdfPath) {
+                pdfLink.href = `/pdf?path=${encodeURIComponent(currentModalPdfPath)}`;
                 pdfLink.classList.remove('hidden');
+                if (revealBtn) revealBtn.classList.remove('hidden');
             } else {
                 pdfLink.classList.add('hidden');
+                if (revealBtn) revealBtn.classList.add('hidden');
             }
 
             const dismissBtn = document.getElementById('modal-dismiss-btn');
@@ -862,7 +897,13 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 });
                 const data = await res.json();
                 if (data.success) {
-                    showToast('Tailored PDF generated & browser opened for ' + jobId);
+                    if (data.resume_pdf_path) {
+                        try {
+                            await navigator.clipboard.writeText(data.resume_pdf_path);
+                        } catch (_) {}
+                        window.open('/pdf?path=' + encodeURIComponent(data.resume_pdf_path), '_blank');
+                    }
+                    showToast('Tailored PDF opened! File revealed in Finder & path copied to clipboard');
                     const card = document.getElementById('job-' + jobId);
                     if (card) {
                         card.style.opacity = '0.4';
@@ -1066,6 +1107,13 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
             if target_url:
                 webbrowser.open(target_url)
 
+            # Reveal tailored PDF in Finder on macOS for immediate drag-and-drop
+            if resume_pdf_path and os.path.exists(resume_pdf_path) and sys.platform == "darwin":
+                try:
+                    subprocess.run(["open", "-R", resume_pdf_path], check=False)
+                except Exception:
+                    pass
+
             # Mark as applied in DB
             db.mark_as_applied(job_id, resume_path, None, resume_pdf_path, None)
 
@@ -1231,7 +1279,14 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
                 if target_url:
                     webbrowser.open(target_url)
 
-                # 4. Mark as applied in database
+                # 4. Reveal tailored PDF in Finder on macOS for immediate drag-and-drop
+                if resume_pdf_path and os.path.exists(resume_pdf_path) and sys.platform == "darwin":
+                    try:
+                        subprocess.run(["open", "-R", resume_pdf_path], check=False)
+                    except Exception:
+                        pass
+
+                # 5. Mark as applied in database
                 db.mark_as_applied(job_id, resume_path, None, resume_pdf_path, None)
 
                 self.send_response(200)
@@ -1249,6 +1304,26 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_response(500)
                 self.end_headers()
                 self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
+                return
+
+        elif path == "/api/reveal":
+            pdf_path = params.get("path")
+            if pdf_path and os.path.exists(pdf_path):
+                if sys.platform == "darwin":
+                    try:
+                        subprocess.run(["open", "-R", pdf_path], check=False)
+                    except Exception:
+                        pass
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": True}).encode("utf-8"))
+                return
+            else:
+                self.send_response(404)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "File not found"}).encode("utf-8"))
                 return
 
         elif path == "/api/dismiss":
