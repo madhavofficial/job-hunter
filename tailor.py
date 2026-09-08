@@ -227,19 +227,26 @@ Please output the COMPLETE tailored resume in Markdown.
         if not tailored_resume:
             raise ValueError("Failed to generate tailored resume after trying all keys and fallback models.")
         
-        # Save files
+        # Save files in dedicated company directory with Madhav_Jayam_ naming scheme
         clean_company = "".join([c for c in company if c.isalnum() or c in (' ', '_')]).replace(' ', '_')
         clean_title = "".join([c for c in title if c.isalnum() or c in (' ', '_')]).replace(' ', '_')
-        
-        resume_filename = f"{clean_company}_{clean_title}_Resume.md"
-        resume_filepath = os.path.join(tailored_dir, resume_filename)
-        resume_pdf_filepath = os.path.join(tailored_dir, f"{clean_company}_{clean_title}_Resume.pdf")
-        
+        clean_company = re.sub(r'_+', '_', clean_company).strip('_')
+        clean_title = re.sub(r'_+', '_', clean_title).strip('_')
+
+        company_dir = os.path.join(tailored_dir, clean_company)
+        os.makedirs(company_dir, exist_ok=True)
+
+        resume_filename = f"Madhav_Jayam_{clean_company}_{clean_title}_Resume.md"
+        resume_pdf_filename = f"Madhav_Jayam_{clean_company}_{clean_title}_Resume.pdf"
+
+        resume_filepath = os.path.join(company_dir, resume_filename)
+        resume_pdf_filepath = os.path.join(company_dir, resume_pdf_filename)
+
         with open(resume_filepath, "w", encoding="utf-8") as f:
             f.write(tailored_resume)
-            
+
         markdown_to_pdf(tailored_resume, resume_pdf_filepath)
-            
+
         print(f"-> Tailored Resume saved to: {resume_filepath}")
         print(f"-> ATS Resume PDF saved to: {resume_pdf_filepath}")
         

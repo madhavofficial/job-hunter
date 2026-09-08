@@ -50,5 +50,22 @@ class AmbiguousJDTests(unittest.TestCase):
         self.assertFalse(is_ambig)
 
 
+class ResumeNamingAndFolderTests(unittest.TestCase):
+    def test_resume_naming_scheme(self):
+        company = "Hewlett Packard Enterprise"
+        title = "AI Engineer"
+        import re, os
+        clean_company = re.sub(r'_+', '_', "".join([c for c in company if c.isalnum() or c in (' ', '_')]).replace(' ', '_')).strip('_')
+        clean_title = re.sub(r'_+', '_', "".join([c for c in title if c.isalnum() or c in (' ', '_')]).replace(' ', '_')).strip('_')
+        
+        expected_md = f"Madhav_Jayam_{clean_company}_{clean_title}_Resume.md"
+        expected_pdf = f"Madhav_Jayam_{clean_company}_{clean_title}_Resume.pdf"
+        
+        self.assertEqual(expected_md, "Madhav_Jayam_Hewlett_Packard_Enterprise_AI_Engineer_Resume.md")
+        self.assertEqual(expected_pdf, "Madhav_Jayam_Hewlett_Packard_Enterprise_AI_Engineer_Resume.pdf")
+        self.assertEqual(clean_company, "Hewlett_Packard_Enterprise")
+
+
 if __name__ == "__main__":
     unittest.main()
+

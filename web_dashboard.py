@@ -44,7 +44,7 @@ def get_dashboard_data():
 
     # Query the recent applied jobs shown in the tracker.
     cursor.execute("""
-    SELECT job_id, title, company, location, date_posted, score,
+    SELECT job_id, site, job_url, job_url_direct, title, company, location, date_posted, score,
            tailored_resume_pdf_path, created_at, status
     FROM jobs
     WHERE status = 'applied'
@@ -312,6 +312,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 const remoteBadge = isRemote ? `<span class="text-[10px] px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-medium flex items-center gap-1"><i class="fa-solid fa-globe text-[9px]"></i> Remote</span>` : '';
                 const datePosted = j.date_posted && j.date_posted !== 'nan' ? j.date_posted : 'Recent';
                 const hasPdf = j.tailored_resume_pdf_path ? true : false;
+                const listingUrl = (j.job_url_direct || j.job_url || '').trim();
 
                 const card = document.createElement('div');
                 card.className = "bg-slate-900 border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition flex flex-col justify-between space-y-4 shadow-sm";
@@ -322,15 +323,20 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                         <div class="space-y-2">
                             <div class="flex items-start justify-between gap-3">
                                 <div>
-                                    <h3 class="text-base font-bold text-white hover:text-sky-400 transition">${j.title}</h3>
+                                    <h3 class="text-base font-bold text-white leading-snug">
+                                        ${listingUrl ? `<a href="${listingUrl}" target="_blank" rel="noopener noreferrer" class="hover:text-sky-400 transition inline-flex items-center gap-1.5">${j.title} <i class="fa-solid fa-arrow-up-right-from-square text-[11px] text-slate-500"></i></a>` : j.title}
+                                    </h3>
                                     <p class="text-sm font-medium text-slate-300">${j.company} &bull; <span class="text-xs text-slate-400">${j.location || 'Remote'}</span></p>
                                 </div>
                                 <span class="px-2 py-1 text-xs font-bold rounded-lg border text-emerald-400 bg-emerald-500/10 border-emerald-500/20">Applied</span>
                             </div>
                         </div>
-                        <div class="flex items-center justify-between pt-3 border-t border-slate-800/80">
+                        <div class="flex items-center justify-between pt-3 border-t border-slate-800/80 gap-2">
                             <span class="text-xs text-slate-500">Applied: ${j.created_at || 'Recently'}</span>
-                            ${hasPdf ? `<a href="/pdf?path=${encodeURIComponent(j.tailored_resume_pdf_path)}" target="_blank" class="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-sky-400 rounded-lg border border-slate-700 flex items-center gap-1.5 transition"><i class="fa-solid fa-file-pdf"></i> View Tailored PDF</a>` : ''}
+                            <div class="flex items-center gap-2">
+                                ${listingUrl ? `<a href="${listingUrl}" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 text-xs font-medium bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg border border-slate-700 flex items-center gap-1.5 transition"><i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-sky-400"></i> View Listing</a>` : ''}
+                                ${hasPdf ? `<a href="/pdf?path=${encodeURIComponent(j.tailored_resume_pdf_path)}" target="_blank" class="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-sky-400 rounded-lg border border-slate-700 flex items-center gap-1.5 transition"><i class="fa-solid fa-file-pdf"></i> View Tailored PDF</a>` : ''}
+                            </div>
                         </div>
                     `;
                 } else {
@@ -343,7 +349,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                                         ${remoteBadge}
                                         <span class="text-[10px] text-slate-400"><i class="fa-regular fa-clock"></i> ${datePosted}</span>
                                     </div>
-                                    <h3 class="text-base font-bold text-white leading-snug">${j.title}</h3>
+                                    <h3 class="text-base font-bold text-white leading-snug">
+                                        ${listingUrl ? `<a href="${listingUrl}" target="_blank" rel="noopener noreferrer" class="hover:text-sky-400 transition inline-flex items-center gap-1.5">${j.title} <i class="fa-solid fa-arrow-up-right-from-square text-[11px] text-slate-500"></i></a>` : j.title}
+                                    </h3>
                                     <p class="text-sm font-medium text-slate-300">${j.company} <span class="text-xs text-slate-400">&bull; ${j.location || 'India'}</span></p>
                                 </div>
                                 <div class="px-2.5 py-1 text-xs font-extrabold rounded-lg border ${scoreColor} shrink-0">
@@ -354,9 +362,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                         </div>
 
                         <div class="flex items-center justify-between pt-3 border-t border-slate-800/80 gap-2">
-                            <button onclick="dismissJob('${j.job_id}')" class="px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition" title="Dismiss from shortlisted">
-                                <i class="fa-solid fa-xmark"></i> Dismiss
-                            </button>
+                            <div class="flex items-center gap-2">
+                                <button onclick="dismissJob('${j.job_id}')" class="px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition border border-transparent hover:border-rose-500/20" title="Dismiss from shortlisted">
+                                    <i class="fa-solid fa-xmark"></i> Dismiss
+                                </button>
+                                ${listingUrl ? `
+                                <a href="${listingUrl}" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800/90 hover:bg-slate-700 rounded-lg border border-slate-700 flex items-center gap-1.5 transition shadow-sm" title="View original job listing in a new tab">
+                                    <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-sky-400"></i> View Listing
+                                </a>` : ''}
+                            </div>
                             <div class="flex items-center gap-2">
                                 ${hasPdf ? `<a href="/pdf?path=${encodeURIComponent(j.tailored_resume_pdf_path)}" target="_blank" class="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-sky-400 rounded-lg border border-slate-700 flex items-center gap-1.5 transition" title="Open Tailored Resume PDF"><i class="fa-solid fa-file-pdf"></i> PDF</a>` : ''}
                                 <button onclick="applyJob('${j.job_id}', this)" class="px-4 py-1.5 text-xs font-bold bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white rounded-lg shadow-md shadow-sky-500/20 flex items-center gap-1.5 transition">
