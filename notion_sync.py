@@ -47,18 +47,131 @@ def is_notion_configured() -> bool:
     return bool(token and token.startswith("ntn_"))
 
 
-def map_platform(url: str, site: str = "") -> str:
+# Canonical registry mapping known companies to their ATS platform and candidate status portal URL
+COMPANY_ATS_REGISTRY: Dict[str, Tuple[str, str]] = {
+    # Workday portals
+    "hewlett packard enterprise": ("Workday", "https://hpe.wd5.myworkdayjobs.com/en-US/Jobsathpe/userHome"),
+    "hpe": ("Workday", "https://hpe.wd5.myworkdayjobs.com/en-US/Jobsathpe/userHome"),
+    "hp (hewlett-packard)": ("Workday", "https://hp.wd5.myworkdayjobs.com/en-US/ExternalCareerSite/userHome"),
+    "hp": ("Workday", "https://hp.wd5.myworkdayjobs.com/en-US/ExternalCareerSite/userHome"),
+    "adobe": ("Workday", "https://adobe.wd5.myworkdayjobs.com/en-US/external_experienced/userHome"),
+    "citi": ("Workday", "https://citi.wd5.myworkdayjobs.com/en-US/2/userHome"),
+    "philips": ("Workday", "https://philips.wd3.myworkdayjobs.com/en-US/jobs-and-careers/userHome"),
+    "pwc": ("Workday", "https://pwc.wd3.myworkdayjobs.com/en-US/Global_Experienced_Careers/userHome"),
+    "fedex": ("Workday", "https://fedex.wd1.myworkdayjobs.com/en-US/FXE-MEISA-External/userHome"),
+    "hitachi": ("Workday", "https://hitachi.wd1.myworkdayjobs.com/en-US/hitachi/userHome"),
+    "thermo fisher": ("Workday", "https://thermofisher.wd5.myworkdayjobs.com/en-US/ThermoFisherCareers/userHome"),
+    "salesforce": ("Workday", "https://salesforce.wd12.myworkdayjobs.com/en-US/External_Career_Site/userHome"),
+    "nike": ("Workday", "https://nike.wd1.myworkdayjobs.com/en-US/nke/userHome"),
+    "motorola": ("Workday", "https://motorolasolutions.wd5.myworkdayjobs.com/en-US/Careers/userHome"),
+    "ebay": ("Workday", "https://ebay.wd5.myworkdayjobs.com/en-US/apply/userHome"),
+    "zoom": ("Workday", "https://zoom.wd5.myworkdayjobs.com/en-US/Zoom/userHome"),
+    "fidelity": ("Workday", "https://wd1.myworkdaysite.com/recruiting/fmr/FidelityCareers/userHome"),
+    "solventum": ("Workday", "https://healthcare.wd1.myworkdayjobs.com/en-US/Search/userHome"),
+    "natwest": ("Workday", "https://rbs.wd3.myworkdayjobs.com/en-US/RBS/userHome"),
+    "rbs": ("Workday", "https://rbs.wd3.myworkdayjobs.com/en-US/RBS/userHome"),
+    "ecolab": ("Workday", "https://ecolab.wd1.myworkdayjobs.com/en-US/Ecolab_External/userHome"),
+    "fujitsu": ("Workday", "https://fujitsu.wd3.myworkdayjobs.com/en-US/Fujitsu/userHome"),
+    "universal robots": ("Workday", "https://teradyne.wd1.myworkdayjobs.com/en-US/Teradyne/userHome"),
+    "greif": ("Workday", "https://greif.wd5.myworkdayjobs.com/en-US/Greif_Careers/userHome"),
+    "experity": ("Workday", "https://experityhealth.wd5.myworkdayjobs.com/en-US/ExperityCareers/userHome"),
+
+    # Oracle Cloud & Taleo
+    "jpmorgan": ("Oracle Cloud", "https://jpmc.fa.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1001/my-profile"),
+    "jpmc": ("Oracle Cloud", "https://jpmc.fa.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1001/my-profile"),
+    "goldman": ("Oracle Cloud", "https://hdpc.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/LateralHiring/my-profile"),
+    "oracle": ("Oracle Cloud", "https://eeho.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/jobsearch/my-profile"),
+    "honeywell": ("Oracle Cloud", "https://ibqbjb.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/Honeywell/my-profile"),
+    "kroll": ("Oracle Cloud", "https://hcxs.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/my-profile"),
+    "pearson": ("Oracle Cloud", "https://hccz.fa.em3.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_2/my-profile"),
+    "unitedhealth": ("Oracle Cloud", "https://uhg.taleo.net/careersection/10780/mysubmissions.ftl"),
+    "uhg": ("Oracle Cloud", "https://uhg.taleo.net/careersection/10780/mysubmissions.ftl"),
+
+    # Greenhouse
+    "stripe": ("Greenhouse", "https://boards.greenhouse.io/stripe"),
+    "solarwinds": ("Greenhouse", "https://boards.greenhouse.io/solarwinds"),
+    "tracelink": ("Greenhouse", "https://job-boards.greenhouse.io/tracelinkinc"),
+    "digitalocean": ("Greenhouse", "https://boards.greenhouse.io/digitalocean"),
+
+    # Ashby
+    "wisdom": ("Ashby", "https://jobs.ashbyhq.com/Wisdom-AI"),
+
+    # iCIMS
+    "blackhawk": ("iCIMS", "https://apac-blackhawknetwork.icims.com/jobs/dashboard"),
+
+    # SmartRecruiters
+    "ixigo": ("SmartRecruiters", "https://my.smartrecruiters.com/identity/public/sign-in"),
+    "linkedin": ("SmartRecruiters", "https://my.smartrecruiters.com/identity/public/sign-in"),
+
+    # Keka
+    "impact analytics": ("Keka", "https://impactanalytics.keka.com/careers/"),
+
+    # Enterprise Direct Portals & SuccessFactors
+    "qualcomm": ("Direct Portal", "https://careers.qualcomm.com/careers/userHome"),
+    "siemens": ("Direct Portal", "https://jobs.siemens.com/careers/userHome"),
+    "ibm": ("Direct Portal", "https://careers.ibm.com/en_US/careers/YourApplications"),
+    "amazon": ("Direct Portal", "https://www.amazon.jobs/applicant"),
+    "cisco": ("Direct Portal", "https://careers.cisco.com/global/en/candidatehub"),
+    "dhl": ("Direct Portal", "https://careers.dhl.com/global/en/candidatehub"),
+    "microsoft": ("Direct Portal", "https://apply.careers.microsoft.com/applicant"),
+    "bt group": ("Direct Portal", "https://career2.successfactors.eu/portalcareer?company=britisht01P1"),
+    "moody": ("Direct Portal", "https://career8.successfactors.com/career?company=MoodysProd"),
+    "sap": ("Direct Portal", "https://career012.successfactors.eu/career?company=SAP"),
+    "tata consultancy": ("Direct Portal", "https://ibegin.tcs.com/iBegin/"),
+    "tcs": ("Direct Portal", "https://ibegin.tcs.com/iBegin/"),
+    "infosys": ("Direct Portal", "https://career.infosys.com/"),
+    "xerox": ("Direct Portal", "https://xerox.avature.net/"),
+    "united airlines": ("Direct Portal", "https://careers.united.com/"),
+    "corning": ("Direct Portal", "https://corningjobs.corning.com/"),
+    "ge vernova": ("Direct Portal", "https://jobs.gevernova.com/global/en/candidatehub"),
+    "msd": ("Direct Portal", "https://jobs.msd.com/gb/en/candidatehub"),
+    "deloitte": ("Direct Portal", "https://apply.deloitte.com/careers"),
+    "cgi": ("Direct Portal", "https://cgi.njoyn.com/"),
+    "ust": ("Direct Portal", "https://usource.ripplehire.com/candidate/"),
+    "harman": ("Direct Portal", "https://jobsearch.harman.com/en_US/careers/Profile#myApplications"),
+    "standard chartered": ("Direct Portal", "https://www.sc.com/en/careers/experienced-professionals/"),
+    "litmus7": ("Direct Portal", "https://litmus7.com/careers"),
+    "42 learn": ("Direct Portal", "https://42learn.com"),
+    "polestar analytics": ("Direct Portal", "https://www.polestarllp.com/careers"),
+    "pyjamahr": ("Direct Portal", "https://app.pyjamahr.com/"),
+    "bharattech": ("Direct Portal", "https://bharattech.in/careers"),
+    "sentlogic": ("Direct Portal", "https://sentlogic.com/careers"),
+    "stitch": ("Direct Portal", "https://stitch.money/careers"),
+    "shopos": ("Direct Portal", "https://shopos.ai/careers"),
+}
+
+
+def resolve_company_ats(company: str) -> Optional[Tuple[str, str]]:
+    """Resolves company name to (platform, status_portal_url) if known."""
+    if not company:
+        return None
+    co_l = company.lower().strip()
+    for k in sorted(COMPANY_ATS_REGISTRY.keys(), key=lambda x: len(x), reverse=True):
+        if len(k) <= 3:
+            if re.search(r"\b" + re.escape(k) + r"\b", co_l):
+                return COMPANY_ATS_REGISTRY[k]
+        else:
+            if k in co_l:
+                return COMPANY_ATS_REGISTRY[k]
+    return None
+
+
+def map_platform(url: str, site: str = "", company: str = "") -> str:
+    # 1. Company check takes precedence for known enterprise ATS
+    co_res = resolve_company_ats(company)
+    if co_res:
+        return co_res[0]
+
+    # 2. Heuristics based on URL
     url_l = (url or "").lower()
     site_l = (site or "").lower()
-    if "myworkdayjobs.com" in url_l or "workday" in url_l:
+    if "myworkdayjobs.com" in url_l or "myworkdaysite.com" in url_l or "workday" in url_l:
         return "Workday"
     if "greenhouse.io" in url_l or "gh_jid" in url_l:
         return "Greenhouse"
     if "smartrecruiters.com" in url_l:
         return "SmartRecruiters"
-    if "linkedin.com" in url_l or site_l == "linkedin":
-        return "LinkedIn"
-    if "oraclecloud.com" in url_l or "taleo.net" in url_l or "oracle" in url_l:
+    if "oraclecloud.com" in url_l or "taleo.net" in url_l:
         return "Oracle Cloud"
     if "icims.com" in url_l:
         return "iCIMS"
@@ -66,16 +179,22 @@ def map_platform(url: str, site: str = "") -> str:
         return "Ashby"
     if "keka.com" in url_l:
         return "Keka"
+    if "linkedin.com" in url_l or site_l == "linkedin":
+        return "LinkedIn"
     return "Direct Portal"
 
 
 def derive_status_portal_url(url: str, platform: str = "", company: str = "", job_id: str = "") -> str:
     """Derives the candidate application status tracking portal URL."""
+    # 1. Company-based registry takes top priority
+    co_res = resolve_company_ats(company)
+    if co_res:
+        return co_res[1]
+
     u = (url or "").strip()
-    co_l = (company or "").lower().strip()
     plat_l = (platform or "").lower().strip()
 
-    # 1. Workday
+    # 2. Workday
     if "myworkdayjobs.com" in u or "myworkdaysite.com" in u or plat_l == "workday":
         m = re.match(r"(https?://[^/]+\.myworkday(?:jobs|site)\.com(?:/[^/]+)?/[^/]+)", u)
         if m:
@@ -84,7 +203,7 @@ def derive_status_portal_url(url: str, platform: str = "", company: str = "", jo
         if m_base:
             return f"{m_base.group(1)}/userHome"
 
-    # 2. Oracle Cloud & Taleo
+    # 3. Oracle Cloud & Taleo
     if "oraclecloud.com" in u or plat_l == "oracle cloud":
         m = re.match(r"(https?://[^/]+/hcmUI/CandidateExperience/[^/]+/sites/[^/]+)", u)
         if m:
@@ -94,41 +213,27 @@ def derive_status_portal_url(url: str, platform: str = "", company: str = "", jo
         if m:
             return f"{m.group(1)}/mysubmissions.ftl"
 
-    # 3. iCIMS
+    # 4. iCIMS
     if "icims.com" in u or plat_l == "icims":
         m = re.match(r"(https?://[^/]+\.icims\.com)", u)
         if m:
             return f"{m.group(1)}/jobs/dashboard"
 
-    # 4. SmartRecruiters
+    # 5. SmartRecruiters
     if "smartrecruiters.com" in u or plat_l == "smartrecruiters":
         return "https://my.smartrecruiters.com/identity/public/sign-in"
 
-    # 5. Greenhouse
+    # 6. Greenhouse
     if "greenhouse.io" in u or plat_l == "greenhouse":
         m = re.match(r"(https?://(?:boards|job-boards)\.greenhouse\.io/[^/]+)", u)
         if m:
             return m.group(1)
 
-    # 6. Ashby
+    # 7. Ashby
     if "ashbyhq.com" in u or plat_l == "ashby":
         m = re.match(r"(https?://jobs\.ashbyhq\.com/[^/]+)", u)
         if m:
             return m.group(1)
-
-    # 7. Known Enterprise Portals by Company
-    known_portals = {
-        "qualcomm": "https://careers.qualcomm.com/careers/userHome",
-        "siemens": "https://jobs.siemens.com/careers/userHome",
-        "ibm": "https://careers.ibm.com/en_US/careers/YourApplications",
-        "amazon": "https://www.amazon.jobs/applicant",
-        "cisco": "https://careers.cisco.com/global/en/candidatehub",
-        "dhl": "https://careers.dhl.com/global/en/candidatehub",
-        "ripplehire": "https://usource.ripplehire.com/candidate/",
-    }
-    for k, v in known_portals.items():
-        if k in co_l:
-            return v
 
     # 8. LinkedIn: Direct listing link or LinkedIn Job Tracker
     if "linkedin.com" in u or plat_l == "linkedin" or (job_id and job_id.startswith("li-")):
@@ -215,7 +320,7 @@ def push_job_to_notion(job: dict, sno: int) -> Optional[str]:
         if re.match(r"^\d{4}-\d{2}-\d{2}$", date_candidate):
             date_val = date_candidate
 
-    platform = map_platform(job_url, site)
+    platform = map_platform(job_url, site, company)
     status_portal_url = derive_status_portal_url(job_url, platform, company, job_id)
 
     properties = {
@@ -367,13 +472,14 @@ def sync_applied_to_notion(target_job_id: str = None) -> int:
     return synced_count
 
 
-def backfill_missing_status_portal_urls() -> int:
-    """Finds all Notion pages where 'Check Status Portal URL' is empty and populates them."""
+def backfill_missing_status_portal_urls(audit_all: bool = True) -> int:
+    """Audits and updates Notion pages where 'Check Status Portal URL' is missing,
+    points to a generic job listing (e.g. LinkedIn or Indeed applied), or has a mismatched platform."""
     if not is_notion_configured():
         return 0
 
     print("\n====================================================")
-    print("🔧 AUDITING & POPULATING 'Check Status Portal URL'")
+    print("🔧 AUDITING & UPDATING ATS PLATFORMS & PORTAL URLS")
     print("====================================================")
 
     entries, _ = fetch_all_notion_applications()
@@ -382,32 +488,52 @@ def backfill_missing_status_portal_urls() -> int:
 
     for p in entries:
         props = p.get("properties", {})
-        existing_portal = props.get("Check Status Portal URL", {}).get("url")
-        if existing_portal:
-            continue
-
+        existing_portal = (props.get("Check Status Portal URL", {}).get("url") or "").strip()
+        existing_plat = props.get("Platform / ATS", {}).get("select", {}).get("name") or ""
         page_id = p.get("id")
-        listing_url = props.get("Job Listing Link", {}).get("url") or ""
-        plat = props.get("Platform / ATS", {}).get("select", {}).get("name") or ""
+        listing_url = (props.get("Job Listing Link", {}).get("url") or "").strip()
         co_arr = props.get("Company", {}).get("title", [])
-        co = co_arr[0].get("plain_text") if co_arr else ""
+        co = co_arr[0].get("plain_text", "").strip() if co_arr else ""
         req_arr = props.get("Req ID / Job ID", {}).get("rich_text", [])
-        jid = req_arr[0].get("plain_text") if req_arr else ""
+        jid = req_arr[0].get("plain_text", "").strip() if req_arr else ""
+        sno = props.get("S.No", {}).get("number", 0) or 0
 
-        derived_url = derive_status_portal_url(listing_url, plat, co, jid)
-        if not derived_url:
+        target_plat = map_platform(listing_url, "", co)
+        target_portal = derive_status_portal_url(listing_url, target_plat, co, jid)
+
+        if not target_portal:
             continue
+
+        # If sno <= 57 and portal is already an established ATS (not linkedin/indeed listing), preserve it
+        if sno <= 57 and existing_portal and "linkedin.com" not in existing_portal and "indeed.com" not in existing_portal:
+            continue
+
+        needs_portal_update = not existing_portal or (existing_portal != target_portal)
+        needs_plat_update = target_plat and (target_plat != existing_plat)
+
+        if not needs_portal_update and not needs_plat_update:
+            continue
+
+        patch_props = {}
+        if needs_portal_update:
+            patch_props["Check Status Portal URL"] = {"url": target_portal}
+        if needs_plat_update:
+            patch_props["Platform / ATS"] = {"select": {"name": target_plat}}
 
         try:
             res = requests.patch(
                 f"https://api.notion.com/v1/pages/{page_id}",
                 headers=headers,
-                json={"properties": {"Check Status Portal URL": {"url": derived_url}}},
+                json={"properties": patch_props},
                 timeout=15
             )
             if res.status_code == 200:
-                sno = props.get("S.No", {}).get("number", "?")
-                print(f"✓ [S.No {sno}] Updated {co} -> Status Portal: {derived_url}")
+                details = []
+                if needs_plat_update:
+                    details.append(f"Platform: {existing_plat} -> {target_plat}")
+                if needs_portal_update:
+                    details.append(f"Portal: {target_portal}")
+                print(f"✓ [S.No {sno}] Updated {co} -> {', '.join(details)}")
                 updated_count += 1
                 time.sleep(0.35)
             else:
@@ -415,14 +541,15 @@ def backfill_missing_status_portal_urls() -> int:
         except Exception as e:
             print(f"Warning: Exception updating page {page_id}: {e}", file=sys.stderr)
 
-    print(f"-> Backfill complete: {updated_count} Notion pages updated with Check Status Portal URL.")
+    print(f"-> Audit and update complete: {updated_count} Notion pages updated with genuine ATS tracking portals.")
     return updated_count
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "--backfill":
+    if len(sys.argv) > 1 and sys.argv[1] in ("--backfill", "--update-portals"):
         backfill_missing_status_portal_urls()
     elif len(sys.argv) > 1 and sys.argv[1]:
         sync_applied_to_notion(sys.argv[1])
     else:
         sync_applied_to_notion()
+

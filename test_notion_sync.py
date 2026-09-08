@@ -11,13 +11,17 @@ class NotionSyncTests(unittest.TestCase):
         self.assertEqual(map_platform("", site="linkedin"), "LinkedIn")
         self.assertEqual(map_platform("https://jpmc.fa.oraclecloud.com/hcmUI/job/789"), "Oracle Cloud")
         self.assertEqual(map_platform("https://careers.example.com/job"), "Direct Portal")
+        # Company takes precedence even if listing was on LinkedIn
+        self.assertEqual(map_platform("https://www.linkedin.com/jobs/view/4464322180/", company="HP"), "Workday")
+        self.assertEqual(map_platform("https://www.linkedin.com/jobs/view/4461064345", company="JPMorganChase"), "Oracle Cloud")
+        self.assertEqual(map_platform("https://www.linkedin.com/jobs/view/4454538326", company="Stripe"), "Greenhouse")
 
     def test_derive_status_portal_url(self):
         # Workday
         wd_url = "https://adobe.myworkdayjobs.com/en-US/external_experienced/job/123"
         self.assertEqual(
             derive_status_portal_url(wd_url, "Workday", "Adobe"),
-            "https://adobe.myworkdayjobs.com/en-US/external_experienced/userHome"
+            "https://adobe.wd5.myworkdayjobs.com/en-US/external_experienced/userHome"
         )
 
         # Oracle Cloud
@@ -31,7 +35,7 @@ class NotionSyncTests(unittest.TestCase):
         taleo_url = "https://oracle.taleo.net/careersection/2/jobdetail.ftl?job=123"
         self.assertEqual(
             derive_status_portal_url(taleo_url, "Taleo", "Oracle"),
-            "https://oracle.taleo.net/careersection/2/mysubmissions.ftl"
+            "https://eeho.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/jobsearch/my-profile"
         )
 
         # Greenhouse
@@ -55,23 +59,25 @@ class NotionSyncTests(unittest.TestCase):
             "https://my.smartrecruiters.com/identity/public/sign-in"
         )
 
-        # Known Enterprise Portal
+        # Known Enterprise Portals by company resolution
+        self.assertEqual(
+            derive_status_portal_url("https://www.linkedin.com/jobs/view/4464322180/", "LinkedIn", "HP"),
+            "https://hp.wd5.myworkdayjobs.com/en-US/ExternalCareerSite/userHome"
+        )
+        self.assertEqual(
+            derive_status_portal_url("https://www.linkedin.com/jobs/view/4461064345", "LinkedIn", "JPMorganChase"),
+            "https://jpmc.fa.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1001/my-profile"
+        )
         self.assertEqual(
             derive_status_portal_url("https://careers.qualcomm.com/jobs/123", "Direct Portal", "Qualcomm"),
             "https://careers.qualcomm.com/careers/userHome"
         )
 
-        # LinkedIn direct listing
-        li_url = "https://www.linkedin.com/jobs/view/4464322180/"
+        # Fallback for companies without a dedicated enterprise ATS
+        startup_url = "https://www.linkedin.com/jobs/view/4454204205"
         self.assertEqual(
-            derive_status_portal_url(li_url, "LinkedIn", "HP"),
-            "https://www.linkedin.com/jobs/view/4464322180/"
-        )
-
-        # LinkedIn with job_id fallback
-        self.assertEqual(
-            derive_status_portal_url("", "LinkedIn", "HP", job_id="li-4464322180"),
-            "https://www.linkedin.com/jobs/view/4464322180/"
+            derive_status_portal_url(startup_url, "LinkedIn", "JuiceLabs AI"),
+            "https://www.linkedin.com/jobs/view/4454204205"
         )
 
     def test_notion_configured(self):
