@@ -2,9 +2,13 @@
 
 Provides a clean, local web interface where you can:
 - View categorized job matches (Fresh Today, Tier 1 AI Startups, Tier 2 Enterprises)
-- Click [⚡ 1-Click Apply & Tailor] to generate an ATS Single-Page Resume PDF, open the application URL in your browser, and mark it applied.
-- Click [✕ Dismiss] to instantly remove jobs from your shortlist feed.
-- Click [🧹 Clean Stale Jobs] to auto-archive older unapplied listings.
+- Search, filter, and sort roles in real time (Match %, Newest, Company A-Z)
+- Quick View full job descriptions, extracted skills, and AI match rationale in a modal
+- Click [⚡ 1-Click Apply & Tailor] to generate an ATS Single-Page Resume PDF, open the application URL, and track status
+- Click [✕ Dismiss] with instant [Undo] protection
+- Track applied jobs with direct status portal links (Workday, Oracle Cloud, Greenhouse, etc.)
+- Ingest custom job postings via interactive dialog or paste raw JD
+- Click [🧹 Clean Stale Jobs] to auto-archive older unapplied listings
 """
 
 import http.server
@@ -20,6 +24,7 @@ from datetime import datetime, timedelta
 
 import db
 import tailor
+from notion_sync import derive_status_portal_url, map_platform
 from screening import classify_company_tier, is_job_truly_remote
 
 PORT = 8765
@@ -35,24 +40,24 @@ def get_dashboard_data():
     cursor.execute("""
     SELECT job_id, site, job_url, job_url_direct, title, company, location,
            date_posted, job_type, is_remote, skills, score, evidence,
-           matching_notes, tailored_resume_pdf_path, created_at, status
+           matching_notes, tailored_resume_pdf_path, created_at, status, description
     FROM jobs
     WHERE status = 'shortlisted'
     ORDER BY score DESC, created_at DESC
     """)
     all_shortlisted = [dict(r) for r in cursor.fetchall()]
 
-    # Query the recent applied jobs shown in the tracker.
+    # Query the applied jobs shown in the tracker
     cursor.execute("""
     SELECT job_id, site, job_url, job_url_direct, title, company, location, date_posted, score,
-           tailored_resume_pdf_path, created_at, status
+           tailored_resume_pdf_path, created_at, status, description
     FROM jobs
     WHERE status = 'applied'
-    ORDER BY created_at DESC LIMIT 25
+    ORDER BY created_at DESC LIMIT 100
     """)
     applied = [dict(r) for r in cursor.fetchall()]
     cursor.execute("SELECT COUNT(*) FROM jobs WHERE status = 'applied'")
-    total_applied = len(applied)
+    total_applied = cursor.fetchone()[0]
 
     # Total counts
     cursor.execute("SELECT COUNT(*) FROM jobs WHERE status = 'rejected'")
@@ -61,7 +66,7 @@ def get_dashboard_data():
     total_scraped = cursor.fetchone()[0]
     conn.close()
 
-    # Filter out unverified agencies
+    # Filter out unverified agencies & enrich shortlisted
     valid_shortlisted = []
     for j in all_shortlisted:
         tier = classify_company_tier(j["company"])
@@ -69,7 +74,17 @@ def get_dashboard_data():
             j["tier"] = tier
             j["apply_url"] = j["job_url_direct"] or j["job_url"]
             j["is_remote_verified"] = is_job_truly_remote(j)
+            plat = map_platform(j["apply_url"], j.get("site", ""), j.get("company", ""))
+            j["platform"] = plat
+            j["status_portal_url"] = derive_status_portal_url(j["apply_url"], plat, j.get("company", ""), j.get("job_id", ""))
             valid_shortlisted.append(j)
+
+    # Enrich applied jobs with platform & status tracking portal
+    for j in applied:
+        j["apply_url"] = j["job_url_direct"] or j["job_url"]
+        plat = map_platform(j["apply_url"], j.get("site", ""), j.get("company", ""))
+        j["platform"] = plat
+        j["status_portal_url"] = derive_status_portal_url(j["apply_url"], plat, j.get("company", ""), j.get("job_id", ""))
 
     # Calculate 48h Freshness cutoff
     cutoff_48h = (datetime.now() - timedelta(hours=48)).strftime("%Y-%m-%d %H:%M:%S")
@@ -93,16 +108,16 @@ def get_dashboard_data():
             "pending_matching": total_scraped,
             "older_count": len(older_jobs),
         },
-        "fresh_jobs": fresh_jobs[:30],
-        "remote_jobs": remote_jobs[:40],
-        "tier1_jobs": tier1_jobs[:35],
-        "tier2_jobs": tier2_jobs[:25],
-        "all_shortlisted": valid_shortlisted[:50],
+        "fresh_jobs": fresh_jobs[:40],
+        "remote_jobs": remote_jobs[:50],
+        "tier1_jobs": tier1_jobs[:50],
+        "tier2_jobs": tier2_jobs[:35],
+        "all_shortlisted": valid_shortlisted,
         "applied_jobs": applied,
     }
 
 
-HTML_TEMPLATE = """<!DOCTYPE html>
+HTML_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -116,11 +131,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: #0f172a; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+        dialog::backdrop {
+            background: rgba(2, 6, 23, 0.82);
+            backdrop-filter: blur(6px);
+        }
     </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased">
     <!-- Header -->
-    <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
+    <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-40">
         <div class="max-w-7xl mx-auto px-4 py-3 sm:px-6 flex items-center justify-between">
             <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
@@ -135,7 +154,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 </div>
             </div>
             <div class="flex items-center gap-2">
-                <button onclick="addCustomJob()" class="px-3 py-1.5 text-xs font-bold bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white rounded-lg shadow-sm flex items-center gap-1.5 transition">
+                <button onclick="openCustomJobModal()" class="px-3 py-1.5 text-xs font-bold bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white rounded-lg shadow-sm flex items-center gap-1.5 transition">
                     <i class="fa-solid fa-plus"></i> Add Custom Link
                 </button>
                 <button onclick="archiveStaleJobs()" class="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 flex items-center gap-1.5 transition">
@@ -221,32 +240,203 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             </button>
         </div>
 
+        <!-- Search, Filter & Sort Controls -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
+            <div class="relative flex-1 w-full">
+                <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+                <input type="text" id="search-input" oninput="handleSearch()" placeholder="Search title, company, skills (e.g. PyTorch, React, Python), location..." class="w-full pl-9 pr-8 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition">
+                <button id="search-clear-btn" onclick="clearSearch()" class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs p-1" title="Clear search">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-3 shrink-0">
+                <div class="flex items-center gap-2">
+                    <label for="sort-select" class="text-xs text-slate-400 font-medium whitespace-nowrap"><i class="fa-solid fa-arrow-down-short-wide text-slate-500"></i> Sort:</label>
+                    <select id="sort-select" onchange="handleSort()" class="px-2.5 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-300 focus:outline-none focus:border-sky-500 cursor-pointer">
+                        <option value="match_desc">Match % (High → Low)</option>
+                        <option value="date_desc">Newest First</option>
+                        <option value="company_asc">Company (A → Z)</option>
+                        <option value="title_asc">Role Title (A → Z)</option>
+                    </select>
+                </div>
+                <div class="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-slate-800/80 text-slate-300 border border-slate-700/60 whitespace-nowrap" id="search-counter">
+                    0 roles
+                </div>
+            </div>
+        </div>
+
         <!-- Job Cards Grid -->
         <div id="jobs-container" class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <!-- Rendered dynamically -->
         </div>
     </main>
 
-    <!-- Notification Toast -->
-    <div id="toast" class="fixed bottom-6 right-6 px-4 py-3 rounded-xl bg-slate-900 border border-slate-700 text-sm shadow-2xl transition-all duration-300 transform translate-y-24 opacity-0 z-50 flex items-center gap-3">
-        <i id="toast-icon" class="fa-solid fa-circle-check text-emerald-400 text-lg"></i>
-        <div id="toast-msg" class="text-slate-200 font-medium">Notification message</div>
+    <!-- Job Details & Match Modal (Native HTML5 Dialog) -->
+    <dialog id="job-details-modal" class="bg-slate-900 text-slate-100 border border-slate-700 rounded-2xl p-0 w-full max-w-3xl shadow-2xl m-auto overflow-hidden">
+        <div class="flex flex-col max-h-[90vh]">
+            <!-- Header -->
+            <div class="px-6 py-4 border-b border-slate-800 flex items-start justify-between gap-4 bg-slate-900/90 sticky top-0 z-10">
+                <div class="space-y-1.5">
+                    <div class="flex items-center gap-2 flex-wrap" id="modal-badges"></div>
+                    <h2 class="text-xl font-bold text-white leading-tight" id="modal-title">Job Title</h2>
+                    <p class="text-sm text-slate-400 font-medium" id="modal-subtitle">Company • Location</p>
+                </div>
+                <button onclick="closeDetailsModal()" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition shrink-0" aria-label="Close dialog">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <!-- Scrollable Content -->
+            <div class="p-6 space-y-5 overflow-y-auto">
+                <!-- AI Match Analysis Box -->
+                <div id="modal-match-section" class="bg-slate-950/70 border border-slate-800 rounded-xl p-4 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> AI Match Analysis
+                        </span>
+                        <span id="modal-score-badge" class="px-2.5 py-0.5 rounded text-xs font-extrabold border"></span>
+                    </div>
+                    <div id="modal-matching-notes" class="text-xs text-slate-300 leading-relaxed"></div>
+                </div>
+
+                <!-- Skills Chips -->
+                <div id="modal-skills-section" class="space-y-2">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Extracted Skills & Requirements</h3>
+                    <div id="modal-skills-chips" class="flex flex-wrap gap-1.5"></div>
+                </div>
+
+                <!-- Full Job Description -->
+                <div class="space-y-2">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Full Job Description</h3>
+                    <div id="modal-description" class="text-xs text-slate-300 whitespace-pre-wrap font-sans bg-slate-950/50 p-4 rounded-xl border border-slate-800/80 leading-relaxed max-h-80 overflow-y-auto select-text"></div>
+                </div>
+            </div>
+
+            <!-- Footer Actions -->
+            <div class="px-6 py-4 border-t border-slate-800 bg-slate-900/90 flex items-center justify-between gap-3 sticky bottom-0">
+                <button id="modal-dismiss-btn" class="px-4 py-2 text-xs font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition border border-transparent hover:border-rose-500/20">
+                    <i class="fa-solid fa-xmark mr-1"></i> Dismiss
+                </button>
+                <div class="flex items-center gap-2">
+                    <a id="modal-listing-link" href="#" target="_blank" rel="noopener noreferrer" class="px-4 py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 flex items-center gap-1.5 transition">
+                        <i class="fa-solid fa-arrow-up-right-from-square text-sky-400"></i> View Listing
+                    </a>
+                    <a id="modal-pdf-link" href="#" target="_blank" class="hidden px-4 py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-sky-400 rounded-lg border border-slate-700 flex items-center gap-1.5 transition">
+                        <i class="fa-solid fa-file-pdf"></i> View PDF
+                    </a>
+                    <button id="modal-apply-btn" class="px-5 py-2 text-xs font-bold bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white rounded-lg shadow-md shadow-sky-500/20 flex items-center gap-1.5 transition">
+                        <i class="fa-solid fa-bolt"></i> 1-Click Tailor & Apply
+                    </button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Add Custom Job Modal (Native HTML5 Dialog) -->
+    <dialog id="custom-job-modal" class="bg-slate-900 text-slate-100 border border-slate-700 rounded-2xl p-0 w-full max-w-lg shadow-2xl m-auto overflow-hidden">
+        <form method="dialog" onsubmit="submitCustomJob(event)" class="p-6 space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center">
+                        <i class="fa-solid fa-plus"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-base font-bold text-white">Add Custom Job Listing</h2>
+                        <p class="text-xs text-slate-400">Extract, screen with AI, and tailor resume</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeCustomJobModal()" class="text-slate-400 hover:text-white transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">Job Listing URL</label>
+                    <div class="flex gap-2">
+                        <input type="url" id="custom-url-input" placeholder="https://jobs.lever.co/..., greenhouse.io, linkedin..." class="flex-1 px-3 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg focus:outline-none focus:border-sky-500 text-slate-100" />
+                        <button type="button" onclick="pasteCustomUrl()" class="px-3 py-2 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition" title="Paste from clipboard">
+                            <i class="fa-solid fa-paste"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">Raw Job Description (Optional fallback)</label>
+                    <textarea id="custom-text-input" rows="4" placeholder="If the role is behind a login or private portal, paste the JD text here..." class="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg focus:outline-none focus:border-sky-500 text-slate-100 resize-none font-mono text-[11px]"></textarea>
+                </div>
+            </div>
+
+            <div id="custom-job-progress" class="hidden p-3 rounded-lg bg-sky-500/10 border border-sky-500/20 text-xs text-sky-300 flex items-center gap-2">
+                <i class="fa-solid fa-circle-notch fa-spin text-sky-400"></i>
+                <span id="custom-job-status-text">Ingesting listing and screening with AI...</span>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                <button type="button" onclick="closeCustomJobModal()" class="px-4 py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition">
+                    Cancel
+                </button>
+                <button type="submit" id="custom-submit-btn" class="px-4 py-2 text-xs font-bold bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white rounded-lg shadow-sm flex items-center gap-1.5 transition">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> Analyze & Ingest
+                </button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- Notification Toast with Undo -->
+    <div id="toast" class="fixed bottom-6 right-6 px-4 py-3 rounded-xl bg-slate-900 border border-slate-700 text-sm shadow-2xl transition-all duration-300 transform translate-y-24 opacity-0 z-50 flex items-center gap-3 max-w-md">
+        <i id="toast-icon" class="fa-solid fa-circle-check text-emerald-400 text-lg shrink-0"></i>
+        <div id="toast-msg" class="text-slate-200 font-medium text-xs flex-1">Notification message</div>
+        <button id="toast-undo-btn" class="hidden px-2.5 py-1 text-xs font-bold bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 rounded border border-sky-500/30 transition shrink-0">
+            Undo
+        </button>
     </div>
 
     <script>
         let currentTab = 'fresh';
         let rawData = null;
+        let searchTerm = '';
+        let currentSort = 'match_desc';
+        let toastTimer = null;
 
-        function showToast(msg, isError = false) {
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function showToast(msg, isError = false, undoCallback = null) {
             const toast = document.getElementById('toast');
             const icon = document.getElementById('toast-icon');
-            document.getElementById('toast-msg').innerText = msg;
+            const msgEl = document.getElementById('toast-msg');
+            const undoBtn = document.getElementById('toast-undo-btn');
 
-            icon.className = isError ? 'fa-solid fa-triangle-exclamation text-rose-400 text-lg' : 'fa-solid fa-circle-check text-emerald-400 text-lg';
+            if (toastTimer) clearTimeout(toastTimer);
+
+            msgEl.innerText = msg;
+            icon.className = isError
+                ? 'fa-solid fa-triangle-exclamation text-rose-400 text-lg shrink-0'
+                : 'fa-solid fa-circle-check text-emerald-400 text-lg shrink-0';
+
+            if (undoCallback) {
+                undoBtn.classList.remove('hidden');
+                undoBtn.onclick = () => {
+                    undoBtn.classList.add('hidden');
+                    toast.classList.add('translate-y-24', 'opacity-0');
+                    undoCallback();
+                };
+            } else {
+                undoBtn.classList.add('hidden');
+            }
+
             toast.classList.remove('translate-y-24', 'opacity-0');
-            setTimeout(() => {
+            toastTimer = setTimeout(() => {
                 toast.classList.add('translate-y-24', 'opacity-0');
-            }, 4000);
+            }, undoCallback ? 7000 : 4000);
         }
 
         async function fetchJobs() {
@@ -261,6 +451,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         function renderMetrics() {
+            if (!rawData || !rawData.stats) return;
             const s = rawData.stats;
             document.getElementById('stat-fresh').innerText = s.fresh_48h;
             document.getElementById('stat-remote').innerText = s.remote_count || 0;
@@ -279,13 +470,88 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         function switchTab(tab) {
             currentTab = tab;
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById('tab-btn-' + tab).classList.add('active');
+            const activeBtn = document.getElementById('tab-btn-' + tab);
+            if (activeBtn) activeBtn.classList.add('active');
             renderCards();
+        }
+
+        function handleSearch() {
+            const input = document.getElementById('search-input');
+            searchTerm = (input.value || '').trim().toLowerCase();
+            const clearBtn = document.getElementById('search-clear-btn');
+            if (searchTerm) {
+                clearBtn.classList.remove('hidden');
+            } else {
+                clearBtn.classList.add('hidden');
+            }
+            renderCards();
+        }
+
+        function clearSearch() {
+            const input = document.getElementById('search-input');
+            input.value = '';
+            searchTerm = '';
+            document.getElementById('search-clear-btn').classList.add('hidden');
+            renderCards();
+        }
+
+        function handleSort() {
+            currentSort = document.getElementById('sort-select').value;
+            renderCards();
+        }
+
+        function getFilteredAndSortedJobs(list) {
+            if (!list) return [];
+            let res = list.slice();
+
+            // 1. Text Search Filter across key attributes
+            if (searchTerm) {
+                const tokens = searchTerm.split(/\s+/).filter(Boolean);
+                res = res.filter(j => {
+                    const searchable = [
+                        j.title,
+                        j.company,
+                        j.location,
+                        j.skills,
+                        j.platform,
+                        j.matching_notes
+                    ].filter(Boolean).join(' ').toLowerCase();
+                    return tokens.every(t => searchable.includes(t));
+                });
+            }
+
+            // 2. Sort
+            res.sort((a, b) => {
+                if (currentSort === 'match_desc') {
+                    return (b.score || 0) - (a.score || 0);
+                } else if (currentSort === 'date_desc') {
+                    return (b.created_at || '').localeCompare(a.created_at || '');
+                } else if (currentSort === 'company_asc') {
+                    return (a.company || '').localeCompare(b.company || '');
+                } else if (currentSort === 'title_asc') {
+                    return (a.title || '').localeCompare(b.title || '');
+                }
+                return 0;
+            });
+
+            return res;
+        }
+
+        function updateResultCounter(shown, total) {
+            const counter = document.getElementById('search-counter');
+            if (!counter) return;
+            if (searchTerm) {
+                counter.innerText = `Showing ${shown} of ${total} roles`;
+            } else {
+                counter.innerText = `${shown} roles`;
+            }
         }
 
         function renderCards() {
             const container = document.getElementById('jobs-container');
             container.innerHTML = '';
+
+            if (!rawData) return;
 
             let list = [];
             if (currentTab === 'fresh') list = rawData.fresh_jobs;
@@ -295,24 +561,30 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             else if (currentTab === 'all') list = rawData.all_shortlisted;
             else if (currentTab === 'applied') list = rawData.applied_jobs;
 
-            if (!list || list.length === 0) {
+            const filtered = getFilteredAndSortedJobs(list);
+            updateResultCounter(filtered.length, (list || []).length);
+
+            if (!filtered || filtered.length === 0) {
                 container.innerHTML = `
-                    <div class="col-span-2 py-16 text-center text-slate-500">
-                        <i class="fa-regular fa-folder-open text-4xl mb-3 block"></i>
-                        <p class="text-sm">No postings currently in this view.</p>
+                    <div class="col-span-1 md:col-span-2 py-16 text-center text-slate-500">
+                        <i class="fa-regular fa-folder-open text-4xl mb-3 block text-slate-600"></i>
+                        <p class="text-sm font-medium">No postings match your current filter.</p>
+                        ${searchTerm ? `<button onclick="clearSearch()" class="mt-2 text-xs text-sky-400 hover:underline">Clear search filter</button>` : ''}
                     </div>
                 `;
                 return;
             }
 
-            list.forEach(j => {
+            filtered.forEach(j => {
                 const scoreColor = (j.score >= 90) ? 'text-amber-400 bg-amber-400/10 border-amber-400/20' : 'text-sky-400 bg-sky-400/10 border-sky-400/20';
                 const tierBadge = j.tier ? `<span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">${j.tier.split(':')[0]}</span>` : '';
                 const isRemote = j.is_remote_verified;
                 const remoteBadge = isRemote ? `<span class="text-[10px] px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-medium flex items-center gap-1"><i class="fa-solid fa-globe text-[9px]"></i> Remote</span>` : '';
+                const platformBadge = j.platform ? `<span class="text-[10px] px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20 font-medium">${j.platform}</span>` : '';
                 const datePosted = j.date_posted && j.date_posted !== 'nan' ? j.date_posted : 'Recent';
                 const hasPdf = j.tailored_resume_pdf_path ? true : false;
                 const listingUrl = (j.job_url_direct || j.job_url || '').trim();
+                const portalUrl = (j.status_portal_url || '').trim();
 
                 const card = document.createElement('div');
                 card.className = "bg-slate-900 border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition flex flex-col justify-between space-y-4 shadow-sm";
@@ -323,19 +595,26 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                         <div class="space-y-2">
                             <div class="flex items-start justify-between gap-3">
                                 <div>
+                                    <div class="flex items-center gap-2 mb-1">
+                                        ${platformBadge}
+                                        <span class="text-[10px] text-slate-500"><i class="fa-regular fa-clock"></i> Applied ${j.created_at || 'Recently'}</span>
+                                    </div>
                                     <h3 class="text-base font-bold text-white leading-snug">
-                                        ${listingUrl ? `<a href="${listingUrl}" target="_blank" rel="noopener noreferrer" class="hover:text-sky-400 transition inline-flex items-center gap-1.5">${j.title} <i class="fa-solid fa-arrow-up-right-from-square text-[11px] text-slate-500"></i></a>` : j.title}
+                                        ${listingUrl ? `<a href="${listingUrl}" target="_blank" rel="noopener noreferrer" class="hover:text-sky-400 transition inline-flex items-center gap-1.5">${escapeHtml(j.title)} <i class="fa-solid fa-arrow-up-right-from-square text-[11px] text-slate-500"></i></a>` : escapeHtml(j.title)}
                                     </h3>
-                                    <p class="text-sm font-medium text-slate-300">${j.company} &bull; <span class="text-xs text-slate-400">${j.location || 'Remote'}</span></p>
+                                    <p class="text-sm font-medium text-slate-300 mt-0.5">${escapeHtml(j.company)} &bull; <span class="text-xs text-slate-400">${escapeHtml(j.location || 'Remote/India')}</span></p>
                                 </div>
-                                <span class="px-2 py-1 text-xs font-bold rounded-lg border text-emerald-400 bg-emerald-500/10 border-emerald-500/20">Applied</span>
+                                <span class="px-2 py-1 text-xs font-bold rounded-lg border text-emerald-400 bg-emerald-500/10 border-emerald-500/20 shrink-0">Applied</span>
                             </div>
                         </div>
-                        <div class="flex items-center justify-between pt-3 border-t border-slate-800/80 gap-2">
-                            <span class="text-xs text-slate-500">Applied: ${j.created_at || 'Recently'}</span>
+                        <div class="flex items-center justify-between pt-3 border-t border-slate-800/80 gap-2 flex-wrap">
+                            <button onclick="openDetailsModal('${j.job_id}')" class="px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800/90 hover:bg-slate-700 rounded-lg border border-slate-700 flex items-center gap-1.5 transition shadow-sm" title="View Job Description & Tailoring Notes">
+                                <i class="fa-solid fa-eye text-[10px] text-indigo-400"></i> Details
+                            </button>
                             <div class="flex items-center gap-2">
+                                ${portalUrl ? `<a href="${portalUrl}" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg shadow-sm flex items-center gap-1.5 transition" title="Open candidate application status tracking portal"><i class="fa-solid fa-id-card"></i> Check Status (${j.platform || 'Portal'})</a>` : ''}
                                 ${listingUrl ? `<a href="${listingUrl}" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 text-xs font-medium bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg border border-slate-700 flex items-center gap-1.5 transition"><i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-sky-400"></i> View Listing</a>` : ''}
-                                ${hasPdf ? `<a href="/pdf?path=${encodeURIComponent(j.tailored_resume_pdf_path)}" target="_blank" class="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-sky-400 rounded-lg border border-slate-700 flex items-center gap-1.5 transition"><i class="fa-solid fa-file-pdf"></i> View Tailored PDF</a>` : ''}
+                                ${hasPdf ? `<a href="/pdf?path=${encodeURIComponent(j.tailored_resume_pdf_path)}" target="_blank" class="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-sky-400 rounded-lg border border-slate-700 flex items-center gap-1.5 transition"><i class="fa-solid fa-file-pdf"></i> View PDF</a>` : ''}
                             </div>
                         </div>
                     `;
@@ -344,27 +623,30 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                         <div class="space-y-3">
                             <div class="flex items-start justify-between gap-2">
                                 <div class="space-y-1">
-                                    <div class="flex items-center gap-2">
+                                    <div class="flex items-center gap-2 flex-wrap">
                                         ${tierBadge}
                                         ${remoteBadge}
                                         <span class="text-[10px] text-slate-400"><i class="fa-regular fa-clock"></i> ${datePosted}</span>
                                     </div>
                                     <h3 class="text-base font-bold text-white leading-snug">
-                                        ${listingUrl ? `<a href="${listingUrl}" target="_blank" rel="noopener noreferrer" class="hover:text-sky-400 transition inline-flex items-center gap-1.5">${j.title} <i class="fa-solid fa-arrow-up-right-from-square text-[11px] text-slate-500"></i></a>` : j.title}
+                                        ${listingUrl ? `<a href="${listingUrl}" target="_blank" rel="noopener noreferrer" class="hover:text-sky-400 transition inline-flex items-center gap-1.5">${escapeHtml(j.title)} <i class="fa-solid fa-arrow-up-right-from-square text-[11px] text-slate-500"></i></a>` : escapeHtml(j.title)}
                                     </h3>
-                                    <p class="text-sm font-medium text-slate-300">${j.company} <span class="text-xs text-slate-400">&bull; ${j.location || 'India'}</span></p>
+                                    <p class="text-sm font-medium text-slate-300">${escapeHtml(j.company)} <span class="text-xs text-slate-400">&bull; ${escapeHtml(j.location || 'India')}</span></p>
                                 </div>
                                 <div class="px-2.5 py-1 text-xs font-extrabold rounded-lg border ${scoreColor} shrink-0">
                                     ${j.score}% Match
                                 </div>
                             </div>
-                            ${j.matching_notes ? `<p class="text-xs text-slate-400 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/60 leading-relaxed"><i class="fa-solid fa-circle-info text-sky-400 mr-1"></i> ${j.matching_notes}</p>` : ''}
+                            ${j.matching_notes ? `<p class="text-xs text-slate-400 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/60 leading-relaxed"><i class="fa-solid fa-circle-info text-sky-400 mr-1"></i> ${escapeHtml(j.matching_notes)}</p>` : ''}
                         </div>
 
-                        <div class="flex items-center justify-between pt-3 border-t border-slate-800/80 gap-2">
+                        <div class="flex items-center justify-between pt-3 border-t border-slate-800/80 gap-2 flex-wrap">
                             <div class="flex items-center gap-2">
-                                <button onclick="dismissJob('${j.job_id}')" class="px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition border border-transparent hover:border-rose-500/20" title="Dismiss from shortlisted">
+                                <button onclick="dismissJob('${j.job_id}')" class="px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition border border-transparent hover:border-rose-500/20" title="Dismiss from shortlist">
                                     <i class="fa-solid fa-xmark"></i> Dismiss
+                                </button>
+                                <button onclick="openDetailsModal('${j.job_id}')" class="px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800/90 hover:bg-slate-700 rounded-lg border border-slate-700 flex items-center gap-1.5 transition shadow-sm" title="View Full Description & Match Details">
+                                    <i class="fa-solid fa-eye text-[10px] text-indigo-400"></i> Details
                                 </button>
                                 ${listingUrl ? `
                                 <a href="${listingUrl}" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800/90 hover:bg-slate-700 rounded-lg border border-slate-700 flex items-center gap-1.5 transition shadow-sm" title="View original job listing in a new tab">
@@ -383,6 +665,188 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
                 container.appendChild(card);
             });
+        }
+
+        function openDetailsModal(jobId) {
+            if (!rawData) return;
+            let job = null;
+            const allLists = [rawData.fresh_jobs, rawData.remote_jobs, rawData.tier1_jobs, rawData.tier2_jobs, rawData.all_shortlisted, rawData.applied_jobs];
+            for (const list of allLists) {
+                if (list) {
+                    const found = list.find(x => x.job_id === jobId);
+                    if (found) { job = found; break; }
+                }
+            }
+            if (!job) return;
+
+            // Badges
+            const badgesEl = document.getElementById('modal-badges');
+            badgesEl.innerHTML = '';
+            if (job.tier) {
+                badgesEl.innerHTML += `<span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">${job.tier.split(':')[0]}</span>`;
+            }
+            if (job.is_remote_verified) {
+                badgesEl.innerHTML += `<span class="text-[10px] px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-medium flex items-center gap-1"><i class="fa-solid fa-globe text-[9px]"></i> Remote</span>`;
+            }
+            if (job.platform) {
+                badgesEl.innerHTML += `<span class="text-[10px] px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20 font-medium">${job.platform}</span>`;
+            }
+            const datePosted = job.date_posted && job.date_posted !== 'nan' ? job.date_posted : 'Recent';
+            badgesEl.innerHTML += `<span class="text-[10px] text-slate-400 flex items-center gap-1"><i class="fa-regular fa-clock"></i> ${datePosted}</span>`;
+
+            // Title & Subtitle
+            document.getElementById('modal-title').innerText = job.title;
+            document.getElementById('modal-subtitle').innerText = `${job.company} • ${job.location || 'Remote/India'}`;
+
+            // Score & Match section
+            const scoreEl = document.getElementById('modal-score-badge');
+            scoreEl.innerText = `${job.score || 0}% Match`;
+            scoreEl.className = (job.score >= 90)
+                ? 'px-2.5 py-0.5 rounded text-xs font-extrabold border text-amber-400 bg-amber-400/10 border-amber-400/20'
+                : 'px-2.5 py-0.5 rounded text-xs font-extrabold border text-sky-400 bg-sky-400/10 border-sky-400/20';
+
+            const matchSection = document.getElementById('modal-match-section');
+            const notesEl = document.getElementById('modal-matching-notes');
+            if (job.matching_notes || job.evidence) {
+                matchSection.classList.remove('hidden');
+                notesEl.innerHTML = (job.matching_notes ? `<p class="mb-1">${escapeHtml(job.matching_notes)}</p>` : '') +
+                    (job.evidence ? `<p class="text-slate-400 text-[11px]"><b class="text-slate-300">Key Evidence:</b> ${escapeHtml(job.evidence)}</p>` : '');
+            } else {
+                matchSection.classList.add('hidden');
+            }
+
+            // Skills Chips
+            const skillsChips = document.getElementById('modal-skills-chips');
+            skillsChips.innerHTML = '';
+            let skillsList = [];
+            if (job.skills) {
+                try {
+                    if (job.skills.startsWith('[') && job.skills.endsWith(']')) {
+                        skillsList = JSON.parse(job.skills.replace(/'/g, '"'));
+                    } else {
+                        skillsList = job.skills.split(',').map(s => s.trim());
+                    }
+                } catch (_) {
+                    skillsList = job.skills.split(',').map(s => s.trim());
+                }
+            }
+            if (skillsList.length > 0) {
+                document.getElementById('modal-skills-section').classList.remove('hidden');
+                skillsList.forEach(skill => {
+                    if (skill) {
+                        const chip = document.createElement('span');
+                        chip.className = "text-[11px] px-2.5 py-1 rounded-md bg-slate-800 text-slate-200 border border-slate-700/80 font-mono";
+                        chip.innerText = skill;
+                        skillsChips.appendChild(chip);
+                    }
+                });
+            } else {
+                document.getElementById('modal-skills-section').classList.add('hidden');
+            }
+
+            // Full description
+            const descEl = document.getElementById('modal-description');
+            descEl.innerText = job.description || 'No detailed description available for this posting.';
+
+            // Footer actions
+            const listingUrl = (job.job_url_direct || job.job_url || '').trim();
+            const listingLink = document.getElementById('modal-listing-link');
+            if (listingUrl) {
+                listingLink.href = listingUrl;
+                listingLink.classList.remove('hidden');
+            } else {
+                listingLink.classList.add('hidden');
+            }
+
+            const pdfLink = document.getElementById('modal-pdf-link');
+            if (job.tailored_resume_pdf_path) {
+                pdfLink.href = `/pdf?path=${encodeURIComponent(job.tailored_resume_pdf_path)}`;
+                pdfLink.classList.remove('hidden');
+            } else {
+                pdfLink.classList.add('hidden');
+            }
+
+            const dismissBtn = document.getElementById('modal-dismiss-btn');
+            dismissBtn.onclick = () => dismissJob(job.job_id);
+
+            const applyBtn = document.getElementById('modal-apply-btn');
+            applyBtn.onclick = () => applyJob(job.job_id, applyBtn);
+
+            const modal = document.getElementById('job-details-modal');
+            modal.showModal();
+        }
+
+        function closeDetailsModal() {
+            const modal = document.getElementById('job-details-modal');
+            if (modal && modal.open) modal.close();
+        }
+
+        function openCustomJobModal() {
+            const modal = document.getElementById('custom-job-modal');
+            document.getElementById('custom-url-input').value = '';
+            document.getElementById('custom-text-input').value = '';
+            document.getElementById('custom-job-progress').classList.add('hidden');
+            document.getElementById('custom-submit-btn').disabled = false;
+            modal.showModal();
+        }
+
+        function closeCustomJobModal() {
+            const modal = document.getElementById('custom-job-modal');
+            if (modal && modal.open) modal.close();
+        }
+
+        async function pasteCustomUrl() {
+            try {
+                const text = await navigator.clipboard.readText();
+                if (text) {
+                    document.getElementById('custom-url-input').value = text.trim();
+                }
+            } catch (_) {
+                showToast('Please paste the URL directly into the field.', true);
+            }
+        }
+
+        async function submitCustomJob(e) {
+            if (e) e.preventDefault();
+            const url = document.getElementById('custom-url-input').value.trim();
+            const text = document.getElementById('custom-text-input').value.trim();
+
+            if (!url && !text) {
+                showToast('Please enter a job URL or raw job description.', true);
+                return;
+            }
+
+            const progress = document.getElementById('custom-job-progress');
+            const statusText = document.getElementById('custom-job-status-text');
+            const submitBtn = document.getElementById('custom-submit-btn');
+
+            progress.classList.remove('hidden');
+            submitBtn.disabled = true;
+            statusText.innerText = 'Extracting job posting & screening with AI...';
+
+            try {
+                const res = await fetch('/api/custom', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url || null, text: text || null })
+                });
+                const data = await res.json();
+                if (data.success && data.job_id) {
+                    statusText.innerText = 'Success! Opening tailored application workflow...';
+                    setTimeout(() => {
+                        closeCustomJobModal();
+                        window.location.href = '/apply?id=' + encodeURIComponent(data.job_id);
+                    }, 600);
+                } else {
+                    progress.classList.add('hidden');
+                    submitBtn.disabled = false;
+                    showToast('Failed to add job: ' + (data.error || 'Unknown error'), true);
+                }
+            } catch (err) {
+                progress.classList.add('hidden');
+                submitBtn.disabled = false;
+                showToast('Failed to process custom link: ' + err, true);
+            }
         }
 
         async function applyJob(jobId, btn) {
@@ -404,6 +868,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                         card.style.opacity = '0.4';
                         setTimeout(() => fetchJobs(), 1500);
                     }
+                    closeDetailsModal();
                 } else {
                     showToast('Error: ' + (data.error || 'Failed to apply'), true);
                     btn.disabled = false;
@@ -417,6 +882,18 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         async function dismissJob(jobId) {
+            let job = null;
+            if (rawData) {
+                const allLists = [rawData.fresh_jobs, rawData.remote_jobs, rawData.tier1_jobs, rawData.tier2_jobs, rawData.all_shortlisted];
+                for (const list of allLists) {
+                    if (list) {
+                        const found = list.find(x => x.job_id === jobId);
+                        if (found) { job = found; break; }
+                    }
+                }
+            }
+            const company = job ? job.company : 'Job';
+
             try {
                 const res = await fetch('/api/dismiss', {
                     method: 'POST',
@@ -426,13 +903,45 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 const data = await res.json();
                 if (data.success) {
                     const card = document.getElementById('job-' + jobId);
-                    if (card) {
-                        card.remove();
-                        showToast('Job dismissed');
+                    if (card) card.remove();
+
+                    if (rawData) {
+                        const allLists = [rawData.fresh_jobs, rawData.remote_jobs, rawData.tier1_jobs, rawData.tier2_jobs, rawData.all_shortlisted];
+                        for (const list of allLists) {
+                            if (list) {
+                                const idx = list.findIndex(x => x.job_id === jobId);
+                                if (idx !== -1) list.splice(idx, 1);
+                            }
+                        }
+                        if (rawData.stats) {
+                            rawData.stats.total_shortlisted = Math.max(0, rawData.stats.total_shortlisted - 1);
+                            renderMetrics();
+                        }
                     }
+                    closeDetailsModal();
+                    showToast(`Dismissed ${company}`, false, () => restoreJob(jobId));
                 }
             } catch (e) {
                 showToast('Failed to dismiss: ' + e, true);
+            }
+        }
+
+        async function restoreJob(jobId) {
+            try {
+                const res = await fetch('/api/restore', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ job_id: jobId })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Job restored to shortlist!');
+                    await fetchJobs();
+                } else {
+                    showToast('Failed to restore: ' + (data.error || 'Unknown error'), true);
+                }
+            } catch (e) {
+                showToast('Failed to restore job: ' + e, true);
             }
         }
 
@@ -452,27 +961,22 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             }
         }
 
-        async function addCustomJob() {
-            const url = prompt("Paste any Job Listing URL (LinkedIn, Greenhouse, Lever, Workday, etc.):");
-            if (!url || !url.trim()) return;
-            showToast("Scraping & analyzing custom job link with AI... Please wait 5-10s.");
-            try {
-                const res = await fetch('/api/custom', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: url.trim() })
-                });
-                const data = await res.json();
-                if (data.success && data.job_id) {
-                    showToast("Custom job added! Starting tailored ATS resume generation...");
-                    window.location.href = '/apply?id=' + encodeURIComponent(data.job_id);
-                } else {
-                    showToast("Failed to add job: " + (data.error || "Unknown error"), true);
+        // Setup Light Dismiss for Native Dialogs
+        document.addEventListener('DOMContentLoaded', () => {
+            ['job-details-modal', 'custom-job-modal'].forEach(id => {
+                const d = document.getElementById(id);
+                if (d) {
+                    d.addEventListener('click', (e) => {
+                        const rect = d.getBoundingClientRect();
+                        const inDialog = (
+                            rect.top <= e.clientY && e.clientY <= rect.top + rect.height &&
+                            rect.left <= e.clientX && e.clientX <= rect.left + rect.width
+                        );
+                        if (!inDialog) d.close();
+                    });
                 }
-            } catch (e) {
-                showToast("Failed to process custom link: " + e, true);
-            }
-        }
+            });
+        });
 
         // Initialize
         fetchJobs();
@@ -756,6 +1260,33 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({"success": True}).encode("utf-8"))
                 return
+
+        elif path == "/api/restore":
+            job_id = params.get("job_id")
+            if not job_id:
+                self.send_response(400)
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "Missing job_id"}).encode("utf-8"))
+                return
+
+            conn = db.get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("UPDATE jobs SET status = 'shortlisted' WHERE job_id = ?", (job_id,))
+            conn.commit()
+            conn.close()
+
+            # Trigger background dashboard rebuild
+            try:
+                import dashboard
+                threading.Thread(target=dashboard.generate_dashboard).start()
+            except Exception:
+                pass
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": True, "job_id": job_id}).encode("utf-8"))
+            return
 
         elif path == "/api/archive-stale":
             days = params.get("days", 7)
