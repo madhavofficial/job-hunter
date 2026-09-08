@@ -69,6 +69,89 @@ def map_platform(url: str, site: str = "") -> str:
     return "Direct Portal"
 
 
+def derive_status_portal_url(url: str, platform: str = "", company: str = "", job_id: str = "") -> str:
+    """Derives the candidate application status tracking portal URL."""
+    u = (url or "").strip()
+    co_l = (company or "").lower().strip()
+    plat_l = (platform or "").lower().strip()
+
+    # 1. Workday
+    if "myworkdayjobs.com" in u or "myworkdaysite.com" in u or plat_l == "workday":
+        m = re.match(r"(https?://[^/]+\.myworkday(?:jobs|site)\.com(?:/[^/]+)?/[^/]+)", u)
+        if m:
+            return f"{m.group(1)}/userHome"
+        m_base = re.match(r"(https?://[^/]+\.myworkday(?:jobs|site)\.com)", u)
+        if m_base:
+            return f"{m_base.group(1)}/userHome"
+
+    # 2. Oracle Cloud & Taleo
+    if "oraclecloud.com" in u or plat_l == "oracle cloud":
+        m = re.match(r"(https?://[^/]+/hcmUI/CandidateExperience/[^/]+/sites/[^/]+)", u)
+        if m:
+            return f"{m.group(1)}/my-profile"
+    if "taleo.net" in u:
+        m = re.match(r"(https?://[^/]+/careersection/[^/]+)", u)
+        if m:
+            return f"{m.group(1)}/mysubmissions.ftl"
+
+    # 3. iCIMS
+    if "icims.com" in u or plat_l == "icims":
+        m = re.match(r"(https?://[^/]+\.icims\.com)", u)
+        if m:
+            return f"{m.group(1)}/jobs/dashboard"
+
+    # 4. SmartRecruiters
+    if "smartrecruiters.com" in u or plat_l == "smartrecruiters":
+        return "https://my.smartrecruiters.com/identity/public/sign-in"
+
+    # 5. Greenhouse
+    if "greenhouse.io" in u or plat_l == "greenhouse":
+        m = re.match(r"(https?://(?:boards|job-boards)\.greenhouse\.io/[^/]+)", u)
+        if m:
+            return m.group(1)
+
+    # 6. Ashby
+    if "ashbyhq.com" in u or plat_l == "ashby":
+        m = re.match(r"(https?://jobs\.ashbyhq\.com/[^/]+)", u)
+        if m:
+            return m.group(1)
+
+    # 7. Known Enterprise Portals by Company
+    known_portals = {
+        "qualcomm": "https://careers.qualcomm.com/careers/userHome",
+        "siemens": "https://jobs.siemens.com/careers/userHome",
+        "ibm": "https://careers.ibm.com/en_US/careers/YourApplications",
+        "amazon": "https://www.amazon.jobs/applicant",
+        "cisco": "https://careers.cisco.com/global/en/candidatehub",
+        "dhl": "https://careers.dhl.com/global/en/candidatehub",
+        "ripplehire": "https://usource.ripplehire.com/candidate/",
+    }
+    for k, v in known_portals.items():
+        if k in co_l:
+            return v
+
+    # 8. LinkedIn: Direct listing link or LinkedIn Job Tracker
+    if "linkedin.com" in u or plat_l == "linkedin" or (job_id and job_id.startswith("li-")):
+        if "linkedin.com/jobs/view/" in u:
+            return u
+        elif job_id and job_id.startswith("li-"):
+            lid = job_id.replace("li-", "")
+            return f"https://www.linkedin.com/jobs/view/{lid}/"
+        return "https://www.linkedin.com/jobs/tracker/applied/"
+
+    # 9. Indeed
+    if "indeed.com" in u or (job_id and job_id.startswith("in-")):
+        if "indeed.com" in u:
+            return u
+        return "https://myjobs.indeed.com/applied"
+
+    # 10. Fallback: Job URL
+    if u.startswith("http://") or u.startswith("https://"):
+        return u
+
+    return ""
+
+
 def fetch_all_notion_applications() -> Tuple[List[dict], int]:
     """Fetches all entries from Notion database and returns (entries, max_sno)."""
     if not is_notion_configured():
@@ -133,6 +216,7 @@ def push_job_to_notion(job: dict, sno: int) -> Optional[str]:
             date_val = date_candidate
 
     platform = map_platform(job_url, site)
+    status_portal_url = derive_status_portal_url(job_url, platform, company, job_id)
 
     properties = {
         "Company": {
@@ -157,6 +241,9 @@ def push_job_to_notion(job: dict, sno: int) -> Optional[str]:
 
     if job_url.startswith("http://") or job_url.startswith("https://"):
         properties["Job Listing Link"] = {"url": job_url}
+
+    if status_portal_url:
+        properties["Check Status Portal URL"] = {"url": status_portal_url}
 
     if job_id:
         properties["Req ID / Job ID"] = {
@@ -272,11 +359,70 @@ def sync_applied_to_notion(target_job_id: str = None) -> int:
             time.sleep(0.35)  # Notion rate-limit etiquette
 
     print(f"-> Notion sync complete: {synced_count} new applications created in tracker.")
+
+    # Also backfill any existing entries missing Check Status Portal URL
+    if not target_job_id:
+        backfill_missing_status_portal_urls()
+
     return synced_count
 
 
+def backfill_missing_status_portal_urls() -> int:
+    """Finds all Notion pages where 'Check Status Portal URL' is empty and populates them."""
+    if not is_notion_configured():
+        return 0
+
+    print("\n====================================================")
+    print("🔧 AUDITING & POPULATING 'Check Status Portal URL'")
+    print("====================================================")
+
+    entries, _ = fetch_all_notion_applications()
+    headers = get_headers()
+    updated_count = 0
+
+    for p in entries:
+        props = p.get("properties", {})
+        existing_portal = props.get("Check Status Portal URL", {}).get("url")
+        if existing_portal:
+            continue
+
+        page_id = p.get("id")
+        listing_url = props.get("Job Listing Link", {}).get("url") or ""
+        plat = props.get("Platform / ATS", {}).get("select", {}).get("name") or ""
+        co_arr = props.get("Company", {}).get("title", [])
+        co = co_arr[0].get("plain_text") if co_arr else ""
+        req_arr = props.get("Req ID / Job ID", {}).get("rich_text", [])
+        jid = req_arr[0].get("plain_text") if req_arr else ""
+
+        derived_url = derive_status_portal_url(listing_url, plat, co, jid)
+        if not derived_url:
+            continue
+
+        try:
+            res = requests.patch(
+                f"https://api.notion.com/v1/pages/{page_id}",
+                headers=headers,
+                json={"properties": {"Check Status Portal URL": {"url": derived_url}}},
+                timeout=15
+            )
+            if res.status_code == 200:
+                sno = props.get("S.No", {}).get("number", "?")
+                print(f"✓ [S.No {sno}] Updated {co} -> Status Portal: {derived_url}")
+                updated_count += 1
+                time.sleep(0.35)
+            else:
+                print(f"Warning: Failed to update page {page_id}: {res.status_code} {res.text}", file=sys.stderr)
+        except Exception as e:
+            print(f"Warning: Exception updating page {page_id}: {e}", file=sys.stderr)
+
+    print(f"-> Backfill complete: {updated_count} Notion pages updated with Check Status Portal URL.")
+    return updated_count
+
+
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1]:
+    if len(sys.argv) > 1 and sys.argv[1] == "--backfill":
+        backfill_missing_status_portal_urls()
+    elif len(sys.argv) > 1 and sys.argv[1]:
         sync_applied_to_notion(sys.argv[1])
     else:
         sync_applied_to_notion()
