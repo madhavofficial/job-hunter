@@ -39,6 +39,24 @@ FEATURED_EXTERNAL_REPOSITORIES = [
     }
 ]
 
+CURATED_REPOSITORY_METADATA = {
+    "Ultimate-Trader-Dashboard-GitHub-Repository-Structure": {
+        "display_name": "Smart Market Watchlist & Trading Terminal (Ultimate-Trader-Dashboard)",
+        "description": "Stateful market intelligence and real-time trading terminal built with Next.js 15, Express, TypeScript, Prisma ORM, PostgreSQL, and Zerodha Kite Connect SDK. Introduces observation checkpoints to detect meaningful price swings, volume anomalies, and benchmark alpha divergence relative to user absence (T_checkpoint -> T_now), multi-factor attention scoring (0-100), real-time WebSocket market streams, and an automated financial RSS/news catalyst enrichment worker with multi-LLM sentiment extraction.",
+        "topics": ["fintech", "nextjs", "typescript", "prisma", "postgresql", "websockets", "zerodha-kite", "trading-terminal", "market-data", "docker"]
+    },
+    "Ultimate-Trader-Dashboard": {
+        "display_name": "Smart Market Watchlist & Trading Terminal (Ultimate-Trader-Dashboard)",
+        "description": "Stateful market intelligence and real-time trading terminal built with Next.js 15, Express, TypeScript, Prisma ORM, PostgreSQL, and Zerodha Kite Connect SDK. Introduces observation checkpoints to detect meaningful price swings, volume anomalies, and benchmark alpha divergence relative to user absence (T_checkpoint -> T_now), multi-factor attention scoring (0-100), real-time WebSocket market streams, and an automated financial RSS/news catalyst enrichment worker with multi-LLM sentiment extraction.",
+        "topics": ["fintech", "nextjs", "typescript", "prisma", "postgresql", "websockets", "zerodha-kite", "trading-terminal", "market-data", "docker"]
+    },
+    "153_Project3_BD": {
+        "display_name": "Distributed Stream & Image Processing with Apache Kafka",
+        "description": "Distributed real-time streaming pipeline utilizing Apache Kafka, Docker, and multi-worker consumers in Python to process high-throughput image and event streams with fault tolerance and metric telemetry.",
+        "topics": ["kafka", "distributed-systems", "docker", "python", "stream-processing"]
+    }
+}
+
 IGNORED_DIRS = {
     "node_modules", ".git", ".venv", "dist", "build", ".next",
     "__pycache__", ".pytest_cache", ".DS_Store", ".idea", ".vscode"
@@ -103,7 +121,7 @@ def inspect_local_repository(repo_path: str) -> dict:
                 if len(manifests) < 8:  # Cap at 8 key architecture/manifest files
                     try:
                         with open(os.path.join(root, f), "r", encoding="utf-8", errors="ignore") as fp:
-                            manifests[rel_file] = fp.read()[:1200]
+                            manifests[rel_file] = fp.read()[:5000]
                     except Exception:
                         pass
 
@@ -151,7 +169,7 @@ def inspect_remote_repository(username: str, repo_name: str, headers: dict) -> d
                             if isinstance(f_data, dict):
                                 f_raw = f_data.get("content", "")
                                 if f_raw:
-                                    manifests[path] = base64.b64decode(f_raw).decode("utf-8", errors="ignore")[:1200]
+                                    manifests[path] = base64.b64decode(f_raw).decode("utf-8", errors="ignore")[:5000]
     except Exception as e:
         print(f"Warning: Failed remote inspection for '{repo_name}': {e}", file=sys.stderr)
 
@@ -237,9 +255,11 @@ def fetch_github_portfolio(username: str = None, force_refresh: bool = False) ->
             continue
         seen_names.add(name)
 
-        description = r.get("description") or ""
+        curated = CURATED_REPOSITORY_METADATA.get(name, {})
+        description = curated.get("description") or r.get("description") or ""
+        topics = curated.get("topics") or r.get("topics") or []
+        display_name = curated.get("display_name") or name
         language = r.get("language") or ""
-        topics = r.get("topics") or []
         html_url = r.get("html_url") or f"https://github.com/{full_name}"
 
         # Check if repo exists locally on disk
@@ -251,8 +271,21 @@ def fetch_github_portfolio(username: str = None, force_refresh: bool = False) ->
             inspection = inspect_remote_repository(owner_login, name, headers)
             source_type = "remote_github"
 
+        # Fallback to manifest description if still empty
+        if not description:
+            for m_path, m_content in inspection.get("manifests", {}).items():
+                if "package.json" in m_path:
+                    try:
+                        pkg_data = json.loads(m_content)
+                        if pkg_data.get("description"):
+                            description = pkg_data.get("description")
+                            break
+                    except Exception:
+                        pass
+
         project_item = {
             "name": name,
+            "display_name": display_name,
             "full_name": full_name,
             "owner": owner_login,
             "url": html_url,
@@ -287,7 +320,7 @@ def format_github_portfolio_for_prompt(portfolio: list[dict]) -> str:
 
     sections = []
     for p in portfolio:
-        p_name = p.get("name", "")
+        p_name = p.get("display_name") or p.get("name", "")
         p_url = p.get("url", "")
         p_desc = p.get("description", "")
         lang = p.get("language") or "N/A"
@@ -296,26 +329,27 @@ def format_github_portfolio_for_prompt(portfolio: list[dict]) -> str:
         readme = p.get("readme_content") or ""
 
         deps = []
+        low_signal_deps = {"uuid", "dotenv", "cookie-parser", "cors", "react-dom", "nodemon", "ts-node", "ts-node-dev"}
         for m_path, m_content in manifests.items():
             if "package.json" in m_path:
                 try:
                     data = json.loads(m_content)
-                    for k in list(data.get("dependencies", {}).keys())[:6]:
-                        if k not in deps:
+                    for k in list(data.get("dependencies", {}).keys()):
+                        if not k.startswith("@types/") and k.lower() not in low_signal_deps and k not in deps:
                             deps.append(k)
                 except Exception:
                     pass
             elif "requirements.txt" in m_path:
                 for line in m_content.splitlines():
                     cleaned = line.split("==")[0].split(">=")[0].strip()
-                    if cleaned and not cleaned.startswith("#") and cleaned not in deps:
+                    if cleaned and not cleaned.startswith("#") and cleaned.lower() not in low_signal_deps and cleaned not in deps:
                         deps.append(cleaned)
 
         block = f"### Project: {p_name}\n"
         block += f"- **Repository**: {p_url}\n"
         block += f"- **Primary Language**: {lang}"
         if deps:
-            block += f" | Key Dependencies: {', '.join(deps[:8])}"
+            block += f" | Key Dependencies: {', '.join(deps[:14])}"
         block += "\n"
         if p_desc:
             block += f"- **Overview**: {p_desc}\n"
@@ -323,9 +357,34 @@ def format_github_portfolio_for_prompt(portfolio: list[dict]) -> str:
             core_files = [f for f in file_tree if any(k in f.lower() for k in ["src", "backend", "prisma", "api", "app", "server", "docker", "infra"])]
             files_str = ", ".join(core_files[:6]) if core_files else ", ".join(file_tree[:6])
             block += f"- **Codebase Structure & Key Files**: {files_str}\n"
+        
+        # Extract meaningful architecture snippet from README
+        arch_snippet = ""
         if readme:
-            clean_readme = [l.strip() for l in readme.splitlines() if l.strip() and not l.startswith("#") and not l.startswith("!") and not l.startswith("```")]
-            block += f"- **Architecture & Verified Capabilities**: {' '.join(clean_readme[:4])[:300]}\n"
+            meaningful_lines = []
+            for l in readme.splitlines():
+                s = l.strip()
+                if not s or s.startswith("#") or s.startswith("!") or s.startswith("```") or s.startswith("|") or s.startswith("-"):
+                    continue
+                if s.startswith(">"):
+                    s = s.lstrip("> *").rstrip("*").strip()
+                if any(disclaimer in s.lower() for disclaimer in ["not an official", "hackathon submission", "affiliated with", "submission for the"]):
+                    continue
+                if len(s) > 20:
+                    meaningful_lines.append(s)
+            if meaningful_lines:
+                combined = " ".join(meaningful_lines[:4])
+                if len(combined) > 450:
+                    period_idx = combined[:450].rfind(".")
+                    if period_idx > 150:
+                        arch_snippet = combined[:period_idx + 1]
+                    else:
+                        arch_snippet = combined[:450].rsplit(" ", 1)[0] + "..."
+                else:
+                    arch_snippet = combined
+
+        if arch_snippet:
+            block += f"- **Architecture & Verified Capabilities**: {arch_snippet}\n"
 
         sections.append(block)
 
