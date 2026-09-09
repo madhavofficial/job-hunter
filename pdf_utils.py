@@ -258,21 +258,24 @@ def _build_flowables(markdown_text: str):
     return flow
 
 
-def markdown_to_pdf(markdown_text: str, output_path: str) -> str:
-    """Render Markdown into a clean, executive ATS single-page PDF with strict layout fit."""
+def markdown_to_pdf(markdown_text: str, output_path: str, single_page: bool = False) -> str:
+    """Render Markdown into a clean, executive ATS PDF allowing natural multi-page flow."""
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     doc = SimpleDocTemplate(
         output_path,
         pagesize=letter,
         rightMargin=0.40 * inch,
         leftMargin=0.40 * inch,
-        topMargin=0.32 * inch,
-        bottomMargin=0.32 * inch,
+        topMargin=0.35 * inch,
+        bottomMargin=0.35 * inch,
         title=os.path.basename(output_path),
         author="Madhav Jayam",
     )
 
     flowables = _build_flowables(markdown_text)
-    content = KeepInFrame(doc.width, doc.height, flowables, mode="shrink")
-    doc.build([content])
+    if single_page:
+        content = KeepInFrame(doc.width, doc.height, flowables, mode="shrink")
+        doc.build([content])
+    else:
+        doc.build(flowables)
     return output_path

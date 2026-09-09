@@ -125,10 +125,10 @@ def tailor_materials(job_id: str):
       * Pillar 3 (Full-Stack / Systems Architecture / Web): 'Ultimate-Trader-Dashboard' (TypeScript, Next.js, WebSockets, PostgreSQL, Docker) or 'University-DBMS-Management-'
       * Pillar 4 (AI Agents / Tooling / Workflow Automation): 'job-hunter' (Agentic automation, multi-source scraping, Pydantic guardrails) or 'CareerTime' (Groq LPU, LangChain)
       * Pillar 5 (Epistemic Multi-Agent Systems / Research / RAG / Graph Clustering): 'A Multi-Agent Generative AI System for Scientific Literature Analysis' (Selected for IEEE SPICES conference, Zenodo DOI: 10.5281/zenodo.22676649, GitHub: https://github.com/GenAI-Scientific-Literature-System/GenAI-Scientific-Literature-System-multi-agent-system, Sentence-BERT, Louvain community clustering, 5-agent verification ensemble, 92.7% accuracy, 89.8% F1) or 'Neuro-Symbolic Platform for Variant Pathogenicity Evaluation'
-   - STRICT SINGLE-PAGE FIT RULES:
-     * To fit 4 to 5 projects cleanly on ONE page, write EXACTLY 2 to 3 concise, punchy, high-density bullet points per project.
-     * Bullet 1: MUST state WHAT the project is and WHAT it does (core product capability and problem solved).
-     * Bullets 2-3: Detail deep technical architecture, libraries, concurrency/data flow, performance optimizations, and quantitative metrics (accuracy, latency, throughput, scale).
+    - DEPTH, TECHNICAL SUBSTANCE & IMPACT RULES:
+      * There is NO artificial 1-page restriction — prioritize technical substance, architectural depth, and quantitative metrics over arbitrary length limits. For each project, write 3 to 4 comprehensive, punchy, high-density bullet points.
+      * Bullet 1: MUST state WHAT the project is and WHAT it does (core product capability and problem solved).
+      * Bullets 2-4: Detail deep technical architecture, libraries, concurrency/data flow, performance optimizations, and quantitative metrics (accuracy, latency, throughput, scale).
    - EXPANDED SKILLS: Ensure the Technical Skills section covers the full breadth of languages, frameworks, and tools across all included projects (e.g. Python, TypeScript, Java, C, Kotlin, Scala, PyTorch, Apache Kafka, Next.js, PostgreSQL, Docker, Android)."""
     else:
         print("-> Targeted role detected. Applying Deep Specialization Strategy...")
@@ -168,7 +168,7 @@ def tailor_materials(job_id: str):
 Instructions & Rules:
 1. PROFESSIONAL EXPERIENCE: Preserve all professional internships (Qualcomm, O.C. Tanner) with all hard metrics (8,700 tickets, 15+ skills, 50+ tickets, 70% coverage), technical depth, and guardrails. Do not compress or delete these experiences.
 {project_strategy}
-   - AUTONOMOUS AMBIGUITY EVALUATION: If the prompt marked this as targeted, but YOU evaluate from the Job Description that the role is actually broad, multi-track, general development centre (e.g. IDC), rotational, or lacks specific single-domain constraints, OVERRIDE and apply the AMBIGUOUS / BROAD JOB DIRECTIVE: include 4 to 5 diverse projects with 2-3 concise, high-density bullets per project to showcase maximum engineering breadth.
+   - AUTONOMOUS AMBIGUITY EVALUATION: If the prompt marked this as targeted, but YOU evaluate from the Job Description that the role is actually broad, multi-track, general development centre (e.g. IDC), rotational, or lacks specific single-domain constraints, OVERRIDE and apply the AMBIGUOUS / BROAD JOB DIRECTIVE: include 4 to 5 diverse projects with 3-4 detailed, high-density bullets per project to showcase maximum engineering breadth.
 2.5. PUBLICATIONS & FLAGSHIP RESEARCH:
    - The candidate co-authored the research paper: 'A Multi-Agent Generative AI System for Scientific Literature Analysis' (Adishree Gupta, Uma D, Madhav Jayam, Sai Roshini Kolla — PES University), which was SELECTED FOR IEEE SPICES (IEEE International Conference on Signal Processing, Informatics, Communication and Energy Systems) with Zenodo DOI: 10.5281/zenodo.22676649 and GitHub: https://github.com/GenAI-Scientific-Literature-System/GenAI-Scientific-Literature-System-multi-agent-system.
    - ALWAYS include this publication/project prominently on the tailored resume! Either in a dedicated '## Publications' section or as a flagship project, explicitly stating:
