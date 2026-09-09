@@ -124,7 +124,7 @@ def tailor_materials(job_id: str):
       * Pillar 2 (Distributed Systems / Big Data / Streaming / Concurrency): '153_Project3_BD' (Distributed Stream & Image Processing with Apache Kafka, Docker, Python)
       * Pillar 3 (Full-Stack / Systems Architecture / Web): 'Ultimate-Trader-Dashboard' (TypeScript, Next.js, WebSockets, PostgreSQL, Docker) or 'University-DBMS-Management-'
       * Pillar 4 (AI Agents / Tooling / Workflow Automation): 'job-hunter' (Agentic automation, multi-source scraping, Pydantic guardrails) or 'CareerTime' (Groq LPU, LangChain)
-      * Pillar 5 (Neuro-Symbolic / RAG / Complex Algorithms): 'neuro_capstone' or 'evidence-grounded-clinical-literature-synthesis'
+      * Pillar 5 (Epistemic Multi-Agent Systems / Research / RAG / Graph Clustering): 'A Multi-Agent Generative AI System for Scientific Literature Analysis' (Selected for IEEE SPICES conference, Zenodo DOI: 10.5281/zenodo.22676649, GitHub: https://github.com/GenAI-Scientific-Literature-System/GenAI-Scientific-Literature-System-multi-agent-system, Sentence-BERT, Louvain community clustering, 5-agent verification ensemble, 92.7% accuracy, 89.8% F1) or 'Neuro-Symbolic Platform for Variant Pathogenicity Evaluation'
    - STRICT SINGLE-PAGE FIT RULES:
      * To fit 4 to 5 projects cleanly on ONE page, write EXACTLY 2 to 3 concise, punchy, high-density bullet points per project.
      * Bullet 1: MUST state WHAT the project is and WHAT it does (core product capability and problem solved).
@@ -137,10 +137,10 @@ def tailor_materials(job_id: str):
    - Compare the candidate's Current Resume Projects with the candidate's Verified GitHub Project Portfolio.
    - Select the 3 to 4 BEST-FITTING projects from the combined pool of projects (Current Resume + GitHub Portfolio).
    - REPLACE less relevant projects on the base resume with stronger-matching GitHub projects where appropriate:
+      * For AI / RAG / Agent / NLP / Generative AI / Research / Machine Learning roles -> STRONGLY PRIORITIZE 'A Multi-Agent Generative AI System for Scientific Literature Analysis' (Selected for IEEE SPICES conference, Zenodo DOI: 10.5281/zenodo.22676649, GitHub: https://github.com/GenAI-Scientific-Literature-System/GenAI-Scientific-Literature-System-multi-agent-system, 92.7% accuracy, 89.8% F1) and ensure the IEEE SPICES publication is featured prominently!
       * For DevOps / Cloud / Automation / Tooling roles -> prioritize 'job-hunter'.
       * For Big Data / Data Engineering / Streaming / Spark / Kafka / Distributed Systems / Batch Processing -> prioritize '153_Project3_BD' (Distributed Stream & Image Processing with Apache Kafka, Docker, Python) and 'Forecasting-Bike-Rental-Demand'.
       * For Full-Stack / TypeScript / FinTech / Database roles -> prioritize 'Ultimate-Trader-Dashboard' or 'University-DBMS-Management-'.
-      * For AI / RAG / Agent / NLP roles -> prioritize 'evidence-grounded-clinical-literature-synthesis', 'CareerTime', or 'neuro_capstone'.
       * For Computer Vision / Deep Learning -> prioritize 'Sketch Recognition System'.
       * For Data Science / Regression / Analytics -> prioritize 'Forecasting-Bike-Rental-Demand'.
    - FIRST BULLET EXPLAINS WHAT THE PROJECT DOES: For EVERY project on the resume, the FIRST bullet point MUST clearly state WHAT the project is and WHAT it does (its core product capability, user function, and problem solved). The remaining bullets should then detail the deep engineering architecture, database design, concurrency models, performance optimizations, and quantitative metrics.
@@ -169,6 +169,9 @@ Instructions & Rules:
 1. PROFESSIONAL EXPERIENCE: Preserve all professional internships (Qualcomm, O.C. Tanner) with all hard metrics (8,700 tickets, 15+ skills, 50+ tickets, 70% coverage), technical depth, and guardrails. Do not compress or delete these experiences.
 {project_strategy}
    - AUTONOMOUS AMBIGUITY EVALUATION: If the prompt marked this as targeted, but YOU evaluate from the Job Description that the role is actually broad, multi-track, general development centre (e.g. IDC), rotational, or lacks specific single-domain constraints, OVERRIDE and apply the AMBIGUOUS / BROAD JOB DIRECTIVE: include 4 to 5 diverse projects with 2-3 concise, high-density bullets per project to showcase maximum engineering breadth.
+2.5. PUBLICATIONS & FLAGSHIP RESEARCH:
+   - The candidate co-authored the research paper: 'A Multi-Agent Generative AI System for Scientific Literature Analysis' (Adishree Gupta, Uma D, Madhav Jayam, Sai Roshini Kolla — PES University), which was SELECTED FOR IEEE SPICES (IEEE International Conference on Signal Processing, Informatics, Communication and Energy Systems) with Zenodo DOI: 10.5281/zenodo.22676649 and GitHub: https://github.com/GenAI-Scientific-Literature-System/GenAI-Scientific-Literature-System-multi-agent-system.
+   - ALWAYS include this publication/project prominently on the tailored resume! Either in a dedicated '## Publications' section or as a flagship project, explicitly mentioning that it was selected for the IEEE SPICES conference along with its DOI and GitHub repo.
 3. SKILLS SECTION: Update the Technical Skills section to highlight the exact languages and tools used across the selected projects and experience (e.g., add TypeScript, Docker, Prisma, etc. if featuring TypeScript/Full-Stack projects).
 4. ZERO FABRICATION: Do NOT invent non-existent projects, companies, durations, graduation date (May 2027), or credentials. Rely strictly on facts in the candidate's resume and GitHub portfolio. Do NOT include GPA on the resume.
 5. FORMATTING & TYPOGRAPHY:

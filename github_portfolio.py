@@ -27,6 +27,18 @@ EXCLUDED_REPOSITORIES = {
     "securedevopsscanner",
 }
 
+FEATURED_EXTERNAL_REPOSITORIES = [
+    {
+        "owner": "GenAI-Scientific-Literature-System",
+        "name": "GenAI-Scientific-Literature-System-multi-agent-system",
+        "full_name": "GenAI-Scientific-Literature-System/GenAI-Scientific-Literature-System-multi-agent-system",
+        "url": "https://github.com/GenAI-Scientific-Literature-System/GenAI-Scientific-Literature-System-multi-agent-system",
+        "description": "A Multi-Agent Generative AI System for Scientific Literature Analysis. Selected for IEEE SPICES Conference (Zenodo DOI: 10.5281/zenodo.22676649). Coordinated agent ensemble with graph-based Louvain clustering.",
+        "language": "Python",
+        "topics": ["multi-agent-systems", "generative-ai", "scientific-literature-analysis", "graph-clustering", "rag", "ieee-spices"]
+    }
+]
+
 IGNORED_DIRS = {
     "node_modules", ".git", ".venv", "dist", "build", ".next",
     "__pycache__", ".pytest_cache", ".DS_Store", ".idea", ".vscode"
@@ -196,6 +208,20 @@ def fetch_github_portfolio(username: str = None, force_refresh: bool = False) ->
                 repos = res.json()
         except Exception as e:
             print(f"Warning: GitHub API error: {e}", file=sys.stderr)
+
+    # 3. Always ensure featured research & organization repositories are included
+    for feat in FEATURED_EXTERNAL_REPOSITORIES:
+        if not any(r.get("name") == feat["name"] for r in repos):
+            repos.append({
+                "name": feat["name"],
+                "full_name": feat["full_name"],
+                "owner": {"login": feat["owner"]},
+                "html_url": feat["url"],
+                "description": feat["description"],
+                "language": feat["language"],
+                "topics": feat["topics"],
+                "fork": False
+            })
 
     portfolio = []
     seen_names = set()
