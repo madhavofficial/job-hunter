@@ -6,6 +6,7 @@ from groq import Groq
 import db
 import config
 from screening import classify_company_tier, deterministic_hard_filter
+from quality import assess_listing_quality, components_json, quality_gate, weighted_match_score
 
 def load_resume():
     resume_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resume.md")
@@ -185,8 +186,27 @@ You MUST respond with a JSON object. Use the following structure:
                 conn.commit()
                 conn.close()
                 print(f"-> Successfully fetched and saved description ({len(description)} chars)")
-            else:
-                print("-> Could not fetch description. Proceeding with title-only matching.")
+        else:
+            print("-> Could not fetch description. Proceeding with title-only matching.")
+
+        # Do not spend model calls on listings that cannot support a reliable
+        # recommendation. A title-only match is discovery data, not a shortlist.
+        job_for_quality = dict(job)
+        job_for_quality["description"] = description
+        company_tier = classify_company_tier(company)
+        quality = assess_listing_quality(job_for_quality, company_tier)
+        quality_passes, quality_reason = quality_gate(job_for_quality, company_tier, quality)
+        if not quality_passes:
+            db.update_job_match(
+                job_id=job_id,
+                score=0,
+                status="rejected",
+                evidence="",
+                matching_notes=f"REJECTED: {quality_reason}",
+                recommendation_status="rejected",
+            )
+            print(f"-> REJECTED by quality gate: {quality_reason}")
+            continue
         
         print(f"\nProcessing: '{title}' at '{company}' ({location})...")
         
@@ -242,44 +262,57 @@ Description:
             result_json = response.choices[0].message.content
             result = json.loads(result_json)
             
-            passes = result.get("passes_hard_filters", False)
+            model_passes = bool(result.get("passes_hard_filters", False))
             try:
                 score = max(0, min(100, int(result.get("compatibility_score", 0))))
             except (TypeError, ValueError):
                 score = 0
             rejection_reason = result.get("rejection_reason", "")
-            company_tier = classify_company_tier(company)
             evidence = result.get("evidence", [])
             notes = result.get("matching_notes", "")
             
             # If identified as an unverified/staffing agency or anonymous poster, reject immediately
             if company_tier.startswith("Tier 3"):
-                passes = False
+                model_passes = False
                 rejection_reason = rejection_reason or "Identified as recruitment/staffing agency or unverified training consultancy."
             
             # Format evidence list as a string
             evidence_str = "\n".join([f"- {ev}" for ev in evidence])
-            
-            # Determine status
-            # If passes hard filters and score >= 75, we shortlist it. Otherwise rejected.
-            if passes and score >= 75:
+
+            final_score, components = weighted_match_score(score, quality)
+            quality_passes, final_quality_reason = quality_gate(job_for_quality, company_tier, quality)
+            passes = model_passes and quality_passes
+            if passes and final_score >= 75:
                 status = "shortlisted"
+                recommendation_status = "recommended" if final_score >= 80 and quality["evidence_score"] >= 80 else "discovered"
+                score = final_score
                 shortlisted_count += 1
-                print(f"-> SHORTLISTED ({company_tier}): Score={score}%")
+                print(f"-> {recommendation_status.upper()} ({company_tier}): Score={score}%")
+            elif passes:
+                # Preserve lower-confidence, non-rejected discoveries for the
+                # searchable discovery pool without presenting them as top fits.
+                status = "shortlisted"
+                recommendation_status = "discovered"
+                score = final_score
+                notes = f"DISCOVERY ONLY: {final_quality_reason or 'Below recommendation threshold.'}\n\n{notes}"
+                print(f"-> DISCOVERY ONLY ({company_tier}): Score={score}%")
             else:
                 status = "rejected"
                 score = 0
+                recommendation_status = "rejected"
                 if rejection_reason:
                     notes = f"REJECTED: {rejection_reason}\n\n{notes}"
                 print(f"-> REJECTED: {rejection_reason or 'Low compatibility score'}")
                 
-            db.update_job_match(
-                job_id=job_id,
-                score=score,
-                status=status,
-                evidence=evidence_str,
-                matching_notes=notes
-            )
+                db.update_job_match(
+                    job_id=job_id,
+                    score=score,
+                    status=status,
+                    evidence=evidence_str,
+                    matching_notes=notes,
+                    components=components,
+                    recommendation_status=recommendation_status,
+                )
             
             processed_count += 1
             

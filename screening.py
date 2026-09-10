@@ -7,6 +7,14 @@ KNOWN_ENTERPRISES = {
     "stripe", "amazon", "google", "microsoft", "oracle", "accenture", "tcs",
     "wipro", "cognizant", "capgemini", "ibm", "nuvama", "idfc", "morningstar",
     "solventum", "ixigo",
+    "teradata", "electronic arts", "ea", "amgen", "metlife", "comcast",
+    "blackrock", "ptc", "eaton", "genpact", "nielsen iq", "scientific games",
+}
+
+KNOWN_PRODUCT_COMPANIES = {
+    "openai", "anthropic", "google", "microsoft", "stripe", "swiggy", "zerodha",
+    "postman", "razorpay", "gitlab", "carousell", "freight tiger", "coram ai",
+    "weekday ai", "everseen", "revolte ai", "peryx ai", "startx med",
 }
 
 AGENCY_MARKERS = (
@@ -26,9 +34,29 @@ def classify_company_tier(company: str) -> str:
         or any(marker in normalized for marker in AGENCY_MARKERS)
     ):
         return "Tier 3: Staffing Agency / Unverified"
-    if normalized in KNOWN_ENTERPRISES or any(name in normalized for name in KNOWN_ENTERPRISES):
+    if normalized in KNOWN_ENTERPRISES or any(
+        normalized.startswith(f"{name} ") or normalized.endswith(f" {name}")
+        for name in KNOWN_ENTERPRISES
+    ):
         return "Tier 2: Global Enterprise / IT Services"
-    return "Tier 1: Product Company / AI Startup"
+    if normalized in KNOWN_PRODUCT_COMPANIES or any(
+        normalized.startswith(f"{name} ") or normalized.endswith(f" {name}")
+        for name in KNOWN_PRODUCT_COMPANIES
+    ):
+        return "Tier 1: Product Company / AI Startup"
+    # Unknown employers must be verified before they appear as a recommended
+    # Tier 1 company. This prevents every small aggregator listing from being
+    # promoted merely because it is not on the enterprise list.
+    return "Tier 3: Staffing Agency / Unverified"
+
+
+def is_explicitly_unverified_company(company: str) -> bool:
+    normalized = (company or "").strip().lower()
+    return (
+        not normalized
+        or normalized in {"none", "confidential", "private limited", "company name"}
+        or any(marker in normalized for marker in AGENCY_MARKERS)
+    )
 
 
 def deterministic_hard_filter(job: dict) -> tuple[bool, str | None]:
@@ -40,7 +68,9 @@ def deterministic_hard_filter(job: dict) -> tuple[bool, str | None]:
     experience = str(job.get("experience_range") or "")
     searchable = f"{title}\n{description}\n{experience}".lower()
 
-    if classify_company_tier(company).startswith("Tier 3"):
+    # Preserve the deterministic hard-filter contract for ordinary unknown
+    # employers; the stricter quality gate rejects them before recommendation.
+    if is_explicitly_unverified_company(company):
         return False, "Company appears to be a staffing agency, consultancy, or unverified aggregator."
     if re.search(r"\b(?:senior|sr\.?|lead|principal|staff|manager|director|head)\b", title, re.I):
         return False, "Role title indicates senior/leadership experience beyond the candidate's internship level."
@@ -92,4 +122,3 @@ def is_job_truly_remote(job: dict) -> bool:
         return True
 
     return False
-

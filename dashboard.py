@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 
 import db
 from screening import classify_company_tier, is_job_truly_remote
+from quality import assess_listing_quality, quality_gate, weighted_match_score
 
 
 def auto_archive_stale_jobs(days: int = 5):
@@ -40,7 +41,19 @@ def generate_dashboard():
 
     # 2. Retrieve active shortlisted jobs
     all_shortlisted = db.get_shortlisted_jobs()
-    shortlisted = [j for j in all_shortlisted if not classify_company_tier(j["company"]).startswith("Tier 3")]
+    shortlisted = all_shortlisted
+    for job in shortlisted:
+        tier = classify_company_tier(job["company"])
+        job["tier"] = tier
+        quality = assess_listing_quality(job, tier)
+        passes, _ = quality_gate(job, tier, quality)
+        role_fit = job.get("role_fit_score") or job.get("score") or 0
+        adjusted_score, _ = weighted_match_score(role_fit, quality)
+        job["score"] = adjusted_score
+        job["recommended"] = bool(
+            passes and tier != "Tier 3: Staffing Agency / Unverified"
+            and (job.get("score") or 0) >= 80 and quality["description_score"] >= 80
+        )
     applied = db.get_applied_jobs()
 
     # Database stats
@@ -62,6 +75,7 @@ def generate_dashboard():
     earlier_jobs = [j for j in shortlisted if j not in today_jobs and j not in yesterday_jobs]
     remote_jobs = [j for j in shortlisted if is_job_truly_remote(j)]
     fresh_48h = [j for j in shortlisted if (j.get("created_at") or "") >= freshness_cutoff]
+    top_matches = [j for j in shortlisted if j.get("recommended")]
 
     now_str = datetime.now().strftime("%d %b %Y, %I:%M %p")
 
@@ -69,6 +83,7 @@ def generate_dashboard():
 
 ## 📊 Summary Statistics
 - **🔥 Fresh (Past 48h)**: {len(fresh_48h)} new opportunities
+- **🎯 Top Matches**: {len(top_matches)} evidence-backed recommendations
 - **🌐 Remote Roles**: {len(remote_jobs)} active opportunities
 - **📅 Yesterday ({yesterday_str})**: {len(yesterday_jobs)} active opportunities
 - **📁 Earlier This Week**: {len(earlier_jobs)} active opportunities
@@ -129,7 +144,8 @@ def generate_dashboard():
         return out
 
     # Render Sections
-    md_content += render_job_table(today_jobs, f"Fresh Today — {today_str}", "Discovered during today's scraping and AI evaluation run.", "🔥")
+    md_content += render_job_table(top_matches[:40], "Top Matches", "High-fit roles with verified company and description evidence.", "🎯")
+    md_content += render_job_table(today_jobs, f"Fresh Discovery — {today_str}", "Newly discovered roles; use Top Matches for the highest-confidence recommendations.", "🔥")
     if remote_jobs:
         md_content += render_job_table(remote_jobs, "Remote Opportunities", "Work-from-anywhere & remote-first roles matched to your stack.", "🌐")
     md_content += render_job_table(yesterday_jobs, f"Yesterday's Opportunities — {yesterday_str}", "High-fit roles discovered in the previous 24-48 hours.", "📅")

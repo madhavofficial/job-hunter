@@ -14,11 +14,13 @@ class TestWebDashboard(unittest.TestCase):
         data = web_dashboard.get_dashboard_data()
         self.assertIn("stats", data)
         self.assertIn("fresh_jobs", data)
+        self.assertIn("recommended_jobs", data)
+        self.assertIn("discovery_jobs", data)
         self.assertIn("applied_jobs", data)
         self.assertIn("all_shortlisted", data)
 
         stats = data["stats"]
-        for k in ["total_shortlisted", "fresh_48h", "tier1_count", "total_applied"]:
+        for k in ["total_shortlisted", "recommended_count", "fresh_48h", "tier1_count", "total_applied"]:
             self.assertIn(k, stats)
 
         # Check fields in shortlisted jobs

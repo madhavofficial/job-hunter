@@ -1,6 +1,8 @@
 import sqlite3
 import os
+import json
 import pandas as pd
+from quality import canonical_company, canonical_title
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "jobs.db")
 
@@ -35,16 +37,41 @@ def init_db():
         tailored_cover_letter_path TEXT,
         tailored_resume_pdf_path TEXT,
         tailored_cover_letter_pdf_path TEXT,
+        role_fit_score INTEGER DEFAULT 0,
+        company_quality_score INTEGER DEFAULT 0,
+        evidence_quality_score INTEGER DEFAULT 0,
+        freshness_score INTEGER DEFAULT 0,
+        directness_score INTEGER DEFAULT 0,
+        match_components TEXT DEFAULT '{}',
+        recommendation_status TEXT DEFAULT 'discovered',
+        canonical_job_id TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """)
     # Add columns when upgrading an existing local database created by an older version.
-    for column in ("tailored_resume_pdf_path", "tailored_cover_letter_pdf_path"):
+    for column, definition in (
+        ("tailored_resume_pdf_path", "TEXT"),
+        ("tailored_cover_letter_pdf_path", "TEXT"),
+        ("role_fit_score", "INTEGER DEFAULT 0"),
+        ("company_quality_score", "INTEGER DEFAULT 0"),
+        ("evidence_quality_score", "INTEGER DEFAULT 0"),
+        ("freshness_score", "INTEGER DEFAULT 0"),
+        ("directness_score", "INTEGER DEFAULT 0"),
+        ("match_components", "TEXT DEFAULT '{}'"),
+        ("recommendation_status", "TEXT DEFAULT 'discovered'"),
+        ("canonical_job_id", "TEXT"),
+    ):
         try:
-            cursor.execute(f"ALTER TABLE jobs ADD COLUMN {column} TEXT")
+            cursor.execute(f"ALTER TABLE jobs ADD COLUMN {column} {definition}")
         except sqlite3.OperationalError as exc:
             if "duplicate column name" not in str(exc).lower():
                 raise
+    cursor.execute("SELECT job_id, company, title FROM jobs WHERE canonical_job_id IS NULL OR canonical_job_id = ''")
+    for row in cursor.fetchall():
+        cursor.execute(
+            "UPDATE jobs SET canonical_job_id = ? WHERE job_id = ?",
+            (f"{canonical_company(row['company'])}|{canonical_title(row['title'])}", row['job_id']),
+        )
     conn.commit()
     conn.close()
 
@@ -94,6 +121,12 @@ def add_jobs(df: pd.DataFrame):
                 (title, company),
             )
             duplicate = cursor.fetchone()
+            if not duplicate:
+                cursor.execute(
+                    "SELECT job_id, site, status FROM jobs WHERE canonical_job_id = ? LIMIT 1",
+                    (f"{canonical_company(company)}|{canonical_title(title)}",),
+                )
+                duplicate = cursor.fetchone()
             if duplicate:
                 incoming_site = str(row.get('site', ''))
                 existing_site = str(duplicate['site'] or '')
@@ -106,7 +139,8 @@ def add_jobs(df: pd.DataFrame):
                         status = CASE WHEN status = 'applied' THEN status ELSE 'scraped' END,
                         score = CASE WHEN status = 'applied' THEN score ELSE 0 END,
                         evidence = CASE WHEN status = 'applied' THEN evidence ELSE '' END,
-                        matching_notes = CASE WHEN status = 'applied' THEN matching_notes ELSE '' END
+                        matching_notes = CASE WHEN status = 'applied' THEN matching_notes ELSE '' END,
+                        canonical_job_id = ?
                     WHERE job_id = ?
                     """, (
                         incoming_site,
@@ -119,6 +153,7 @@ def add_jobs(df: pd.DataFrame):
                         int(row.get('is_remote', 0)) if pd.notna(row.get('is_remote')) else 0,
                         row.get('skills', ''),
                         row.get('experience_range', ''),
+                        f"{canonical_company(company)}|{canonical_title(title)}",
                         duplicate['job_id'],
                     ))
                 continue
@@ -133,8 +168,8 @@ def add_jobs(df: pd.DataFrame):
             INSERT INTO jobs (
                 job_id, site, job_url, job_url_direct, title, company, location, 
                 date_posted, job_type, description, is_remote, skills, experience_range,
-                status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scraped')
+                status, canonical_job_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scraped', ?)
             """, (
                 job_id,
                 row.get('site', ''),
@@ -149,6 +184,7 @@ def add_jobs(df: pd.DataFrame):
                 is_remote_val,
                 row.get('skills', ''),
                 row.get('experience_range', ''),
+                f"{canonical_company(company)}|{canonical_title(title)}",
             ))
             inserted_count += 1
         except sqlite3.IntegrityError:
@@ -167,14 +203,27 @@ def get_unprocessed_jobs():
     conn.close()
     return [dict(r) for r in rows]
 
-def update_job_match(job_id: str, score: int, status: str, evidence: str, matching_notes: str):
+def update_job_match(job_id: str, score: int, status: str, evidence: str, matching_notes: str,
+                     components: dict | None = None, recommendation_status: str | None = None):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("""
-    UPDATE jobs 
-    SET score = ?, status = ?, evidence = ?, matching_notes = ?
-    WHERE job_id = ?
-    """, (score, status, evidence, matching_notes, job_id))
+    updates = ["score = ?", "status = ?", "evidence = ?", "matching_notes = ?"]
+    values = [score, status, evidence, matching_notes]
+    if components is not None:
+        updates.extend([
+            "role_fit_score = ?", "company_quality_score = ?", "evidence_quality_score = ?",
+            "freshness_score = ?", "directness_score = ?", "match_components = ?",
+        ])
+        values.extend([
+            components.get("role_fit", 0), components.get("company_quality", 0),
+            components.get("evidence_quality", 0), components.get("freshness", 0),
+            components.get("directness", 0), json.dumps(components, sort_keys=True),
+        ])
+    if recommendation_status is not None:
+        updates.append("recommendation_status = ?")
+        values.append(recommendation_status)
+    values.append(job_id)
+    cursor.execute(f"UPDATE jobs SET {', '.join(updates)} WHERE job_id = ?", values)
     conn.commit()
     conn.close()
 

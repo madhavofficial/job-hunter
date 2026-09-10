@@ -27,6 +27,7 @@ import db
 import tailor
 from notion_sync import derive_status_portal_url, map_platform
 from screening import classify_company_tier, is_job_truly_remote
+from quality import assess_listing_quality, quality_gate, weighted_match_score
 
 PORT = 8765
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -115,7 +116,9 @@ def get_dashboard_data():
     cursor.execute("""
     SELECT job_id, site, job_url, job_url_direct, title, company, location,
            date_posted, job_type, is_remote, skills, score, evidence,
-           matching_notes, tailored_resume_pdf_path, created_at, status, description
+           matching_notes, tailored_resume_pdf_path, created_at, status, description,
+           recommendation_status, role_fit_score, company_quality_score,
+           evidence_quality_score, freshness_score, directness_score, match_components
     FROM jobs
     WHERE status = 'shortlisted'
     ORDER BY score DESC, created_at DESC
@@ -141,18 +144,27 @@ def get_dashboard_data():
     total_scraped = cursor.fetchone()[0]
     conn.close()
 
-    # Filter out unverified agencies & enrich shortlisted
+    # Enrich all shortlisted roles. Unverified roles remain searchable in the
+    # discovery pool but are excluded from Top Matches.
     valid_shortlisted = []
     for j in all_shortlisted:
         tier = classify_company_tier(j["company"])
-        if not tier.startswith("Tier 3"):
-            j["tier"] = tier
-            j["apply_url"] = j["job_url_direct"] or j["job_url"]
-            j["is_remote_verified"] = is_job_truly_remote(j)
-            plat = map_platform(j["apply_url"], j.get("site", ""), j.get("company", ""))
-            j["platform"] = plat
-            j["status_portal_url"] = derive_status_portal_url(j["apply_url"], plat, j.get("company", ""), j.get("job_id", ""))
-            valid_shortlisted.append(j)
+        j["tier"] = tier
+        j["apply_url"] = j["job_url_direct"] or j["job_url"]
+        j["is_remote_verified"] = is_job_truly_remote(j)
+        j["quality"] = assess_listing_quality(j, tier)
+        j["quality_passes"], j["quality_reason"] = quality_gate(j, tier, j["quality"])
+        role_fit = j.get("role_fit_score") or j.get("score") or 0
+        j["score"], _ = weighted_match_score(role_fit, j["quality"])
+        j["recommended"] = bool(
+            j.get("recommendation_status") == "recommended"
+            or (j["quality_passes"] and tier != "Tier 3: Staffing Agency / Unverified"
+                and (j.get("score") or 0) >= 80 and j["quality"]["description_score"] >= 80)
+        )
+        plat = map_platform(j["apply_url"], j.get("site", ""), j.get("company", ""))
+        j["platform"] = plat
+        j["status_portal_url"] = derive_status_portal_url(j["apply_url"], plat, j.get("company", ""), j.get("job_id", ""))
+        valid_shortlisted.append(j)
 
     # Enrich applied jobs with platform & status tracking portal
     for j in applied:
@@ -169,11 +181,14 @@ def get_dashboard_data():
     remote_jobs = [j for j in valid_shortlisted if j["is_remote_verified"]]
     tier1_jobs = [j for j in valid_shortlisted if j["tier"] == "Tier 1: Product Company / AI Startup"]
     tier2_jobs = [j for j in valid_shortlisted if j["tier"] == "Tier 2: Global Enterprise / IT Services"]
+    recommended_jobs = [j for j in valid_shortlisted if j["recommended"]]
+    discovery_jobs = [j for j in valid_shortlisted if not j["recommended"]]
     older_jobs = [j for j in valid_shortlisted if (j.get("created_at") or "") < cutoff_7d]
 
     return {
         "stats": {
             "total_shortlisted": len(valid_shortlisted),
+            "recommended_count": len(recommended_jobs),
             "fresh_48h": len(fresh_jobs),
             "remote_count": len(remote_jobs),
             "tier1_count": len(tier1_jobs),
@@ -184,6 +199,8 @@ def get_dashboard_data():
             "older_count": len(older_jobs),
         },
         "fresh_jobs": fresh_jobs[:40],
+        "recommended_jobs": recommended_jobs[:40],
+        "discovery_jobs": discovery_jobs,
         "remote_jobs": remote_jobs[:50],
         "tier1_jobs": tier1_jobs[:50],
         "tier2_jobs": tier2_jobs[:35],
@@ -295,6 +312,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
         <!-- Navigation Tabs -->
         <div class="flex items-center gap-6 border-b border-slate-800 text-sm overflow-x-auto pb-px">
+            <button onclick="switchTab('recommended')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-2" id="tab-btn-recommended">
+                <i class="fa-solid fa-star text-amber-400"></i> Top Matches <span class="text-xs px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300" id="badge-recommended">0</span>
+            </button>
             <button onclick="switchTab('fresh')" class="tab-btn active pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-2" id="tab-btn-fresh">
                 <i class="fa-solid fa-bolt text-amber-400"></i> Fresh Drops (48h) <span class="text-xs px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300" id="badge-fresh">0</span>
             </button>
@@ -561,6 +581,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             document.getElementById('stat-total').innerText = s.total_shortlisted;
 
             document.getElementById('badge-fresh').innerText = s.fresh_48h;
+            document.getElementById('badge-recommended').innerText = s.recommended_count || 0;
             document.getElementById('badge-remote').innerText = s.remote_count || 0;
             document.getElementById('badge-tier1').innerText = s.tier1_count;
             document.getElementById('badge-tier2').innerText = s.tier2_count;
@@ -655,7 +676,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             if (!rawData) return;
 
             let list = [];
-            if (currentTab === 'fresh') list = rawData.fresh_jobs;
+            if (currentTab === 'recommended') list = rawData.recommended_jobs;
+            else if (currentTab === 'fresh') list = rawData.fresh_jobs;
             else if (currentTab === 'remote') list = rawData.remote_jobs;
             else if (currentTab === 'tier1') list = rawData.tier1_jobs;
             else if (currentTab === 'tier2') list = rawData.tier2_jobs;
@@ -775,7 +797,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         function openDetailsModal(jobId) {
             if (!rawData) return;
             let job = null;
-            const allLists = [rawData.fresh_jobs, rawData.remote_jobs, rawData.tier1_jobs, rawData.tier2_jobs, rawData.all_shortlisted, rawData.applied_jobs];
+            const allLists = [rawData.recommended_jobs, rawData.fresh_jobs, rawData.remote_jobs, rawData.tier1_jobs, rawData.tier2_jobs, rawData.all_shortlisted, rawData.applied_jobs];
             for (const list of allLists) {
                 if (list) {
                     const found = list.find(x => x.job_id === jobId);
@@ -1054,7 +1076,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         async function dismissJob(jobId) {
             let job = null;
             if (rawData) {
-                const allLists = [rawData.fresh_jobs, rawData.remote_jobs, rawData.tier1_jobs, rawData.tier2_jobs, rawData.all_shortlisted];
+                const allLists = [rawData.recommended_jobs, rawData.fresh_jobs, rawData.remote_jobs, rawData.tier1_jobs, rawData.tier2_jobs, rawData.all_shortlisted];
                 for (const list of allLists) {
                     if (list) {
                         const found = list.find(x => x.job_id === jobId);
@@ -1076,7 +1098,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                     if (card) card.remove();
 
                     if (rawData) {
-                        const allLists = [rawData.fresh_jobs, rawData.remote_jobs, rawData.tier1_jobs, rawData.tier2_jobs, rawData.all_shortlisted];
+                        const allLists = [rawData.recommended_jobs, rawData.fresh_jobs, rawData.remote_jobs, rawData.tier1_jobs, rawData.tier2_jobs, rawData.all_shortlisted];
                         for (const list of allLists) {
                             if (list) {
                                 const idx = list.findIndex(x => x.job_id === jobId);
