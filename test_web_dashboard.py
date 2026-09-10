@@ -1,5 +1,6 @@
 import os
 import unittest
+from unittest.mock import patch
 import db
 import web_dashboard
 
@@ -68,6 +69,56 @@ class TestWebDashboard(unittest.TestCase):
             conn = db.get_db_connection()
             c = conn.cursor()
             c.execute("DELETE FROM jobs WHERE job_id = ?", (test_job_id,))
+            conn.commit()
+            conn.close()
+
+    def test_apply_flow_waits_for_confirmation_before_marking_applied(self):
+        test_job_id = "test_confirmation_job_12345"
+        task_id = "test_confirmation_task_12345"
+        resume_path = "/tmp/test-resume.md"
+        resume_pdf_path = "/tmp/test-resume.pdf"
+        conn = db.get_db_connection()
+        conn.execute("DELETE FROM jobs WHERE job_id = ?", (test_job_id,))
+        conn.execute("""
+        INSERT INTO jobs (job_id, site, job_url, title, company, status, score)
+        VALUES (?, 'custom', 'https://example.com/job', 'Backend Engineer', 'TestCo', 'shortlisted', 90)
+        """, (test_job_id,))
+        conn.commit()
+        conn.close()
+
+        try:
+            with patch.object(web_dashboard.tailor, "tailor_materials", return_value=(resume_path, resume_pdf_path)), \
+                 patch.object(web_dashboard.webbrowser, "open", return_value=True):
+                web_dashboard._run_tailor_worker(task_id, test_job_id, {
+                    "job_url": "https://example.com/job",
+                    "job_url_direct": "",
+                    "title": "Backend Engineer",
+                    "company": "TestCo",
+                })
+
+            conn = db.get_db_connection()
+            self.assertEqual(
+                conn.execute("SELECT status FROM jobs WHERE job_id = ?", (test_job_id,)).fetchone()["status"],
+                "shortlisted",
+            )
+            conn.close()
+
+            result = web_dashboard.finalize_application(task_id, test_job_id, "applied")
+            self.assertEqual(result["application_status"], "applied")
+            conn = db.get_db_connection()
+            row = conn.execute(
+                "SELECT status, tailored_resume_path, tailored_resume_pdf_path FROM jobs WHERE job_id = ?",
+                (test_job_id,),
+            ).fetchone()
+            self.assertEqual(row["status"], "applied")
+            self.assertEqual(row["tailored_resume_path"], resume_path)
+            self.assertEqual(row["tailored_resume_pdf_path"], resume_pdf_path)
+            conn.close()
+        finally:
+            with web_dashboard._apply_tasks_lock:
+                web_dashboard._apply_tasks.pop(task_id, None)
+            conn = db.get_db_connection()
+            conn.execute("DELETE FROM jobs WHERE job_id = ?", (test_job_id,))
             conn.commit()
             conn.close()
 

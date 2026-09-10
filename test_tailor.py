@@ -1,5 +1,5 @@
 import unittest
-from tailor import is_job_description_ambiguous
+from tailor import ensure_career_objective_target, ensure_selected_project_github_links, is_job_description_ambiguous
 
 
 class AmbiguousJDTests(unittest.TestCase):
@@ -65,7 +65,78 @@ class ResumeNamingAndFolderTests(unittest.TestCase):
         self.assertEqual(expected_pdf, "Madhav_Jayam_Hewlett_Packard_Enterprise_AI_Engineer_Resume.pdf")
         self.assertEqual(clean_company, "Hewlett_Packard_Enterprise")
 
+    def test_selected_projects_receive_verified_github_links(self):
+        markdown = """## Selected Projects
+
+### CareerTime (Python, LangChain)
+- Built a career intelligence application.
+
+### Unmatched Project (Python)
+- Kept without an unverified URL.
+"""
+        portfolio = [{
+            "name": "CareerTime",
+            "display_name": "CareerTime: LPU-Accelerated AI Career Specialist",
+            "full_name": "madhavofficial/CareerTime",
+            "url": "https://github.com/madhavofficial/CareerTime",
+        }]
+
+        result = ensure_selected_project_github_links(markdown, portfolio)
+
+        self.assertIn("*GitHub: https://github.com/madhavofficial/CareerTime*", result)
+        self.assertEqual(result.count("https://github.com/madhavofficial/CareerTime"), 1)
+        self.assertNotIn("Unmatched Project\n*GitHub:", result)
+
+    def test_existing_project_link_is_not_duplicated(self):
+        markdown = """## Selected Projects
+### CareerTime
+*GitHub: https://github.com/madhavofficial/CareerTime*
+- Built a career intelligence application.
+"""
+        portfolio = [{"name": "CareerTime", "url": "https://github.com/madhavofficial/CareerTime"}]
+
+        result = ensure_selected_project_github_links(markdown, portfolio)
+
+        self.assertEqual(result.count("https://github.com/madhavofficial/CareerTime"), 1)
+
+    def test_career_objective_names_target_company_and_position(self):
+        markdown = """# Madhav Jayam
+
+## Career Objective
+Software engineering student seeking an internship.
+
+## Education
+PES University
+"""
+        result = ensure_career_objective_target(markdown, "Acme AI", "Backend Engineer Intern")
+
+        self.assertIn("**Backend Engineer Intern**", result)
+        self.assertIn("**Acme AI**", result)
+
+    def test_career_objective_target_is_not_duplicated(self):
+        markdown = """# Madhav Jayam
+## Career Objective
+Targeting the **Backend Engineer Intern** position at **Acme AI**.
+"""
+        result = ensure_career_objective_target(markdown, "Acme AI", "Backend Engineer Intern")
+
+        self.assertEqual(result.count("Backend Engineer Intern"), 1)
+
+    def test_bold_career_objective_heading_is_updated_in_place(self):
+        markdown = """# Madhav Jayam
+## **CAREER OBJECTIVE**
+Seeking a software engineering role.
+
+## **Education**
+PES University
+"""
+        result = ensure_career_objective_target(markdown, "GE HealthCare", "Software Engineering Intern")
+
+        self.assertEqual(result.count("Career Objective"), 0)
+        self.assertIn("**Software Engineering Intern**", result)
+        self.assertIn("**GE HealthCare**", result)
+        self.assertEqual(result.count("## **CAREER OBJECTIVE**"), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
-

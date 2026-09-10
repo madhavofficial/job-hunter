@@ -5,6 +5,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Ordered from strongest general-purpose reasoning capability to fastest
+# fallback for resume tailoring and job matching. Only models returned by the
+# account's model API are used; unavailable/deprecated IDs are skipped.
+PREFERRED_GROQ_MODELS = (
+    "openai/gpt-oss-120b",
+    "qwen/qwen3.8-27b",
+    "qwen/qwen3.6-27b",
+    "openai/gpt-oss-20b",
+    "groq/compound",
+    "groq/compound-mini",
+)
+
 class KeyManager:
     def __init__(self):
         self.keys = []
@@ -48,6 +60,13 @@ class KeyManager:
         print(f"[{self.current_idx}/{len(self.keys)}] Cycled to next Groq API key.", flush=True)
         return self.keys[self.current_idx]
         
+    def mark_key_invalid(self, key: str):
+        if key in self.keys:
+            self.keys.remove(key)
+            if self.keys:
+                self.current_idx = self.current_idx % len(self.keys)
+            print(f"Removed invalid Groq API key. {len(self.keys)} valid keys remaining.", file=sys.stderr)
+
     def get_num_keys(self):
         return len(self.keys)
 
@@ -57,11 +76,16 @@ key_manager = KeyManager()
 def get_groq_client() -> Groq:
     key = key_manager.get_current_key()
     if not key:
-        raise ValueError("No GROQ_API_KEY found.")
+        raise ValueError("No valid GROQ_API_KEY found.")
     return Groq(api_key=key)
 
-def cycle_groq_client() -> Groq:
-    key_manager.cycle_key()
+def cycle_groq_client(remove_current: bool = False) -> Groq:
+    if remove_current:
+        cur_key = key_manager.get_current_key()
+        if cur_key:
+            key_manager.mark_key_invalid(cur_key)
+    else:
+        key_manager.cycle_key()
     return get_groq_client()
 
 def get_fallback_models(client: Groq = None) -> list[str]:
@@ -70,7 +94,7 @@ def get_fallback_models(client: Groq = None) -> list[str]:
         try:
             client = get_groq_client()
         except Exception:
-            return ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.6-27b", "groq/compound-mini"]
+            return ["qwen/qwen3.8-27b", "qwen/qwen3.6-27b", "groq/compound", "groq/compound-mini"]
 
     try:
         available = [m.id for m in client.models.list().data]
@@ -81,23 +105,27 @@ def get_fallback_models(client: Groq = None) -> list[str]:
     excluded = {"whisper", "guard", "orpheus", "prompt-guard"}
     chat_models = [m for m in available if not any(x in m.lower() for x in excluded)]
 
-    # Scoring heuristic: prefer larger reasoning models first, then fast models
+    preference_rank = {model: len(PREFERRED_GROQ_MODELS) - index for index, model in enumerate(PREFERRED_GROQ_MODELS)}
+
+    # Prefer the explicit capability order above, then rank unknown active
+    # models conservatively so new provider models remain usable.
     def model_rank(m_name: str) -> int:
         name = m_name.lower()
-        if "120b" in name or "r1" in name:
-            return 100
-        if "70b" in name or "nemotron" in name or "kimi" in name or "moonshot" in name:
-            return 90
-        if "27b" in name or "qwen" in name:
+        for model, rank in preference_rank.items():
+            if name == model:
+                return 1000 + rank
+        if "120b" in name or "70b" in name or "nemotron" in name:
             return 80
-        if "20b" in name or "compound" in name:
+        if "qwen" in name or "27b" in name:
             return 70
-        if "8b" in name or "7b" in name or "mini" in name:
+        if "20b" in name or "compound" in name:
             return 60
-        return 50
+        if "8b" in name or "7b" in name:
+            return 50
+        return 10
 
     ranked = sorted(chat_models, key=model_rank, reverse=True)
-    return ranked if ranked else ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.6-27b", "groq/compound-mini"]
+    return ranked if ranked else list(PREFERRED_GROQ_MODELS)
 
 
 def get_best_model(client: Groq) -> str:

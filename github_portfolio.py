@@ -37,7 +37,7 @@ FEATURED_EXTERNAL_REPOSITORIES = [
         "name": "GenAI-Scientific-Literature-System-multi-agent-system",
         "full_name": "GenAI-Scientific-Literature-System/GenAI-Scientific-Literature-System-multi-agent-system",
         "url": "https://github.com/GenAI-Scientific-Literature-System/GenAI-Scientific-Literature-System-multi-agent-system",
-        "description": "Autonomous multi-agent biomedical literature synthesis engine published at IEEE SPICES (Zenodo DOI: 10.5281/zenodo.22676649). Core features: (1) Multi-Source Literature Retrieval querying PubMed, arXiv, Semantic Scholar, and Europe PMC; (2) Semantic Embedding Pipeline using Sentence-BERT for abstract encoding; (3) Cosine Similarity Knowledge Graph with hard threshold pruning (tau = 0.70) and Louvain community clustering; (4) Five Specialized Autonomous Agents: Agent 1 extracts subject-predicate-object claims and PICO tuples, Agent 2 retrieves evidence spans and maps to Oxford CEBM Levels 1-5, Agent 3 evaluates 8-factor study reliability (rho) across design, sample size, blinding, follow-up, statistics, funding bias, preregistration, and journal impact, Agent 4 computes reliability-weighted consensus and contradiction scores (A_k), and Agent 5 quantifies epistemic uncertainty priority (U_k) to surface research gaps; (5) Composite Ranking Function balancing relevance and study quality (alpha * cos + beta * rel(e)); (6) Fault-Tolerant LLM Inference Key Rotation across Groq LLaMA-3.3-70B and Mistral; (7) Interactive UI with structured claim explorer and automated CSV/PDF reporting.",
+        "description": "Autonomous multi-agent scientific literature synthesis engine selected for IEEE SPICES (Zenodo DOI: 10.5281/zenodo.22676649). Core architecture: (1) Multi-Source Literature Retrieval querying PubMed, arXiv, Semantic Scholar, and Europe PMC (ingesting 300-800 papers per query); (2) Semantic Embedding Pipeline using Sentence-BERT for abstract encoding; (3) Cosine Similarity Knowledge Graph with similarity threshold pruning and Louvain community clustering; (4) Five Specialized Autonomous Agents for claim extraction with automated Hallucination Guard, evidence mapping, 8-factor study reliability scoring, consensus and contradiction detection, and epistemic uncertainty prioritization; (5) Composite relevance and quality ranking; (6) Fault-Tolerant LLM inference key rotation across Groq LLaMA-3.3-70B; (7) Interactive UI with structured claim explorer and automated reporting.",
         "language": "Python",
         "topics": ["multi-agent-systems", "generative-ai", "scientific-literature-analysis", "graph-clustering", "rag", "ieee-spices", "nlp", "bioinformatics", "python"]
     }
@@ -56,13 +56,13 @@ CURATED_REPOSITORY_METADATA = {
     },
     "GenAI-Scientific-Literature-System-multi-agent-system": {
         "display_name": "Multi-Agent Generative AI System for Scientific Literature Analysis (IEEE SPICES / Zenodo DOI: 10.5281/zenodo.22676649)",
-        "description": "Autonomous multi-agent biomedical literature synthesis engine published at IEEE SPICES (Zenodo DOI: 10.5281/zenodo.22676649). Core features: (1) Multi-Source Literature Retrieval querying PubMed, arXiv, Semantic Scholar, and Europe PMC; (2) Semantic Embedding Pipeline using Sentence-BERT for abstract encoding; (3) Cosine Similarity Knowledge Graph with hard threshold pruning (tau = 0.70) and Louvain community clustering; (4) Five Specialized Autonomous Agents: Agent 1 extracts subject-predicate-object claims and PICO tuples, Agent 2 retrieves evidence spans and maps to Oxford CEBM Levels 1-5, Agent 3 evaluates 8-factor study reliability (rho) across design, sample size, blinding, follow-up, statistics, funding bias, preregistration, and journal impact, Agent 4 computes reliability-weighted consensus and contradiction scores (A_k), and Agent 5 quantifies epistemic uncertainty priority (U_k) to surface research gaps; (5) Composite Ranking Function balancing relevance and study quality (alpha * cos + beta * rel(e)); (6) Fault-Tolerant LLM Inference Key Rotation across Groq LLaMA-3.3-70B and Mistral; (7) Interactive UI with structured claim explorer and automated CSV/PDF reporting.",
+        "description": "Autonomous multi-agent biomedical literature synthesis engine published at IEEE SPICES (Zenodo DOI: 10.5281/zenodo.22676649). Core architecture: (1) Multi-Source Literature Retrieval querying PubMed, arXiv, Semantic Scholar, and Europe PMC; (2) Semantic Embedding Pipeline using Sentence-BERT for abstract encoding; (3) Cosine Similarity Knowledge Graph with threshold pruning and Louvain community clustering; (4) Five Specialized Autonomous Agents for claim extraction, evidence mapping to Oxford CEBM levels, 8-factor study reliability evaluation, consensus/contradiction matrix, and epistemic uncertainty prioritization; (5) Relevance-quality composite ranking; (6) Fault-Tolerant LLM key rotation across Groq LLaMA-3.3-70B; (7) Interactive UI with structured claim explorer.",
         "topics": ["multi-agent-systems", "generative-ai", "scientific-literature-analysis", "graph-clustering", "rag", "ieee-spices", "nlp", "bioinformatics", "python"]
     },
     "evidence-grounded-clinical-literature-synthesis": {
-        "display_name": "GLAS-Med: Generative Literature Analysis System for Medicine",
-        "description": "Evidence-grounded clinical literature synthesis pipeline designed for evidence-based medicine and clinical controversy resolution. Core features: (1) Clinical Claim Extraction & PICO Tuple Projection converting unstructured abstracts into Population, Intervention, Comparator, and Outcome claims; (2) 5-Tier Oxford CEBM Hierarchy Classifier stratifying evidence quality from randomized controlled trials to observational studies; (3) Eight-Factor Study Reliability Evaluator (rho) assessing sample size, double blinding, randomization, follow-up rates, statistical power, funding bias, trial preregistration, and journal impact; (4) Medical Knowledge Graph Construction with Louvain community detection for clinical topic partitioning; (5) Reliability-Weighted Agreement Metric (A_k) detecting clinical consensus and conflicting findings; (6) Epistemic Uncertainty & Research Gap Prioritization (U_k) highlighting unproven therapies; (7) Strict Provenance Verification binding every assertion to PubMed/PMC IDs.",
-        "topics": ["clinical-nlp", "evidence-based-medicine", "knowledge-graphs", "pico-extraction", "oxford-cebm", "multi-agent", "python", "bioinformatics"]
+        "display_name": "GLAS-Med: Evidence-Grounded Clinical Literature Synthesis (Clinical & Production Enhancement of IEEE SPICES Architecture)",
+        "description": "Evidence-grounded clinical literature synthesis pipeline designed as an advanced clinical and production microservice enhancement of the IEEE SPICES literature analysis paper. Core features: (1) Clinical Claim Extraction & PICO Tuple Projection converting unstructured abstracts into Population, Intervention, Comparator, and Outcome claims; (2) 5-Tier Oxford CEBM Hierarchy Classifier stratifying evidence quality from randomized controlled trials to observational studies; (3) Eight-Factor Study Reliability Evaluator assessing sample size, double blinding, randomization, follow-up rates, statistical power, funding bias, trial preregistration, and journal impact; (4) Medical Knowledge Graph Construction with Louvain community detection for clinical topic partitioning; (5) Reliability-Weighted Agreement Metric detecting clinical consensus, resolving controversies, and quarantining low-reliability studies; (6) Epistemic Uncertainty & Research Gap Prioritization highlighting unproven therapies; (7) Microservice Architecture with 9 services including FastAPI, MongoDB document store, Neo4j graph database, FAISS vector search, and Docker Compose deployment.",
+        "topics": ["clinical-nlp", "evidence-based-medicine", "knowledge-graphs", "pico-extraction", "oxford-cebm", "multi-agent", "python", "bioinformatics", "fastapi", "docker", "neo4j", "mongodb"]
     },
     "MultiAgent_GenAI_IEEE": {
         "display_name": "Multi-Agent GenAI Scientific Literature Analysis (IEEE Conference Publication Package)",
@@ -534,42 +534,10 @@ def format_github_portfolio_for_prompt(portfolio: list[dict]) -> str:
         block += f"- **Repository**: {p_url}\n"
         block += f"- **Primary Language**: {lang}"
         if deps:
-            block += f" | Key Dependencies: {', '.join(deps[:14])}"
+            block += f" | Key Dependencies: {', '.join(deps[:10])}"
         block += "\n"
         if p_desc:
             block += f"- **Overview & Core Features**: {p_desc}\n"
-        if file_tree:
-            core_files = [f for f in file_tree if any(k in f.lower() for k in ["src", "backend", "prisma", "api", "app", "server", "docker", "infra"])]
-            files_str = ", ".join(core_files[:6]) if core_files else ", ".join(file_tree[:6])
-            block += f"- **Codebase Structure & Key Files**: {files_str}\n"
-
-        # Extract meaningful architecture snippet from README
-        arch_snippet = ""
-        if readme:
-            meaningful_lines = []
-            for l in readme.splitlines():
-                s = l.strip()
-                if not s or s.startswith("#") or s.startswith("!") or s.startswith("```") or s.startswith("|") or s.startswith("-"):
-                    continue
-                if s.startswith(">"):
-                    s = s.lstrip("> *").rstrip("*").strip()
-                if any(disclaimer in s.lower() for disclaimer in ["not an official", "hackathon submission", "affiliated with", "submission for the"]):
-                    continue
-                if len(s) > 20:
-                    meaningful_lines.append(s)
-            if meaningful_lines:
-                combined = " ".join(meaningful_lines[:4])
-                if len(combined) > 450:
-                    period_idx = combined[:450].rfind(".")
-                    if period_idx > 150:
-                        arch_snippet = combined[:period_idx + 1]
-                    else:
-                        arch_snippet = combined[:450].rsplit(" ", 1)[0] + "..."
-                else:
-                    arch_snippet = combined
-
-        if arch_snippet:
-            block += f"- **Architecture & Verified Capabilities**: {arch_snippet}\n"
 
         sections.append(block)
 

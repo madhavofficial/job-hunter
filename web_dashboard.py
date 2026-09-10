@@ -31,6 +31,80 @@ from screening import classify_company_tier, is_job_truly_remote
 PORT = 8765
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+import uuid
+
+# --- Async apply task tracking ---
+# Maps task_id -> {"status": "pending"|"done"|"confirmed"|"error", "result": ..., "error": ...}
+_apply_tasks: dict = {}
+_apply_tasks_lock = threading.Lock()
+
+
+def _run_tailor_worker(tid: str, jid: str, job_row: dict):
+    """Tailor materials and open the listing without changing application status."""
+    try:
+        materials = tailor.tailor_materials(jid)
+        if not materials:
+            with _apply_tasks_lock:
+                _apply_tasks[tid] = {"status": "error", "result": None, "error": "Failed to tailor materials"}
+            return
+        resume_path, resume_pdf_path = materials[0], materials[1]
+        target_url = job_row["job_url_direct"] or job_row["job_url"]
+        if target_url:
+            webbrowser.open(target_url)
+        if resume_pdf_path and os.path.exists(resume_pdf_path) and sys.platform == "darwin":
+            try:
+                subprocess.run(["open", "-R", resume_pdf_path], check=False)
+            except Exception:
+                pass
+        with _apply_tasks_lock:
+            _apply_tasks[tid] = {
+                "status": "done",
+                "result": {
+                    "job_id": jid,
+                    "resume_path": resume_path,
+                    "resume_pdf_path": resume_pdf_path,
+                    "url": target_url,
+                    "title": job_row["title"],
+                    "company": job_row["company"],
+                },
+                "error": None,
+            }
+    except Exception as e:
+        with _apply_tasks_lock:
+            _apply_tasks[tid] = {"status": "error", "result": None, "error": str(e)}
+
+
+def finalize_application(task_id: str, job_id: str, outcome: str) -> dict:
+    """Apply the user's Y/S/E confirmation to the database exactly once."""
+    normalized = (outcome or "").strip().lower()
+    if normalized not in {"applied", "skipped", "expired"}:
+        raise ValueError("Outcome must be applied, skipped, or expired")
+
+    with _apply_tasks_lock:
+        task = _apply_tasks.get(task_id)
+    if not task or task.get("status") != "done" or not task.get("result"):
+        raise ValueError("Application task is not ready for confirmation")
+    if task["result"].get("job_id") != job_id:
+        raise ValueError("Application task does not match this job")
+
+    if normalized == "applied":
+        db.mark_as_applied(
+            job_id,
+            task["result"].get("resume_path"),
+            None,
+            task["result"].get("resume_pdf_path"),
+            None,
+        )
+    elif normalized == "expired":
+        db.mark_as_rejected(job_id)
+    else:
+        db.mark_as_shortlisted(job_id)
+
+    with _apply_tasks_lock:
+        task["status"] = "confirmed"
+        task["result"]["application_status"] = normalized
+    return {"job_id": job_id, "application_status": normalized}
+
 
 def get_dashboard_data():
     db.init_db()
@@ -887,33 +961,87 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         async function applyJob(jobId, btn) {
             const originalText = btn.innerHTML;
             btn.disabled = true;
-            btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Tailoring Resume...`;
+            btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Starting...`;
 
             try {
+                // 1. Kick off the tailoring task (returns 202 immediately)
                 const res = await fetch('/api/apply', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ job_id: jobId })
                 });
-                const data = await res.json();
-                if (data.success) {
-                    if (data.resume_pdf_path) {
-                        try {
-                            await navigator.clipboard.writeText(data.resume_pdf_path);
-                        } catch (_) {}
-                        window.open('/pdf?path=' + encodeURIComponent(data.resume_pdf_path), '_blank');
-                    }
-                    showToast('Tailored PDF opened! File revealed in Finder & path copied to clipboard');
-                    const card = document.getElementById('job-' + jobId);
-                    if (card) {
-                        card.style.opacity = '0.4';
-                        setTimeout(() => fetchJobs(), 1500);
-                    }
-                    closeDetailsModal();
-                } else {
-                    showToast('Error: ' + (data.error || 'Failed to apply'), true);
+                const initData = await res.json();
+                if (res.status === 404 || res.status === 400) {
+                    showToast('Error: ' + (initData.error || 'Unknown error'), true);
                     btn.disabled = false;
                     btn.innerHTML = originalText;
+                    return;
+                }
+                const taskId = initData.task_id;
+                if (!taskId) {
+                    showToast('Error: No task ID returned from server', true);
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                    return;
+                }
+
+                // 2. Poll /api/apply-status until done or error (max 3 minutes)
+                const startTime = Date.now();
+                const maxWaitMs = 180000;
+                while (true) {
+                    const elapsed = Math.round((Date.now() - startTime) / 1000);
+                    btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Tailoring Resume... ${elapsed}s`;
+
+                    if (Date.now() - startTime > maxWaitMs) {
+                        showToast('Timed out waiting for tailored resume. Check terminal for progress.', true);
+                        btn.disabled = false;
+                        btn.innerHTML = originalText;
+                        return;
+                    }
+
+                    await new Promise(r => setTimeout(r, 3000));
+
+                    const pollRes = await fetch('/api/apply-status?task_id=' + encodeURIComponent(taskId));
+                    if (pollRes.status === 404) {
+                        showToast('Error: Task not found or expired on server', true);
+                        btn.disabled = false;
+                        btn.innerHTML = originalText;
+                        return;
+                    }
+                    const pollData = await pollRes.json();
+
+                    if (pollData.status === 'done' && pollData.success) {
+                        if (pollData.resume_pdf_path) {
+                            try {
+                                await navigator.clipboard.writeText(pollData.resume_pdf_path);
+                            } catch (_) {}
+                            window.open('/pdf?path=' + encodeURIComponent(pollData.resume_pdf_path), '_blank');
+                        }
+                        const answer = (window.prompt('Did you submit the application? [Y]es (mark as applied) / [S]kip / [E]xpired:') || 'S').trim().toUpperCase();
+                        const outcome = answer === 'Y' ? 'applied' : (answer === 'E' ? 'expired' : 'skipped');
+                        const confirmRes = await fetch('/api/confirm-application', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ task_id: taskId, job_id: jobId, outcome })
+                        });
+                        const confirmData = await confirmRes.json();
+                        if (!confirmRes.ok) {
+                            showToast('Could not save application status: ' + (confirmData.error || 'Unknown error'), true);
+                            btn.disabled = false;
+                            btn.innerHTML = originalText;
+                            return;
+                        }
+                        showToast(outcome === 'applied' ? 'Marked as applied.' : outcome === 'expired' ? 'Marked as expired / rejected.' : 'Kept in shortlist.');
+                        fetchJobs();
+                        closeDetailsModal();
+                        return;
+                    } else if (pollData.status === 'error' || pollData.error) {
+                        showToast('Error: ' + (pollData.error || 'Failed to apply'), true);
+                        btn.disabled = false;
+                        btn.innerHTML = originalText;
+                        return;
+                    }
+                    // status === 'pending' → keep polling
                 }
             } catch (e) {
                 showToast('Failed to execute apply: ' + e, true);
@@ -921,6 +1049,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 btn.innerHTML = originalText;
             }
         }
+
 
         async function dismissJob(jobId) {
             let job = null;
@@ -1092,66 +1221,111 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(f"<h1>Error: Job ID '{job_id}' not found in database.</h1>".encode("utf-8"))
                 return
 
-            # Execute Tailor pipeline
-            materials = tailor.tailor_materials(job_id)
-            if not materials:
-                self.send_response(500)
-                self.end_headers()
-                self.wfile.write(b"<h1>Error: Failed to generate tailored resume.</h1>")
-                return
+            # Kick off tailoring in a background thread immediately
+            task_id = str(uuid.uuid4())
+            with _apply_tasks_lock:
+                _apply_tasks[task_id] = {"status": "pending", "result": None, "error": None}
 
-            resume_path, resume_pdf_path = materials[0], materials[1]
-            target_url = job["job_url_direct"] or job["job_url"]
+            threading.Thread(target=_run_tailor_worker, args=(task_id, job_id, job), daemon=True).start()
 
-            # Open target URL in default browser
-            if target_url:
-                webbrowser.open(target_url)
-
-            # Reveal tailored PDF in Finder on macOS for immediate drag-and-drop
-            if resume_pdf_path and os.path.exists(resume_pdf_path) and sys.platform == "darwin":
-                try:
-                    subprocess.run(["open", "-R", resume_pdf_path], check=False)
-                except Exception:
-                    pass
-
-            # Mark as applied in DB
-            db.mark_as_applied(job_id, resume_path, None, resume_pdf_path, None)
-
-            success_html = f"""<!DOCTYPE html>
+            # Serve a self-polling "Generating..." page immediately
+            loading_html = f"""<!DOCTYPE html>
 <html>
 <head>
-    <title>Application Triggered — {job['company']}</title>
+    <title>Tailoring Resume — {job['company']}</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-950 text-slate-100 flex items-center justify-center min-h-screen p-6">
-    <div class="max-w-lg w-full bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center space-y-6 shadow-2xl">
-        <div class="w-16 h-16 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full flex items-center justify-center mx-auto text-3xl">
-            ✓
+    <div id="card" class="max-w-lg w-full bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center space-y-6 shadow-2xl">
+        <div id="icon" class="w-16 h-16 bg-sky-500/10 text-sky-400 border border-sky-500/20 rounded-full flex items-center justify-center mx-auto text-3xl animate-spin">
+            ⚙
         </div>
         <div>
-            <h1 class="text-2xl font-bold text-white">Apply Script Executed!</h1>
-            <p class="text-slate-400 text-sm mt-1">Application materials generated for <b>{job['title']}</b> at <b>{job['company']}</b></p>
+            <h1 class="text-2xl font-bold text-white">Tailoring Your Resume...</h1>
+            <p class="text-slate-400 text-sm mt-1">Generating materials for <b>{job['title']}</b> at <b>{job['company']}</b></p>
         </div>
-        <div class="bg-slate-950 p-4 rounded-xl text-left text-xs space-y-2 border border-slate-800 text-slate-300">
-            <div><b>Target URL Opened:</b> <a href="{target_url}" target="_blank" class="text-sky-400 underline truncate block">{target_url}</a></div>
-            <div><b>Status:</b> <span class="text-emerald-400 font-semibold">Marked as Applied in Database</span></div>
-        </div>
-        <div class="flex items-center justify-center gap-3">
-            <a href="/pdf?path={urllib.parse.quote(resume_pdf_path)}" target="_blank" class="px-5 py-2.5 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-medium rounded-xl text-sm transition shadow-lg shadow-sky-500/20">
-                📄 Open Tailored Resume PDF
-            </a>
-            <a href="/" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium rounded-xl text-sm transition border border-slate-700">
-                ← Return to Dashboard
-            </a>
-        </div>
+        <p id="elapsed" class="text-slate-500 text-xs">Elapsed: 0s — this usually takes 20–60 seconds</p>
+        <p id="errmsg" class="text-red-400 text-sm hidden"></p>
     </div>
+    <script>
+        const taskId = {json.dumps(task_id)};
+        const start = Date.now();
+        const timer = setInterval(() => {{
+            const s = Math.round((Date.now() - start) / 1000);
+            document.getElementById('elapsed').textContent = `Elapsed: ${{s}}s — this usually takes 20–60 seconds`;
+        }}, 1000);
+
+        async function poll() {{
+            try {{
+                const r = await fetch('/api/apply-status?task_id=' + encodeURIComponent(taskId));
+                if (r.status === 404) {{
+                    clearInterval(timer);
+                    document.getElementById('icon').textContent = '✕';
+                    document.getElementById('icon').className = 'w-16 h-16 bg-red-500/10 text-red-400 border border-red-500/20 rounded-full flex items-center justify-center mx-auto text-3xl';
+                    document.getElementById('errmsg').textContent = 'Error: Task not found or expired on server.';
+                    document.getElementById('errmsg').classList.remove('hidden');
+                    document.getElementById('elapsed').textContent = '';
+                    return;
+                }}
+                const d = await r.json();
+                if (d.status === 'done' && d.success) {{
+                    clearInterval(timer);
+                    const pdfPath = d.resume_pdf_path || '';
+                    const targetUrl = d.url || '';
+                    const answer = (window.prompt('Did you submit the application? [Y]es (mark as applied) / [S]kip / [E]xpired:') || 'S').trim().toUpperCase();
+                    const outcome = answer === 'Y' ? 'applied' : (answer === 'E' ? 'expired' : 'skipped');
+                    const confirmResponse = await fetch('/api/confirm-application', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ task_id: taskId, job_id: {json.dumps(job_id)}, outcome })
+                    });
+                    const confirmation = await confirmResponse.json();
+                    if (!confirmResponse.ok) {{
+                        throw new Error(confirmation.error || 'Could not save application status');
+                    }}
+                    const statusLabel = outcome === 'applied' ? 'Marked as Applied' : outcome === 'expired' ? 'Marked as Expired / Rejected' : 'Kept as Shortlisted';
+                    document.getElementById('icon').textContent = '✓';
+                    document.getElementById('icon').className = 'w-16 h-16 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full flex items-center justify-center mx-auto text-3xl';
+                    document.getElementById('card').innerHTML = `
+                        <div class="w-16 h-16 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full flex items-center justify-center mx-auto text-3xl">✓</div>
+                        <div>
+                            <h1 class="text-2xl font-bold text-white">Application Triggered!</h1>
+                            <p class="text-slate-400 text-sm mt-1">Materials generated for <b>{job['title']}</b> at <b>{job['company']}</b></p>
+                        </div>
+                        <div class="bg-slate-950 p-4 rounded-xl text-left text-xs space-y-2 border border-slate-800 text-slate-300">
+                            <div><b>Target URL Opened:</b> <a href="${{targetUrl}}" target="_blank" class="text-sky-400 underline truncate block">${{targetUrl || '(none)'}}</a></div>
+                            <div><b>Status:</b> <span class="text-amber-400 font-semibold">${{statusLabel}}</span></div>
+                        </div>
+                        <div class="flex items-center justify-center gap-3">
+                            ${{pdfPath ? `<a href="/pdf?path=${{encodeURIComponent(pdfPath)}}" target="_blank" class="px-5 py-2.5 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-medium rounded-xl text-sm transition shadow-lg shadow-sky-500/20">📄 Open Tailored Resume PDF</a>` : ''}}
+                            <a href="/" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium rounded-xl text-sm transition border border-slate-700">← Return to Dashboard</a>
+                        </div>
+                        <p class="text-slate-500 text-xs">A confirmation prompt will record whether you submitted, skipped, or found the listing expired.</p>
+                    `;
+                }} else if (d.status === 'error' || d.error) {{
+                    clearInterval(timer);
+                    document.getElementById('icon').textContent = '✕';
+                    document.getElementById('icon').className = 'w-16 h-16 bg-red-500/10 text-red-400 border border-red-500/20 rounded-full flex items-center justify-center mx-auto text-3xl';
+                    document.getElementById('errmsg').textContent = 'Error: ' + (d.error || 'Unknown error');
+                    document.getElementById('errmsg').classList.remove('hidden');
+                    document.getElementById('elapsed').textContent = '';
+                }} else {{
+                    setTimeout(poll, 3000);
+                }}
+            }} catch(e) {{
+                setTimeout(poll, 3000);
+            }}
+        }}
+        setTimeout(poll, 3000);
+    </script>
 </body>
 </html>"""
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
-            self.wfile.write(success_html.encode("utf-8"))
+            self.wfile.write(loading_html.encode("utf-8"))
             return
+
 
         elif path == "/dismiss":
             query = urllib.parse.parse_qs(parsed.query)
@@ -1229,6 +1403,29 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.end_headers()
                 return
 
+        elif path == "/api/apply-status":
+            query = urllib.parse.parse_qs(parsed.query)
+            task_id = query.get("task_id", [""])[0]
+            with _apply_tasks_lock:
+                task = _apply_tasks.get(task_id)
+            if task is None:
+                self.send_response(404)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "Unknown task_id"}).encode("utf-8"))
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            payload = {"status": task["status"]}
+            if task["status"] == "done":
+                payload["success"] = True
+                payload.update(task["result"])
+            elif task["status"] == "error":
+                payload["error"] = task["error"]
+            self.wfile.write(json.dumps(payload).encode("utf-8"))
+            return
+
         super().do_GET()
 
     def do_POST(self):
@@ -1246,65 +1443,61 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
             job_id = params.get("job_id")
             if not job_id:
                 self.send_response(400)
+                self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(json.dumps({"error": "Missing job_id"}).encode("utf-8"))
                 return
 
+            # Validate job exists before spawning thread
+            conn = db.get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,))
+            job = cursor.fetchone()
+            conn.close()
+
+            if not job:
+                self.send_response(404)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "Job not found"}).encode("utf-8"))
+                return
+
+            # Return 202 immediately — tailoring runs in background thread
+            task_id = str(uuid.uuid4())
+            with _apply_tasks_lock:
+                _apply_tasks[task_id] = {"status": "pending", "result": None, "error": None}
+
+            threading.Thread(target=_run_tailor_worker, args=(task_id, job_id, job), daemon=True).start()
+
+            self.send_response(202)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"task_id": task_id, "status": "pending"}).encode("utf-8"))
+            return
+
+
+        elif path == "/api/confirm-application":
+            task_id = params.get("task_id")
+            job_id = params.get("job_id")
+            outcome = params.get("outcome")
+            if not task_id or not job_id or not outcome:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "task_id, job_id, and outcome are required"}).encode("utf-8"))
+                return
             try:
-                # 1. Fetch job details
-                conn = db.get_db_connection()
-                cursor = conn.cursor()
-                cursor.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,))
-                job = cursor.fetchone()
-                conn.close()
-
-                if not job:
-                    self.send_response(404)
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"error": "Job not found"}).encode("utf-8"))
-                    return
-
-                # 2. Tailor materials
-                materials = tailor.tailor_materials(job_id)
-                if not materials:
-                    self.send_response(500)
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"error": "Failed to tailor materials"}).encode("utf-8"))
-                    return
-
-                resume_path, resume_pdf_path = materials[0], materials[1]
-                target_url = job["job_url_direct"] or job["job_url"]
-
-                # 3. Open browser directly to target URL
-                if target_url:
-                    webbrowser.open(target_url)
-
-                # 4. Reveal tailored PDF in Finder on macOS for immediate drag-and-drop
-                if resume_pdf_path and os.path.exists(resume_pdf_path) and sys.platform == "darwin":
-                    try:
-                        subprocess.run(["open", "-R", resume_pdf_path], check=False)
-                    except Exception:
-                        pass
-
-                # 5. Mark as applied in database
-                db.mark_as_applied(job_id, resume_path, None, resume_pdf_path, None)
-
+                result = finalize_application(task_id, job_id, outcome)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
-                self.wfile.write(json.dumps({
-                    "success": True,
-                    "job_id": job_id,
-                    "resume_pdf_path": resume_pdf_path,
-                    "url": target_url
-                }).encode("utf-8"))
-                return
-
-            except Exception as e:
-                self.send_response(500)
+                self.wfile.write(json.dumps({"success": True, **result}).encode("utf-8"))
+            except ValueError as exc:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
                 self.end_headers()
-                self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
-                return
+                self.wfile.write(json.dumps({"error": str(exc)}).encode("utf-8"))
+            return
 
         elif path == "/api/reveal":
             pdf_path = params.get("path")
@@ -1419,8 +1612,11 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
 def start_server(open_browser: bool = True):
     """Start local web dashboard server."""
     server_address = ("127.0.0.1", PORT)
-    socketserver.TCPServer.allow_reuse_address = True
-    httpd = socketserver.TCPServer(server_address, DashboardRequestHandler)
+
+    class _ReuseServer(socketserver.ThreadingTCPServer):
+        allow_reuse_address = True
+
+    httpd = _ReuseServer(server_address, DashboardRequestHandler)
     print(f"\n=======================================================")
     print(f"🚀 Job Hunter Interactive Dashboard running at:")
     print(f"   http://127.0.0.1:{PORT}")
