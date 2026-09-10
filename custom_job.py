@@ -226,59 +226,15 @@ def ingest_custom_job(url: str, custom_text: Optional[str] = None) -> Optional[s
         score, status, matching_notes, evidence, created_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, 0, ?, '', ?, ?, ?, '', datetime('now'))
     """, (job_id, site, url, url, title, company, location, job_type, description, skills,
-           90, "shortlisted", "Custom Ingested Opportunity"))
+           0, "scraped", "Custom Ingested Opportunity"))
     conn.commit()
     conn.close()
 
-    # 5. Evaluate match score
+    # 5. Run the same deterministic filters, quality gate, and weighted LLM
+    # scoring used by the daily pipeline. Custom jobs must not be shortlisted
+    # before they have been evaluated.
     print("Step 3/3: Evaluating compatibility with candidate resume...")
-    try:
-        resume_text = matcher.load_resume()
-        client = config.cycle_groq_client()
-        model_name = config.get_best_model(client)
-        eval_prompt = f"""You are an expert technical hiring filter. Evaluate candidate fit for this job listing.
-
-Candidate Resume:
-{resume_text}
-
-Job Posting:
-Title: {title}
-Company: {company}
-Location: {location}
-Description:
-{description[:3500]}
-
-Respond ONLY with a JSON object:
-{{
-  "compatibility_score": 92,
-  "matching_notes": "1-2 sentences summarizing alignment with candidate skills and GitHub portfolio.",
-  "evidence": ["Evidence 1", "Evidence 2"]
-}}
-"""
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=[{"role": "user", "content": eval_prompt}],
-            temperature=0.1,
-            response_format={"type": "json_object"}
-        )
-        res_data = json.loads(response.choices[0].message.content)
-        score = int(res_data.get("compatibility_score", 90))
-        notes = res_data.get("matching_notes", "Custom Ingested Opportunity")
-        evidence_list = res_data.get("evidence", [])
-        evidence_str = "\n".join(f"- {e}" for e in evidence_list) if isinstance(evidence_list, list) else str(evidence_list)
-
-        conn = db.get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-        UPDATE jobs
-        SET score = ?, matching_notes = ?, evidence = ?
-        WHERE job_id = ?
-        """, (score, notes, evidence_str, job_id))
-        conn.commit()
-        conn.close()
-        print(f"-> Compatibility Score: {score}%")
-    except Exception as e:
-        print(f"Notice: Matcher evaluation defaulted ({e}).", file=sys.stderr)
+    matcher.run_matcher(job_ids=[job_id])
 
     print(f"✅ Ingestion complete! Job ID: `{job_id}`\n")
     return job_id

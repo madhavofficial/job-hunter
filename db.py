@@ -195,10 +195,17 @@ def add_jobs(df: pd.DataFrame):
     conn.close()
     return inserted_count
 
-def get_unprocessed_jobs():
+def get_unprocessed_jobs(job_ids=None):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM jobs WHERE status = 'scraped'")
+    if job_ids:
+        placeholders = ", ".join("?" for _ in job_ids)
+        cursor.execute(
+            f"SELECT * FROM jobs WHERE status = 'scraped' AND job_id IN ({placeholders})",
+            list(job_ids),
+        )
+    else:
+        cursor.execute("SELECT * FROM jobs WHERE status = 'scraped'")
     rows = cursor.fetchall()
     conn.close()
     return [dict(r) for r in rows]

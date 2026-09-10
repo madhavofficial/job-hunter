@@ -6,7 +6,7 @@ from groq import Groq
 import db
 import config
 from screening import classify_company_tier, deterministic_hard_filter
-from quality import assess_listing_quality, components_json, quality_gate, weighted_match_score
+from quality import assess_listing_quality, quality_gate, weighted_match_score
 
 def load_resume():
     resume_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resume.md")
@@ -53,7 +53,7 @@ def fetch_description_from_web(url, site):
         print(f"Warning: Failed to fetch description from {url}: {e}", file=sys.stderr)
     return None
 
-def run_matcher():
+def run_matcher(job_ids=None):
     db.init_db()
     
     # Load resume
@@ -62,7 +62,7 @@ def run_matcher():
         return
         
     # Get unprocessed jobs
-    unprocessed = db.get_unprocessed_jobs()
+    unprocessed = db.get_unprocessed_jobs(job_ids)
     if not unprocessed:
         print("No new unprocessed jobs found.")
         return
@@ -304,15 +304,15 @@ Description:
                     notes = f"REJECTED: {rejection_reason}\n\n{notes}"
                 print(f"-> REJECTED: {rejection_reason or 'Low compatibility score'}")
                 
-                db.update_job_match(
-                    job_id=job_id,
-                    score=score,
-                    status=status,
-                    evidence=evidence_str,
-                    matching_notes=notes,
-                    components=components,
-                    recommendation_status=recommendation_status,
-                )
+            db.update_job_match(
+                job_id=job_id,
+                score=score,
+                status=status,
+                evidence=evidence_str,
+                matching_notes=notes,
+                components=components,
+                recommendation_status=recommendation_status,
+            )
             
             processed_count += 1
             

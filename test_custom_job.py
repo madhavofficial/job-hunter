@@ -34,14 +34,17 @@ class TestCustomJob(unittest.TestCase):
         conn.commit()
         conn.close()
 
-        job_id = custom_job.ingest_custom_job(custom_url, custom_text=custom_text)
+        with patch.object(custom_job.matcher, "run_matcher") as run_matcher:
+            job_id = custom_job.ingest_custom_job(custom_url, custom_text=custom_text)
+            run_matcher.assert_called_once_with(job_ids=[job_id])
         self.assertTrue(job_id.startswith("custom-") or job_id.startswith("li-"))
         conn = db.get_db_connection()
         row = conn.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
         conn.close()
         self.assertIsNotNone(row)
         self.assertEqual(row["job_url"], custom_url)
-        self.assertEqual(row["status"], "shortlisted")
+        self.assertEqual(row["status"], "scraped")
+        self.assertEqual(row["score"], 0)
         self.assertEqual(custom_job.ingest_custom_job(custom_url), job_id)
 
 
