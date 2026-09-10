@@ -7,19 +7,22 @@ official ATS JSON endpoints after an ATS URL is found.
 from __future__ import annotations
 
 import html as html_lib
+import hashlib
 import json
+import os
 import re
 import sys
+import time
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 import pandas as pd
-from jobspy import scrape_jobs
 
 import db
 from collector import get_dynamic_search_terms
+from search_provider import SearchProviderError, SearchRateLimitError, search_urls
 
 
 ATS_HOSTS = {
@@ -169,20 +172,90 @@ def fetch_board_jobs(ats: str, board: str) -> list[dict]:
     raise ValueError(f"Unsupported ATS: {ats}")
 
 
+def _career_listing_from_url(url: str, domain: str) -> dict | None:
+    """Extract common JobPosting JSON-LD fields from a public career page."""
+    try:
+        request = Request(url, headers={"User-Agent": "job-hunter/1.0"})
+        with urlopen(request, timeout=20) as response:
+            html = response.read().decode("utf-8", errors="replace")
+    except Exception as exc:
+        print(f"Warning: career listing fetch failed for {url}: {exc}", file=sys.stderr)
+        return None
+
+    postings = re.findall(
+        r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+        html,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    posting = {}
+    for raw in postings:
+        try:
+            payload = json.loads(html_lib.unescape(raw.strip()))
+        except json.JSONDecodeError:
+            continue
+        candidates = payload if isinstance(payload, list) else payload.get("@graph", []) if isinstance(payload, dict) else []
+        if isinstance(payload, dict) and payload.get("@type") == "JobPosting":
+            candidates = [payload]
+        for candidate in candidates:
+            if isinstance(candidate, dict) and candidate.get("@type") == "JobPosting":
+                posting = candidate
+                break
+        if posting:
+            break
+
+    title = posting.get("title", "")
+    company_data = posting.get("hiringOrganization") or {}
+    company = company_data.get("name", "") if isinstance(company_data, dict) else str(company_data)
+    location_data = posting.get("jobLocation") or {}
+    if isinstance(location_data, list):
+        location_data = location_data[0] if location_data else {}
+    address = location_data.get("address") if isinstance(location_data, dict) else {}
+    location = address.get("addressLocality", "") if isinstance(address, dict) else ""
+    location = ", ".join(filter(None, [location, address.get("addressRegion", "") if isinstance(address, dict) else "", address.get("addressCountry", "") if isinstance(address, dict) else ""]))
+    description = html_to_text(posting.get("description", ""))
+    if not title:
+        title_match = re.search(r"<title[^>]*>(.*?)</title>", html, flags=re.IGNORECASE | re.DOTALL)
+        title = html_lib.unescape(title_match.group(1)).strip() if title_match else ""
+    if not description:
+        meta_match = re.search(r'<meta[^>]+name=["\']description["\'][^>]+content=["\'](.*?)["\']', html, flags=re.IGNORECASE | re.DOTALL)
+        description = html_lib.unescape(meta_match.group(1)).strip() if meta_match else ""
+    if not title or not company:
+        return None
+    return {
+        "id": f"career-{hashlib.sha1(url.encode()).hexdigest()[:16]}",
+        "site": f"career:{domain}",
+        "title": title,
+        "company": company,
+        "location": location or "India / Remote",
+        "job_url": url,
+        "job_url_direct": url,
+        "date_posted": posting.get("datePosted", ""),
+        "description": description,
+        "is_remote": "remote" in location.lower(),
+        "skills": "",
+        "experience_range": "",
+    }
+
+
 def discover_ats_urls() -> list[str]:
     terms = get_dynamic_search_terms()
     keyword_query = " OR ".join(f'"{term}"' for term in terms[:6])
     urls = []
-    for domain in ATS_HOSTS:
-        query = f"site:{domain} ({keyword_query}) India OR remote"
-        try:
-            results = scrape_jobs(
-                site_name=["google"], google_search_term=query,
-                location="India", results_wanted=50, country_indeed="india",
-            )
-            urls.extend(results.get("job_url", pd.Series(dtype=str)).dropna().tolist())
-        except Exception as exc:
-            print(f"Warning: ATS discovery failed for {domain}: {exc}", file=sys.stderr)
+    try:
+        provider = os.getenv("ATS_SEARCH_PROVIDER", "auto")
+        print(f"Using dynamic ATS search provider: {provider}")
+        for domain in ATS_HOSTS:
+            query = f"site:{domain} ({keyword_query}) India OR remote"
+            try:
+                urls.extend(search_urls(query))
+                time.sleep(1.0)
+            except SearchRateLimitError as exc:
+                print(f"Warning: ATS discovery stopped after provider rate limit: {exc}", file=sys.stderr)
+                break
+            except SearchProviderError as exc:
+                print(f"Warning: ATS discovery failed for {domain}: {exc}", file=sys.stderr)
+    except SearchProviderError as exc:
+        print(f"Warning: ATS discovery unavailable: {exc}", file=sys.stderr)
     return urls
 
 
@@ -196,23 +269,26 @@ def discover_career_board_jobs(limit_per_domain: int = 50) -> pd.DataFrame:
     terms = get_dynamic_search_terms()
     keyword_query = " OR ".join(f'"{term}"' for term in terms[:6])
     rows = []
-    for domain in CAREER_BOARD_DOMAINS:
-        query = f"site:{domain} ({keyword_query}) India OR remote"
-        try:
-            results = scrape_jobs(
-                site_name=["google"], google_search_term=query,
-                location="India", results_wanted=limit_per_domain,
-                country_indeed="india",
-            )
-            if results.empty:
-                continue
-            results = results.copy()
-            results["site"] = f"career:{domain}"
-            rows.append(results)
-            print(f"Career discovery {domain}: {len(results)} indexed listings.")
-        except Exception as exc:
-            print(f"Warning: career-board discovery failed for {domain}: {exc}", file=sys.stderr)
-    return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
+    try:
+        provider = os.getenv("ATS_SEARCH_PROVIDER", "auto")
+        print(f"Using dynamic career-board search provider: {provider}")
+        for domain in CAREER_BOARD_DOMAINS:
+            query = f"site:{domain} ({keyword_query}) India OR remote"
+            try:
+                urls = search_urls(query, count=limit_per_domain)
+                listings = [listing for url in urls if (listing := _career_listing_from_url(url, domain))]
+                if listings:
+                    rows.extend(listings)
+                    print(f"Career discovery {domain}: {len(listings)} parsed listings.")
+                time.sleep(1.0)
+            except SearchRateLimitError as exc:
+                print(f"Warning: career-board discovery stopped after provider rate limit: {exc}", file=sys.stderr)
+                break
+            except SearchProviderError as exc:
+                print(f"Warning: career-board discovery failed for {domain}: {exc}", file=sys.stderr)
+    except SearchProviderError as exc:
+        print(f"Warning: career-board discovery unavailable: {exc}", file=sys.stderr)
+    return pd.DataFrame(rows)
 
 
 def run_ats_collector() -> int:
