@@ -157,8 +157,8 @@ def get_dashboard_data():
         role_fit = j.get("role_fit_score") or j.get("score") or 0
         j["score"], _ = weighted_match_score(role_fit, j["quality"])
         j["recommended"] = bool(
-            j.get("recommendation_status") == "recommended"
-            or (j["quality_passes"] and tier != "Tier 3: Staffing Agency / Unverified"
+            (j.get("recommendation_status") == "recommended" and not tier.startswith("Tier 3"))
+            or (j["quality_passes"] and not tier.startswith("Tier 3")
                 and (j.get("score") or 0) >= 80 and j["quality"]["description_score"] >= 80)
         )
         plat = map_platform(j["apply_url"], j.get("site", ""), j.get("company", ""))

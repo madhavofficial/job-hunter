@@ -111,6 +111,10 @@ def assess_listing_quality(job: dict, company_tier: str, now: datetime | None = 
         company_score = 100
     elif company_tier.startswith("Tier 2"):
         company_score = 80
+    elif direct:
+        # A direct ATS/employer domain is meaningful evidence, but it is not
+        # enough to promote an unknown employer to Tier 1.
+        company_score = 65
     else:
         company_score = 20
 
@@ -164,6 +168,7 @@ def assess_listing_quality(job: dict, company_tier: str, now: datetime | None = 
         "description_state": description_state,
         "generic_title": generic_title,
         "irrelevant_title": irrelevant,
+        "unknown_company": unknown_company,
         "direct_employer_signal": direct,
         "canonical_key": canonical_job_key(job),
         "reason": " ".join(reasons),
@@ -172,7 +177,7 @@ def assess_listing_quality(job: dict, company_tier: str, now: datetime | None = 
 
 def quality_gate(job: dict, company_tier: str, quality: dict | None = None) -> tuple[bool, str | None]:
     quality = quality or assess_listing_quality(job, company_tier)
-    if company_tier.startswith("Tier 3"):
+    if company_tier.startswith("Tier 3") and (not quality["direct_employer_signal"] or quality["unknown_company"]):
         return False, "Employer is unverified, anonymous, or appears to be a staffing/consulting source."
     if quality["description_score"] == 0:
         return False, "Missing job description; title-only inference is not reliable enough to shortlist."

@@ -51,7 +51,7 @@ def generate_dashboard():
         adjusted_score, _ = weighted_match_score(role_fit, quality)
         job["score"] = adjusted_score
         job["recommended"] = bool(
-            passes and tier != "Tier 3: Staffing Agency / Unverified"
+            passes and not tier.startswith("Tier 3")
             and (job.get("score") or 0) >= 80 and quality["description_score"] >= 80
         )
     applied = db.get_applied_jobs()

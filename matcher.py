@@ -284,7 +284,13 @@ Description:
             passes = model_passes and quality_passes
             if passes and final_score >= 75:
                 status = "shortlisted"
-                recommendation_status = "recommended" if final_score >= 80 and quality["evidence_score"] >= 80 else "discovered"
+                recommendation_status = (
+                    "recommended"
+                    if not company_tier.startswith("Tier 3")
+                    and final_score >= 80
+                    and quality["evidence_score"] >= 80
+                    else "discovered"
+                )
                 score = final_score
                 shortlisted_count += 1
                 print(f"-> {recommendation_status.upper()} ({company_tier}): Score={score}%")

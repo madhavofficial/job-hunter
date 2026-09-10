@@ -44,6 +44,27 @@ class ListingQualityTests(unittest.TestCase):
         self.assertFalse(passes)
         self.assertIn("Missing job description", reason)
 
+    def test_unknown_direct_ats_employer_enters_discovery_but_not_tier_one(self):
+        job = self.make_job(company="Mystery Labs")
+        tier = classify_company_tier(job["company"])
+        quality = assess_listing_quality(job, tier)
+        passes, reason = quality_gate(job, tier, quality)
+        self.assertTrue(passes, reason)
+        self.assertTrue(tier.startswith("Tier 3"))
+        self.assertEqual(quality["company_score"], 65)
+
+    def test_unknown_aggregator_employer_is_rejected(self):
+        job = self.make_job(
+            company="Mystery Labs",
+            site="linkedin",
+            job_url="https://www.linkedin.com/jobs/view/123",
+            job_url_direct="https://www.linkedin.com/jobs/view/123",
+        )
+        tier = classify_company_tier(job["company"])
+        quality = assess_listing_quality(job, tier)
+        passes, _ = quality_gate(job, tier, quality)
+        self.assertFalse(passes)
+
     def test_generic_title_with_partial_description_is_rejected(self):
         job = self.make_job(title="Software Engineer", description="Join our team. Freshers welcome.")
         tier = classify_company_tier(job["company"])
