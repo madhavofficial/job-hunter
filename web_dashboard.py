@@ -1296,11 +1296,11 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
                     const targetUrl = d.url || '';
                     const answer = (window.prompt('Did you submit the application? [Y]es (mark as applied) / [S]kip / [E]xpired:') || 'S').trim().toUpperCase();
                     const outcome = answer === 'Y' ? 'applied' : (answer === 'E' ? 'expired' : 'skipped');
-                    const confirmResponse = await fetch('/api/confirm-application', {
+                    const confirmResponse = await fetch('/api/confirm-application', {{
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ task_id: taskId, job_id: {json.dumps(job_id)}, outcome })
-                    });
+                        headers: {{ 'Content-Type': 'application/json' }},
+                        body: JSON.stringify({{ task_id: taskId, job_id: {json.dumps(job_id)}, outcome }})
+                    }});
                     const confirmation = await confirmResponse.json();
                     if (!confirmResponse.ok) {{
                         throw new Error(confirmation.error || 'Could not save application status');
