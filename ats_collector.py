@@ -15,7 +15,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from html.parser import HTMLParser
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 from urllib.request import Request, urlopen
 
 import pandas as pd
@@ -174,12 +174,27 @@ def fetch_board_jobs(ats: str, board: str) -> list[dict]:
 
 def _career_listing_from_url(url: str, domain: str) -> dict | None:
     """Extract common JobPosting JSON-LD fields from a public career page."""
-    try:
-        request = Request(url, headers={"User-Agent": "job-hunter/1.0"})
-        with urlopen(request, timeout=20) as response:
-            html = response.read().decode("utf-8", errors="replace")
-    except Exception as exc:
-        print(f"Warning: career listing fetch failed for {url}: {exc}", file=sys.stderr)
+    parsed_url = urlparse(url)
+    clean_query = [(key, value) for key, value in parse_qsl(parsed_url.query) if not key.lower().startswith("utm_")]
+    url = urlunparse(parsed_url._replace(query=urlencode(clean_query)))
+    timeout = max(20, int(os.getenv("CAREER_PAGE_TIMEOUT_SECONDS", "45")))
+    html = None
+    last_error = None
+    for attempt in range(2):
+        try:
+            request = Request(url, headers={
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            })
+            with urlopen(request, timeout=timeout) as response:
+                html = response.read().decode("utf-8", errors="replace")
+            break
+        except Exception as exc:
+            last_error = exc
+            if attempt == 0:
+                time.sleep(2)
+    if html is None:
+        print(f"Notice: career listing deferred after retries for {url}: {last_error}", file=sys.stderr)
         return None
 
     postings = re.findall(
