@@ -293,9 +293,21 @@ def discover_career_board_jobs(limit_per_domain: int = 50) -> pd.DataFrame:
 
 def run_ats_collector() -> int:
     db.init_db()
+    total = 0
+
+    # Prioritize the career systems most commonly used by large employers.
+    # This also lets direct Workday/Oracle records win canonical deduplication
+    # before broader ATS sources are ingested.
+    print("Priority 1: Discovering Workday/Oracle and other career-board listings...")
+    career_jobs = discover_career_board_jobs()
+    if not career_jobs.empty:
+        added = db.add_jobs(career_jobs)
+        total += added
+        print(f"Dynamic career boards: {len(career_jobs)} indexed jobs, {added} new.")
+
+    print("Priority 2: Discovering Ashby, Greenhouse, and Lever boards...")
     refs = discover_board_refs(discover_ats_urls())
     print(f"Discovered {len(refs)} ATS boards dynamically.")
-    total = 0
     for ats, board in sorted(refs):
         try:
             jobs = fetch_board_jobs(ats, board)
@@ -304,11 +316,6 @@ def run_ats_collector() -> int:
             print(f"ATS {ats}/{board}: {len(jobs)} India/remote jobs, {added} new.")
         except Exception as exc:
             print(f"Warning: ATS board {ats}/{board} failed: {exc}", file=sys.stderr)
-    career_jobs = discover_career_board_jobs()
-    if not career_jobs.empty:
-        added = db.add_jobs(career_jobs)
-        total += added
-        print(f"Dynamic career boards: {len(career_jobs)} indexed jobs, {added} new.")
     print(f"ATS collection complete. New direct jobs stored: {total}")
     return total
 
