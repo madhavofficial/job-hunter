@@ -247,7 +247,7 @@ def discover_ats_urls() -> list[str]:
         for domain in ATS_HOSTS:
             query = f"site:{domain} ({keyword_query}) India OR remote"
             try:
-                urls.extend(search_urls(query))
+                urls.extend(search_urls(query, count=10))
                 time.sleep(1.0)
             except SearchRateLimitError as exc:
                 print(f"Warning: ATS discovery stopped after provider rate limit: {exc}", file=sys.stderr)
@@ -275,7 +275,7 @@ def discover_career_board_jobs(limit_per_domain: int = 50) -> pd.DataFrame:
         for domain in CAREER_BOARD_DOMAINS:
             query = f"site:{domain} ({keyword_query}) India OR remote"
             try:
-                urls = search_urls(query, count=limit_per_domain)
+                urls = search_urls(query, count=min(limit_per_domain, 10))
                 listings = [listing for url in urls if (listing := _career_listing_from_url(url, domain))]
                 if listings:
                     rows.extend(listings)

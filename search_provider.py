@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -24,14 +25,15 @@ class SearchRateLimitError(SearchProviderError):
 
 def _request_json(url: str, headers: dict[str, str], params: dict[str, str | int]) -> dict:
     request = Request(f"{url}?{urlencode(params)}", headers=headers)
+    timeout = max(10, int(os.getenv("ATS_SEARCH_TIMEOUT_SECONDS", "45")))
     try:
-        with urlopen(request, timeout=20) as response:
+        with urlopen(request, timeout=timeout) as response:
             return json.load(response)
     except HTTPError as exc:
         if exc.code == 429:
             raise SearchRateLimitError(f"search provider returned HTTP 429 for {url}") from exc
         raise SearchProviderError(f"search provider returned HTTP {exc.code} for {url}") from exc
-    except (URLError, TimeoutError, json.JSONDecodeError) as exc:
+    except (URLError, TimeoutError, socket.timeout, json.JSONDecodeError) as exc:
         raise SearchProviderError(f"search provider request failed for {url}: {exc}") from exc
 
 
