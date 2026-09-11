@@ -118,7 +118,7 @@ LAYER 1: HARD FILTERS (If any fails, reject immediately)
 2. Experience Level: The candidate has intern-level experience. If the job explicitly requires senior-level professional experience (e.g., 3+ years, 5+ years, Lead, Manager), set passes_hard_filters to false. Internship, co-op, entry-level, junior, or 0-2 years roles pass.
 3. Location: Must be in India (any city, e.g., Bengaluru, Pune, Hyderabad, Gurgaon, Mumbai) or Remote. If it explicitly requires relocation outside India, set passes_hard_filters to false.
 4. Role Type: Must be a CSE-related role. Reject non-CSE roles (e.g., Sales, Marketing, Mechanical/Civil Engineer, HR).
-5. Legitimacy / Company Spam Filter: Reject anonymous posters ("None", "Confidential", "Private Limited"), resume-harvesting consultancies, or unpaid training institutes. Real tech startups, funded ventures, and established enterprises pass.
+5. Legitimacy / Company Spam Filter: Reject anonymous posters ("None", "Confidential", "Private Limited"), resume-harvesting consultancies, or unpaid training institutes. An official direct ATS/career-board listing is evidence of a real employer even when the company is not in the examples; do not reject it merely because it is unfamiliar. Unknown direct employers remain discovery-only rather than Top Matches.
 
 LAYER 2: COMPANY TIER CLASSIFICATION
 Classify the company into one of the following tiers:
@@ -271,8 +271,11 @@ Description:
             evidence = result.get("evidence", [])
             notes = result.get("matching_notes", "")
             
-            # If identified as an unverified/staffing agency or anonymous poster, reject immediately
-            if company_tier.startswith("Tier 3"):
+            # Reject only unverified/anonymous sources. An unknown company on
+            # an official direct ATS page may remain discovery-only.
+            if company_tier.startswith("Tier 3") and (
+                not quality["direct_employer_signal"] or quality["unknown_company"]
+            ):
                 model_passes = False
                 rejection_reason = rejection_reason or "Identified as recruitment/staffing agency or unverified training consultancy."
             
