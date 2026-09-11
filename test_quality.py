@@ -36,13 +36,14 @@ class ListingQualityTests(unittest.TestCase):
         self.assertTrue(classify_company_tier("Teradata").startswith("Tier 2"))
         self.assertTrue(classify_company_tier("Coram AI").startswith("Tier 1"))
 
-    def test_missing_description_is_rejected_before_scoring(self):
+    def test_missing_description_enters_review_pool_with_capped_score(self):
         job = self.make_job(description="")
         tier = classify_company_tier(job["company"])
         quality = assess_listing_quality(job, tier)
         passes, reason = quality_gate(job, tier, quality)
-        self.assertFalse(passes)
-        self.assertIn("Missing job description", reason)
+        self.assertTrue(passes, reason)
+        score, _ = weighted_match_score(95, quality)
+        self.assertLessEqual(score, 79)
 
     def test_unknown_direct_ats_employer_enters_discovery_but_not_tier_one(self):
         job = self.make_job(company="Mystery Labs")
@@ -53,7 +54,7 @@ class ListingQualityTests(unittest.TestCase):
         self.assertTrue(tier.startswith("Tier 3"))
         self.assertEqual(quality["company_score"], 65)
 
-    def test_unknown_aggregator_employer_is_rejected(self):
+    def test_unknown_aggregator_employer_enters_review_pool_with_cap(self):
         job = self.make_job(
             company="Mystery Labs",
             site="linkedin",
@@ -62,15 +63,19 @@ class ListingQualityTests(unittest.TestCase):
         )
         tier = classify_company_tier(job["company"])
         quality = assess_listing_quality(job, tier)
-        passes, _ = quality_gate(job, tier, quality)
-        self.assertFalse(passes)
+        passes, reason = quality_gate(job, tier, quality)
+        self.assertTrue(passes, reason)
+        score, _ = weighted_match_score(95, quality)
+        self.assertLessEqual(score, 84)
 
-    def test_generic_title_with_partial_description_is_rejected(self):
+    def test_generic_title_with_partial_description_enters_review_pool(self):
         job = self.make_job(title="Software Engineer", description="Join our team. Freshers welcome.")
         tier = classify_company_tier(job["company"])
         quality = assess_listing_quality(job, tier)
-        passes, _ = quality_gate(job, tier, quality)
-        self.assertFalse(passes)
+        passes, reason = quality_gate(job, tier, quality)
+        self.assertTrue(passes, reason)
+        score, _ = weighted_match_score(95, quality)
+        self.assertLessEqual(score, 79)
 
     def test_partial_evidence_caps_final_score(self):
         job = self.make_job(description=("Build software with Python and APIs. " * 10))

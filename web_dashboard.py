@@ -154,6 +154,8 @@ def get_dashboard_data():
         j["is_remote_verified"] = is_job_truly_remote(j)
         j["quality"] = assess_listing_quality(j, tier)
         j["quality_passes"], j["quality_reason"] = quality_gate(j, tier, j["quality"])
+        if not j["quality_passes"]:
+            continue
         role_fit = j.get("role_fit_score") or j.get("score") or 0
         j["score"], _ = weighted_match_score(role_fit, j["quality"])
         j["recommended"] = bool(

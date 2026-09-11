@@ -271,14 +271,6 @@ Description:
             evidence = result.get("evidence", [])
             notes = result.get("matching_notes", "")
             
-            # Reject only unverified/anonymous sources. An unknown company on
-            # an official direct ATS page may remain discovery-only.
-            if company_tier.startswith("Tier 3") and (
-                not quality["direct_employer_signal"] or quality["unknown_company"]
-            ):
-                model_passes = False
-                rejection_reason = rejection_reason or "Identified as recruitment/staffing agency or unverified training consultancy."
-            
             # Format evidence list as a string
             evidence_str = "\n".join([f"- {ev}" for ev in evidence])
 
@@ -303,7 +295,8 @@ Description:
                 status = "shortlisted"
                 recommendation_status = "discovered"
                 score = final_score
-                notes = f"DISCOVERY ONLY: {final_quality_reason or 'Below recommendation threshold.'}\n\n{notes}"
+                review_reason = final_quality_reason or quality["reason"] or "Below recommendation threshold."
+                notes = f"DISCOVERY ONLY: {review_reason}\n\n{notes}"
                 print(f"-> DISCOVERY ONLY ({company_tier}): Score={score}%")
             else:
                 status = "rejected"

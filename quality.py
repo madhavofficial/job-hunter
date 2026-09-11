@@ -177,12 +177,11 @@ def assess_listing_quality(job: dict, company_tier: str, now: datetime | None = 
 
 def quality_gate(job: dict, company_tier: str, quality: dict | None = None) -> tuple[bool, str | None]:
     quality = quality or assess_listing_quality(job, company_tier)
-    if company_tier.startswith("Tier 3") and (not quality["direct_employer_signal"] or quality["unknown_company"]):
-        return False, "Employer is unverified, anonymous, or appears to be a staffing/consulting source."
-    if quality["description_score"] == 0:
-        return False, "Missing job description; title-only inference is not reliable enough to shortlist."
-    if quality["description_state"] == "partial" and quality["generic_title"]:
-        return False, "Generic title with partial description evidence."
+    # Keep plausible roles in the review pool even when evidence is weak. The
+    # weighted score caps them below Top Matches; only obvious junk should be
+    # rejected before the model call.
+    if quality["unknown_company"]:
+        return False, "Employer identity is missing or anonymous."
     if quality["irrelevant_title"]:
         return False, "Role title is outside the target software/AI scope."
     if quality["evidence_score"] < 40:
