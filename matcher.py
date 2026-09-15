@@ -54,6 +54,17 @@ def fetch_description_from_web(url, site, job_id=None):
                                 "is no longer available",
                             )):
                                 return "EXPIRED_OR_CLOSED"
+
+                            # Detect when LinkedIn marks role as closed by omitting Apply CTA
+                            apply_cta = soup.find(lambda el: (
+                                el.name in ["button", "a"] and (
+                                    any(c in el.get("class", []) for c in ["top-card-layout__cta", "apply-button", "topcard__cta"]) or
+                                    el.get_text().strip().lower() in ["apply", "easy apply", "apply on company website"]
+                                )
+                            ))
+                            if not apply_cta:
+                                return "EXPIRED_OR_CLOSED"
+
                             desc_div = soup.find("div", class_="show-more-less-html__markup") or soup.find("div", class_="description__text")
                             if desc_div:
                                 return desc_div.get_text(separator="\n").strip()
