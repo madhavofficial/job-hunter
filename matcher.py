@@ -40,17 +40,32 @@ def fetch_description_from_web(url, site, job_id=None):
             if lid_match:
                 lid = lid_match.group(1)
                 guest_url = f"https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{lid}"
-                res = requests.get(guest_url, headers=headers, timeout=12)
-                if res.status_code == 200:
-                    soup = BeautifulSoup(res.text, "html.parser")
-                    desc_div = soup.find("div", class_="show-more-less-html__markup") or soup.find("div", class_="description__text")
-                    if desc_div:
-                        return desc_div.get_text(separator="\n").strip()
-                    page_text = soup.get_text().lower()
-                    if any(marker in page_text for marker in ("no longer accepting applications", "job is closed", "show more jobs like this")):
-                        return "EXPIRED_OR_CLOSED"
-                elif res.status_code in {404, 410}:
-                    return "EXPIRED_OR_CLOSED"
+                for attempt in range(3):
+                    try:
+                        res = requests.get(guest_url, headers=headers, timeout=12)
+                        if res.status_code == 200:
+                            soup = BeautifulSoup(res.text, "html.parser")
+                            page_text = soup.get_text().lower()
+                            if any(marker in page_text for marker in (
+                                "no longer accepting applications",
+                                "not currently accepting applications",
+                                "job is closed",
+                                "this job is closed",
+                                "is no longer available",
+                            )):
+                                return "EXPIRED_OR_CLOSED"
+                            desc_div = soup.find("div", class_="show-more-less-html__markup") or soup.find("div", class_="description__text")
+                            if desc_div:
+                                return desc_div.get_text(separator="\n").strip()
+                        elif res.status_code in {404, 410}:
+                            return "EXPIRED_OR_CLOSED"
+                        elif res.status_code == 429:
+                            time.sleep(1.5 * (attempt + 1))
+                            continue
+                        break
+                    except Exception:
+                        if attempt < 2:
+                            time.sleep(1)
 
             # Fallback to direct URL if guest API didn't resolve
             if url:
@@ -59,6 +74,15 @@ def fetch_description_from_web(url, site, job_id=None):
                 res = requests.get(clean_url, headers=headers, timeout=10)
                 if res.status_code == 200:
                     soup = BeautifulSoup(res.text, 'html.parser')
+                    page_text = soup.get_text().lower()
+                    if any(marker in page_text for marker in (
+                        "no longer accepting applications",
+                        "not currently accepting applications",
+                        "job is closed",
+                        "this job is closed",
+                        "is no longer available",
+                    )):
+                        return "EXPIRED_OR_CLOSED"
                     desc_div = soup.find(class_="show-more-less-html__markup") or soup.find(class_="description__text")
                     if desc_div:
                         return desc_div.get_text(separator="\n").strip()
