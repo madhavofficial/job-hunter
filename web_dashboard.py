@@ -220,42 +220,50 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     <title>Job Hunter — Executive Career Operations Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        .gradient-card { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); }
+        * { font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .gradient-card { background: linear-gradient(135deg, #161824 0%, #10121a 100%); }
         .tab-btn.active { border-bottom: 2px solid #38bdf8; color: #38bdf8; font-weight: 600; }
         ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: #0f172a; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+        ::-webkit-scrollbar-track { background: #0b0c10; }
+        ::-webkit-scrollbar-thumb { background: #222638; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #323852; }
         dialog::backdrop {
-            background: rgba(2, 6, 23, 0.82);
-            backdrop-filter: blur(6px);
+            background: rgba(4, 6, 11, 0.85);
+            backdrop-filter: blur(12px);
         }
     </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased">
+<body class="bg-[#0b0c10] text-slate-100 min-h-screen font-sans antialiased selection:bg-sky-500/30 selection:text-sky-200">
     <!-- Header -->
-    <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-40">
+    <header class="border-b border-[#1c1f2e] bg-[#0f1118]/80 backdrop-blur sticky top-0 z-40">
         <div class="max-w-7xl mx-auto px-4 py-3 sm:px-6 flex items-center justify-between">
             <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
-                    <i class="fa-solid fa-briefcase text-white text-lg"></i>
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-500 via-indigo-500 to-teal-400 p-[1px] shadow-lg shadow-sky-500/20">
+                    <div class="w-full h-full bg-[#0b0c10] rounded-[11px] flex items-center justify-center">
+                        <i class="fa-solid fa-briefcase text-sky-400 text-base"></i>
+                    </div>
                 </div>
                 <div>
-                    <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                    <h1 class="text-base font-bold tracking-tight text-white flex items-center gap-2">
                         Job Hunter Operations
-                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20">Live</span>
+                        <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Live</span>
                     </h1>
                     <p class="text-xs text-slate-400">Autonomous Screening, ATS PDF Tailoring & Application Hub</p>
                 </div>
             </div>
             <div class="flex items-center gap-2">
-                <button onclick="openCustomJobModal()" class="px-3 py-1.5 text-xs font-bold bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white rounded-lg shadow-sm flex items-center gap-1.5 transition">
+                <button onclick="openCustomJobModal()" class="px-3.5 py-1.5 text-xs font-semibold bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white rounded-xl shadow-sm shadow-emerald-500/20 flex items-center gap-1.5 transition">
                     <i class="fa-solid fa-plus"></i> Add Custom Link
                 </button>
-                <button onclick="archiveStaleJobs()" class="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 flex items-center gap-1.5 transition">
+                <button onclick="archiveStaleJobs()" class="px-3 py-1.5 text-xs font-medium bg-[#151824] hover:bg-[#1c2030] text-slate-300 rounded-xl border border-[#24283b] flex items-center gap-1.5 transition">
                     <i class="fa-solid fa-broom text-amber-400"></i> Clear Stale (>7d)
                 </button>
-                <button onclick="fetchJobs()" class="px-3 py-1.5 text-xs font-medium bg-sky-600 hover:bg-sky-500 text-white rounded-lg shadow-sm shadow-sky-600/30 flex items-center gap-1.5 transition">
+                <button onclick="fetchJobs()" class="px-3 py-1.5 text-xs font-medium bg-[#151824] hover:bg-[#1c2030] text-sky-400 hover:text-sky-300 rounded-xl border border-[#24283b] shadow-sm flex items-center gap-1.5 transition">
                     <i class="fa-solid fa-rotate"></i> Refresh
                 </button>
             </div>
@@ -266,98 +274,98 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     <main class="max-w-7xl mx-auto px-4 py-6 sm:px-6 space-y-6">
         <!-- Metrics Ribbon -->
         <div class="grid grid-cols-2 sm:grid-cols-5 gap-3" id="stats-ribbon">
-            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center gap-4">
-                <div class="w-12 h-12 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 text-xl">
+            <div class="bg-[#12141d] border border-[#1e2233] hover:border-[#2b3047] transition rounded-2xl p-4 flex items-center gap-3.5 shadow-sm group">
+                <div class="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 text-lg group-hover:scale-105 transition">
                     <i class="fa-solid fa-fire-flame-curved"></i>
                 </div>
                 <div>
-                    <div class="text-2xl font-bold text-white" id="stat-fresh">0</div>
-                    <div class="text-xs font-medium text-slate-400">Fresh (Past 48h)</div>
+                    <div class="text-2xl font-extrabold text-white tracking-tight" id="stat-fresh">0</div>
+                    <div class="text-[11px] font-medium text-slate-400">Fresh (Past 48h)</div>
                 </div>
             </div>
-            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center gap-4">
-                <div class="w-12 h-12 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 text-xl">
+            <div class="bg-[#12141d] border border-[#1e2233] hover:border-[#2b3047] transition rounded-2xl p-4 flex items-center gap-3.5 shadow-sm group">
+                <div class="w-11 h-11 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 text-lg group-hover:scale-105 transition">
                     <i class="fa-solid fa-globe"></i>
                 </div>
                 <div>
-                    <div class="text-2xl font-bold text-white" id="stat-remote">0</div>
-                    <div class="text-xs font-medium text-slate-400">Remote Roles</div>
+                    <div class="text-2xl font-extrabold text-white tracking-tight" id="stat-remote">0</div>
+                    <div class="text-[11px] font-medium text-slate-400">Remote Roles</div>
                 </div>
             </div>
-            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center gap-4">
-                <div class="w-12 h-12 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 text-xl">
-                    <i class="fa-solid fa-star"></i>
+            <div class="bg-[#12141d] border border-[#1e2233] hover:border-[#2b3047] transition rounded-2xl p-4 flex items-center gap-3.5 shadow-sm group">
+                <div class="w-11 h-11 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 text-lg group-hover:scale-105 transition">
+                    <i class="fa-solid fa-rocket"></i>
                 </div>
                 <div>
-                    <div class="text-2xl font-bold text-white" id="stat-tier1">0</div>
-                    <div class="text-xs font-medium text-slate-400">Tier 1 Startups</div>
+                    <div class="text-2xl font-extrabold text-white tracking-tight" id="stat-tier1">0</div>
+                    <div class="text-[11px] font-medium text-slate-400">Tier 1 Startups</div>
                 </div>
             </div>
-            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center gap-4">
-                <div class="w-12 h-12 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-xl">
+            <div class="bg-[#12141d] border border-[#1e2233] hover:border-[#2b3047] transition rounded-2xl p-4 flex items-center gap-3.5 shadow-sm group">
+                <div class="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-lg group-hover:scale-105 transition">
                     <i class="fa-solid fa-circle-check"></i>
                 </div>
                 <div>
-                    <div class="text-2xl font-bold text-white" id="stat-applied">0</div>
-                    <div class="text-xs font-medium text-slate-400">Applied Roles</div>
+                    <div class="text-2xl font-extrabold text-white tracking-tight" id="stat-applied">0</div>
+                    <div class="text-[11px] font-medium text-slate-400">Applied Roles</div>
                 </div>
             </div>
-            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center gap-4">
-                <div class="w-12 h-12 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 text-xl">
+            <div class="bg-[#12141d] border border-[#1e2233] hover:border-[#2b3047] transition rounded-2xl p-4 flex items-center gap-3.5 shadow-sm group">
+                <div class="w-11 h-11 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 text-lg group-hover:scale-105 transition">
                     <i class="fa-solid fa-layer-group"></i>
                 </div>
                 <div>
-                    <div class="text-2xl font-bold text-white" id="stat-total">0</div>
-                    <div class="text-xs font-medium text-slate-400">Total Shortlisted</div>
+                    <div class="text-2xl font-extrabold text-white tracking-tight" id="stat-total">0</div>
+                    <div class="text-[11px] font-medium text-slate-400">Total Shortlisted</div>
                 </div>
             </div>
         </div>
 
         <!-- Navigation Tabs -->
-        <div class="flex items-center gap-6 border-b border-slate-800 text-sm overflow-x-auto pb-px">
-            <button onclick="switchTab('recommended')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-2" id="tab-btn-recommended">
-                <i class="fa-solid fa-star text-amber-400"></i> Top Matches <span class="text-xs px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300" id="badge-recommended">0</span>
+        <div class="flex items-center gap-5 border-b border-[#1c1f2e] text-xs font-medium overflow-x-auto pb-px">
+            <button onclick="switchTab('recommended')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5" id="tab-btn-recommended">
+                <i class="fa-solid fa-star text-amber-400 text-[11px]"></i> Top Matches <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-[#181b28] text-slate-300 border border-[#24283b]" id="badge-recommended">0</span>
             </button>
-            <button onclick="switchTab('fresh')" class="tab-btn active pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-2" id="tab-btn-fresh">
-                <i class="fa-solid fa-bolt text-amber-400"></i> Fresh Drops (48h) <span class="text-xs px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300" id="badge-fresh">0</span>
+            <button onclick="switchTab('fresh')" class="tab-btn active pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5" id="tab-btn-fresh">
+                <i class="fa-solid fa-bolt text-amber-400 text-[11px]"></i> Fresh Drops (48h) <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-[#181b28] text-slate-300 border border-[#24283b]" id="badge-fresh">0</span>
             </button>
-            <button onclick="switchTab('remote')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-2" id="tab-btn-remote">
-                <i class="fa-solid fa-globe text-cyan-400"></i> Remote <span class="text-xs px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300" id="badge-remote">0</span>
+            <button onclick="switchTab('remote')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5" id="tab-btn-remote">
+                <i class="fa-solid fa-globe text-cyan-400 text-[11px]"></i> Remote <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-[#181b28] text-slate-300 border border-[#24283b]" id="badge-remote">0</span>
             </button>
-            <button onclick="switchTab('tier1')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-2" id="tab-btn-tier1">
-                <i class="fa-solid fa-rocket text-sky-400"></i> Tier 1 Product Startups <span class="text-xs px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300" id="badge-tier1">0</span>
+            <button onclick="switchTab('tier1')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5" id="tab-btn-tier1">
+                <i class="fa-solid fa-rocket text-indigo-400 text-[11px]"></i> Tier 1 Product Startups <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-[#181b28] text-slate-300 border border-[#24283b]" id="badge-tier1">0</span>
             </button>
-            <button onclick="switchTab('tier2')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-2" id="tab-btn-tier2">
-                <i class="fa-solid fa-building text-slate-400"></i> Enterprise & Global <span class="text-xs px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300" id="badge-tier2">0</span>
+            <button onclick="switchTab('tier2')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5" id="tab-btn-tier2">
+                <i class="fa-solid fa-building text-slate-400 text-[11px]"></i> Enterprise & Global <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-[#181b28] text-slate-300 border border-[#24283b]" id="badge-tier2">0</span>
             </button>
-            <button onclick="switchTab('all')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-2" id="tab-btn-all">
-                <i class="fa-solid fa-list-check"></i> All Shortlisted <span class="text-xs px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300" id="badge-all">0</span>
+            <button onclick="switchTab('all')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5" id="tab-btn-all">
+                <i class="fa-solid fa-list-check text-[11px]"></i> All Shortlisted <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-[#181b28] text-slate-300 border border-[#24283b]" id="badge-all">0</span>
             </button>
-            <button onclick="switchTab('applied')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-2" id="tab-btn-applied">
-                <i class="fa-solid fa-circle-check text-emerald-400"></i> Applied Tracker <span class="text-xs px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300" id="badge-applied">0</span>
+            <button onclick="switchTab('applied')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5" id="tab-btn-applied">
+                <i class="fa-solid fa-circle-check text-emerald-400 text-[11px]"></i> Applied Tracker <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-[#181b28] text-slate-300 border border-[#24283b]" id="badge-applied">0</span>
             </button>
         </div>
 
         <!-- Search, Filter & Sort Controls -->
-        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
+        <div class="bg-[#12141d] border border-[#1e2233] rounded-2xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
             <div class="relative flex-1 w-full">
                 <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
-                <input type="text" id="search-input" oninput="handleSearch()" placeholder="Search title, company, skills (e.g. PyTorch, React, Python), location..." class="w-full pl-9 pr-8 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition">
+                <input type="text" id="search-input" oninput="handleSearch()" placeholder="Search title, company, skills (e.g. PyTorch, React, Python), location..." class="w-full pl-9 pr-8 py-2 text-xs bg-[#0a0c14] border border-[#1e2233] rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition">
                 <button id="search-clear-btn" onclick="clearSearch()" class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs p-1" title="Clear search">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
             </div>
-            <div class="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-3 shrink-0">
+            <div class="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-2.5 shrink-0">
                 <div class="flex items-center gap-2">
                     <label for="sort-select" class="text-xs text-slate-400 font-medium whitespace-nowrap"><i class="fa-solid fa-arrow-down-short-wide text-slate-500"></i> Sort:</label>
-                    <select id="sort-select" onchange="handleSort()" class="px-2.5 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-300 focus:outline-none focus:border-sky-500 cursor-pointer">
+                    <select id="sort-select" onchange="handleSort()" class="px-2.5 py-2 text-xs bg-[#0a0c14] border border-[#1e2233] rounded-xl text-slate-300 focus:outline-none focus:border-sky-500 cursor-pointer">
                         <option value="match_desc">Match % (High → Low)</option>
                         <option value="date_desc">Newest First</option>
                         <option value="company_asc">Company (A → Z)</option>
                         <option value="title_asc">Role Title (A → Z)</option>
                     </select>
                 </div>
-                <div class="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-slate-800/80 text-slate-300 border border-slate-700/60 whitespace-nowrap" id="search-counter">
+                <div class="text-xs font-semibold px-2.5 py-1.5 rounded-xl bg-[#181b28] text-slate-300 border border-[#24283b] whitespace-nowrap" id="search-counter">
                     0 roles
                 </div>
             </div>
@@ -370,16 +378,16 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     </main>
 
     <!-- Job Details & Match Modal (Native HTML5 Dialog) -->
-    <dialog id="job-details-modal" class="bg-slate-900 text-slate-100 border border-slate-700 rounded-2xl p-0 w-full max-w-3xl shadow-2xl m-auto overflow-hidden">
+    <dialog id="job-details-modal" class="bg-[#12141d] text-slate-100 border border-[#24283b] rounded-2xl p-0 w-full max-w-3xl shadow-2xl shadow-black/80 m-auto overflow-hidden">
         <div class="flex flex-col max-h-[90vh]">
             <!-- Header -->
-            <div class="px-6 py-4 border-b border-slate-800 flex items-start justify-between gap-4 bg-slate-900/90 sticky top-0 z-10">
+            <div class="px-6 py-4 border-b border-[#1c1f2e] flex items-start justify-between gap-4 bg-[#12141d]/95 sticky top-0 z-10">
                 <div class="space-y-1.5">
                     <div class="flex items-center gap-2 flex-wrap" id="modal-badges"></div>
                     <h2 class="text-xl font-bold text-white leading-tight" id="modal-title">Job Title</h2>
                     <p class="text-sm text-slate-400 font-medium" id="modal-subtitle">Company • Location</p>
                 </div>
-                <button onclick="closeDetailsModal()" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition shrink-0" aria-label="Close dialog">
+                <button onclick="closeDetailsModal()" class="w-8 h-8 rounded-lg bg-[#181b28] hover:bg-[#222638] text-slate-400 hover:text-white flex items-center justify-center transition shrink-0" aria-label="Close dialog">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
             </div>
@@ -387,7 +395,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             <!-- Scrollable Content -->
             <div class="p-6 space-y-5 overflow-y-auto">
                 <!-- AI Match Analysis Box -->
-                <div id="modal-match-section" class="bg-slate-950/70 border border-slate-800 rounded-xl p-4 space-y-2">
+                <div id="modal-match-section" class="bg-[#0a0c14] border border-[#1e2233] rounded-xl p-4 space-y-2">
                     <div class="flex items-center justify-between">
                         <span class="text-xs font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
                             <i class="fa-solid fa-wand-magic-sparkles"></i> AI Match Analysis
@@ -406,27 +414,27 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 <!-- Full Job Description -->
                 <div class="space-y-2">
                     <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Full Job Description</h3>
-                    <div id="modal-description" class="text-xs text-slate-300 whitespace-pre-wrap font-sans bg-slate-950/50 p-4 rounded-xl border border-slate-800/80 leading-relaxed max-h-80 overflow-y-auto select-text"></div>
+                    <div id="modal-description" class="text-xs text-slate-300 whitespace-pre-wrap font-sans bg-[#0a0c14] p-4 rounded-xl border border-[#1e2233] leading-relaxed max-h-80 overflow-y-auto select-text"></div>
                 </div>
             </div>
 
             <!-- Footer Actions -->
-            <div class="px-6 py-4 border-t border-slate-800 bg-slate-900/90 flex items-center justify-between gap-3 sticky bottom-0">
-                <button id="modal-dismiss-btn" class="px-4 py-2 text-xs font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition border border-transparent hover:border-rose-500/20">
+            <div class="px-6 py-4 border-t border-[#1c1f2e] bg-[#12141d]/95 flex items-center justify-between gap-3 sticky bottom-0">
+                <button id="modal-dismiss-btn" class="px-4 py-2 text-xs font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition border border-transparent hover:border-rose-500/20">
                     <i class="fa-solid fa-xmark mr-1"></i> Dismiss
                 </button>
                 <div class="flex items-center gap-2">
-                    <a id="modal-listing-link" href="#" target="_blank" rel="noopener noreferrer" class="px-4 py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 flex items-center gap-1.5 transition">
+                    <a id="modal-listing-link" href="#" target="_blank" rel="noopener noreferrer" class="px-4 py-2 text-xs font-medium bg-[#181b28] hover:bg-[#222638] text-slate-200 rounded-xl border border-[#24283b] flex items-center gap-1.5 transition">
                         <i class="fa-solid fa-arrow-up-right-from-square text-sky-400"></i> View Listing
                     </a>
-                    <a id="modal-pdf-link" href="#" target="_blank" class="hidden px-4 py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-sky-400 rounded-lg border border-slate-700 flex items-center gap-1.5 transition">
+                    <a id="modal-pdf-link" href="#" target="_blank" class="hidden px-4 py-2 text-xs font-medium bg-[#181b28] hover:bg-[#222638] text-sky-400 rounded-xl border border-[#24283b] flex items-center gap-1.5 transition">
                         <i class="fa-solid fa-file-pdf"></i> View PDF
                     </a>
-                    <button id="modal-reveal-btn" onclick="revealInFinder(currentModalPdfPath)" class="hidden px-3 py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 flex items-center gap-1.5 transition" title="Reveal PDF in Finder & copy path">
+                    <button id="modal-reveal-btn" onclick="revealInFinder(currentModalPdfPath)" class="hidden px-3 py-2 text-xs font-medium bg-[#181b28] hover:bg-[#222638] text-slate-300 rounded-xl border border-[#24283b] flex items-center gap-1.5 transition" title="Reveal PDF in Finder & copy path">
                         <i class="fa-regular fa-folder-open text-amber-400"></i> Finder
                     </button>
-                    <button id="modal-apply-btn" class="px-5 py-2 text-xs font-bold bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white rounded-lg shadow-md shadow-sky-500/20 flex items-center gap-1.5 transition">
-                        <i class="fa-solid fa-bolt"></i> 1-Click Tailor & Apply
+                    <button id="modal-apply-btn" class="px-5 py-2 text-xs font-bold bg-gradient-to-r from-sky-500 via-indigo-500 to-teal-500 hover:from-sky-400 hover:to-teal-400 text-white rounded-xl shadow-md shadow-sky-500/20 flex items-center gap-1.5 transition">
+                        <i class="fa-solid fa-bolt text-yellow-300"></i> 1-Click Tailor & Apply
                     </button>
                 </div>
             </div>
@@ -434,9 +442,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     </dialog>
 
     <!-- Add Custom Job Modal (Native HTML5 Dialog) -->
-    <dialog id="custom-job-modal" class="bg-slate-900 text-slate-100 border border-slate-700 rounded-2xl p-0 w-full max-w-lg shadow-2xl m-auto overflow-hidden">
+    <dialog id="custom-job-modal" class="bg-[#12141d] text-slate-100 border border-[#24283b] rounded-2xl p-0 w-full max-w-lg shadow-2xl shadow-black/80 m-auto overflow-hidden">
         <form method="dialog" onsubmit="submitCustomJob(event)" class="p-6 space-y-4">
-            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div class="flex items-center justify-between border-b border-[#1c1f2e] pb-3">
                 <div class="flex items-center gap-2.5">
                     <div class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center">
                         <i class="fa-solid fa-plus"></i>
@@ -455,8 +463,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 <div>
                     <label class="block text-xs font-semibold text-slate-300 mb-1">Job Listing URL</label>
                     <div class="flex gap-2">
-                        <input type="url" id="custom-url-input" placeholder="https://jobs.lever.co/..., greenhouse.io, linkedin..." class="flex-1 px-3 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg focus:outline-none focus:border-sky-500 text-slate-100" />
-                        <button type="button" onclick="pasteCustomUrl()" class="px-3 py-2 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition" title="Paste from clipboard">
+                        <input type="url" id="custom-url-input" placeholder="https://jobs.lever.co/..., greenhouse.io, linkedin..." class="flex-1 px-3 py-2 text-xs bg-[#0a0c14] border border-[#1e2233] rounded-xl focus:outline-none focus:border-sky-500 text-slate-100" />
+                        <button type="button" onclick="pasteCustomUrl()" class="px-3 py-2 text-xs bg-[#181b28] hover:bg-[#222638] text-slate-300 rounded-xl border border-[#24283b] transition" title="Paste from clipboard">
                             <i class="fa-solid fa-paste"></i>
                         </button>
                     </div>
@@ -464,20 +472,20 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
                 <div>
                     <label class="block text-xs font-semibold text-slate-300 mb-1">Raw Job Description (Optional fallback)</label>
-                    <textarea id="custom-text-input" rows="4" placeholder="If the role is behind a login or private portal, paste the JD text here..." class="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg focus:outline-none focus:border-sky-500 text-slate-100 resize-none font-mono text-[11px]"></textarea>
+                    <textarea id="custom-text-input" rows="4" placeholder="If the role is behind a login or private portal, paste the JD text here..." class="w-full px-3 py-2 text-xs bg-[#0a0c14] border border-[#1e2233] rounded-xl focus:outline-none focus:border-sky-500 text-slate-100 resize-none font-mono text-[11px]"></textarea>
                 </div>
             </div>
 
-            <div id="custom-job-progress" class="hidden p-3 rounded-lg bg-sky-500/10 border border-sky-500/20 text-xs text-sky-300 flex items-center gap-2">
+            <div id="custom-job-progress" class="hidden p-3 rounded-xl bg-sky-500/10 border border-sky-500/20 text-xs text-sky-300 flex items-center gap-2">
                 <i class="fa-solid fa-circle-notch fa-spin text-sky-400"></i>
                 <span id="custom-job-status-text">Ingesting listing and screening with AI...</span>
             </div>
 
-            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
-                <button type="button" onclick="closeCustomJobModal()" class="px-4 py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition">
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-[#1c1f2e]">
+                <button type="button" onclick="closeCustomJobModal()" class="px-4 py-2 text-xs font-medium bg-[#181b28] hover:bg-[#222638] text-slate-300 rounded-xl border border-[#24283b] transition">
                     Cancel
                 </button>
-                <button type="submit" id="custom-submit-btn" class="px-4 py-2 text-xs font-bold bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white rounded-lg shadow-sm flex items-center gap-1.5 transition">
+                <button type="submit" id="custom-submit-btn" class="px-4 py-2 text-xs font-bold bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white rounded-xl shadow-sm flex items-center gap-1.5 transition">
                     <i class="fa-solid fa-wand-magic-sparkles"></i> Analyze & Ingest
                 </button>
             </div>
@@ -485,7 +493,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     </dialog>
 
     <!-- Notification Toast with Undo -->
-    <div id="toast" class="fixed bottom-6 right-6 px-4 py-3 rounded-xl bg-slate-900 border border-slate-700 text-sm shadow-2xl transition-all duration-300 transform translate-y-24 opacity-0 z-50 flex items-center gap-3 max-w-md">
+    <div id="toast" class="fixed bottom-6 right-6 px-4 py-3 rounded-2xl bg-[#12141d] border border-[#24283b] text-sm shadow-2xl transition-all duration-300 transform translate-y-24 opacity-0 z-50 flex items-center gap-3 max-w-md">
         <i id="toast-icon" class="fa-solid fa-circle-check text-emerald-400 text-lg shrink-0"></i>
         <div id="toast-msg" class="text-slate-200 font-medium text-xs flex-1">Notification message</div>
         <button id="toast-undo-btn" class="hidden px-2.5 py-1 text-xs font-bold bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 rounded border border-sky-500/30 transition shrink-0">
@@ -702,18 +710,20 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             }
 
             filtered.forEach(j => {
-                const scoreColor = (j.score >= 90) ? 'text-amber-400 bg-amber-400/10 border-amber-400/20' : 'text-sky-400 bg-sky-400/10 border-sky-400/20';
-                const tierBadge = j.tier ? `<span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">${j.tier.split(':')[0]}</span>` : '';
+                const scoreColor = (j.score >= 90) ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                                 : (j.score >= 80) ? 'text-sky-400 bg-sky-500/10 border-sky-500/20'
+                                 : 'text-amber-400 bg-amber-500/10 border-amber-500/20';
+                const tierBadge = j.tier ? `<span class="text-[10px] px-2 py-0.5 rounded-md bg-[#181b28] text-slate-300 border border-[#24283b] font-medium">${j.tier.split(':')[0]}</span>` : '';
                 const isRemote = j.is_remote_verified;
-                const remoteBadge = isRemote ? `<span class="text-[10px] px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-medium flex items-center gap-1"><i class="fa-solid fa-globe text-[9px]"></i> Remote</span>` : '';
-                const platformBadge = j.platform ? `<span class="text-[10px] px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20 font-medium">${j.platform}</span>` : '';
+                const remoteBadge = isRemote ? `<span class="text-[10px] px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-medium flex items-center gap-1"><i class="fa-solid fa-globe text-[9px]"></i> Remote</span>` : '';
+                const platformBadge = j.platform ? `<span class="text-[10px] px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-400 border border-sky-500/20 font-mono">${j.platform}</span>` : '';
                 const datePosted = j.date_posted && j.date_posted !== 'nan' ? j.date_posted : 'Recent';
                 const hasPdf = j.tailored_resume_pdf_path ? true : false;
                 const listingUrl = (j.job_url_direct || j.job_url || '').trim();
                 const portalUrl = (j.status_portal_url || '').trim();
 
                 const card = document.createElement('div');
-                card.className = "bg-slate-900 border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition flex flex-col justify-between space-y-4 shadow-sm";
+                card.className = "bg-[#12141d] border border-[#1e2233] hover:border-[#2f354f] rounded-2xl p-5 hover:shadow-xl hover:shadow-sky-500/5 transition duration-200 flex flex-col justify-between space-y-4 shadow-sm";
                 card.id = `job-${j.job_id}`;
 
                 if (currentTab === 'applied') {
@@ -730,19 +740,19 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                                     </h3>
                                     <p class="text-sm font-medium text-slate-300 mt-0.5">${escapeHtml(j.company)} &bull; <span class="text-xs text-slate-400">${escapeHtml(j.location || 'Remote/India')}</span></p>
                                 </div>
-                                <span class="px-2 py-1 text-xs font-bold rounded-lg border text-emerald-400 bg-emerald-500/10 border-emerald-500/20 shrink-0">Applied</span>
+                                <span class="px-2.5 py-1 text-xs font-bold rounded-lg border text-emerald-400 bg-emerald-500/10 border-emerald-500/20 shrink-0">Applied</span>
                             </div>
                         </div>
-                        <div class="flex items-center justify-between pt-3 border-t border-slate-800/80 gap-2 flex-wrap">
-                            <button onclick="openDetailsModal('${j.job_id}')" class="px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800/90 hover:bg-slate-700 rounded-lg border border-slate-700 flex items-center gap-1.5 transition shadow-sm" title="View Job Description & Tailoring Notes">
+                        <div class="flex items-center justify-between pt-3 border-t border-[#1c1f2e] gap-2 flex-wrap">
+                            <button onclick="openDetailsModal('${j.job_id}')" class="px-3.5 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-[#181b28] hover:bg-[#222638] rounded-xl border border-[#24283b] flex items-center gap-1.5 transition shadow-sm" title="View Job Description & Tailoring Notes">
                                 <i class="fa-solid fa-eye text-[10px] text-indigo-400"></i> Details
                             </button>
                             <div class="flex items-center gap-2">
-                                ${portalUrl ? `<a href="${portalUrl}" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg shadow-sm flex items-center gap-1.5 transition" title="Open candidate application status tracking portal"><i class="fa-solid fa-id-card"></i> Check Status (${j.platform || 'Portal'})</a>` : ''}
-                                ${listingUrl ? `<a href="${listingUrl}" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 text-xs font-medium bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg border border-slate-700 flex items-center gap-1.5 transition"><i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-sky-400"></i> View Listing</a>` : ''}
+                                ${portalUrl ? `<a href="${portalUrl}" target="_blank" rel="noopener noreferrer" class="px-3.5 py-1.5 text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl shadow-sm flex items-center gap-1.5 transition" title="Open candidate application status tracking portal"><i class="fa-solid fa-id-card"></i> Check Status (${j.platform || 'Portal'})</a>` : ''}
+                                ${listingUrl ? `<a href="${listingUrl}" target="_blank" rel="noopener noreferrer" class="px-3.5 py-1.5 text-xs font-medium bg-[#181b28] hover:bg-[#222638] text-slate-300 hover:text-white rounded-xl border border-[#24283b] flex items-center gap-1.5 transition"><i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-sky-400"></i> View Listing</a>` : ''}
                                 ${hasPdf ? `
-                                <button onclick="revealInFinder('${escapeHtml(j.tailored_resume_pdf_path)}')" class="px-2.5 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg border border-slate-700 flex items-center gap-1 transition" title="Reveal PDF in Finder & copy path"><i class="fa-regular fa-folder-open text-amber-400"></i></button>
-                                <a href="/pdf?path=${encodeURIComponent(j.tailored_resume_pdf_path)}" target="_blank" class="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-sky-400 rounded-lg border border-slate-700 flex items-center gap-1.5 transition"><i class="fa-solid fa-file-pdf"></i> View PDF</a>` : ''}
+                                <button onclick="revealInFinder('${escapeHtml(j.tailored_resume_pdf_path)}')" class="px-2.5 py-1.5 text-xs font-medium bg-[#181b28] hover:bg-[#222638] text-slate-300 hover:text-white rounded-xl border border-[#24283b] flex items-center gap-1 transition" title="Reveal PDF in Finder & copy path"><i class="fa-regular fa-folder-open text-amber-400"></i></button>
+                                <a href="/pdf?path=${encodeURIComponent(j.tailored_resume_pdf_path)}" target="_blank" class="px-3 py-1.5 text-xs font-medium bg-[#181b28] hover:bg-[#222638] text-sky-400 rounded-xl border border-[#24283b] flex items-center gap-1.5 transition"><i class="fa-solid fa-file-pdf"></i> View PDF</a>` : ''}
                             </div>
                         </div>
                     `;
@@ -765,28 +775,28 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                                     ${j.score}% Match
                                 </div>
                             </div>
-                            ${j.matching_notes ? `<p class="text-xs text-slate-400 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/60 leading-relaxed"><i class="fa-solid fa-circle-info text-sky-400 mr-1"></i> ${escapeHtml(j.matching_notes)}</p>` : ''}
+                            ${j.matching_notes ? `<p class="text-xs text-slate-300 bg-[#0a0c14] p-3 rounded-xl border border-[#1e2233] leading-relaxed"><i class="fa-solid fa-circle-info text-sky-400 mr-1"></i> ${escapeHtml(j.matching_notes)}</p>` : ''}
                         </div>
 
-                        <div class="flex items-center justify-between pt-3 border-t border-slate-800/80 gap-2 flex-wrap">
+                        <div class="flex items-center justify-between pt-3 border-t border-[#1c1f2e] gap-2 flex-wrap">
                             <div class="flex items-center gap-2">
-                                <button onclick="dismissJob('${j.job_id}')" class="px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition border border-transparent hover:border-rose-500/20" title="Dismiss from shortlist">
+                                <button onclick="dismissJob('${j.job_id}')" class="px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition border border-transparent hover:border-rose-500/20" title="Dismiss from shortlist">
                                     <i class="fa-solid fa-xmark"></i> Dismiss
                                 </button>
-                                <button onclick="openDetailsModal('${j.job_id}')" class="px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800/90 hover:bg-slate-700 rounded-lg border border-slate-700 flex items-center gap-1.5 transition shadow-sm" title="View Full Description & Match Details">
+                                <button onclick="openDetailsModal('${j.job_id}')" class="px-3.5 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-[#181b28] hover:bg-[#222638] rounded-xl border border-[#24283b] flex items-center gap-1.5 transition shadow-sm" title="View Full Description & Match Details">
                                     <i class="fa-solid fa-eye text-[10px] text-indigo-400"></i> Details
                                 </button>
                                 ${listingUrl ? `
-                                <a href="${listingUrl}" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800/90 hover:bg-slate-700 rounded-lg border border-slate-700 flex items-center gap-1.5 transition shadow-sm" title="View original job listing in a new tab">
+                                <a href="${listingUrl}" target="_blank" rel="noopener noreferrer" class="px-3.5 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-[#181b28] hover:bg-[#222638] rounded-xl border border-[#24283b] flex items-center gap-1.5 transition shadow-sm" title="View original job listing in a new tab">
                                     <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-sky-400"></i> View Listing
                                 </a>` : ''}
                             </div>
                             <div class="flex items-center gap-2">
                                 ${hasPdf ? `
-                                <button onclick="revealInFinder('${escapeHtml(j.tailored_resume_pdf_path)}')" class="px-2.5 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg border border-slate-700 flex items-center gap-1 transition" title="Reveal PDF in Finder & copy path"><i class="fa-regular fa-folder-open text-amber-400"></i></button>
-                                <a href="/pdf?path=${encodeURIComponent(j.tailored_resume_pdf_path)}" target="_blank" class="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-sky-400 rounded-lg border border-slate-700 flex items-center gap-1.5 transition" title="Open Tailored Resume PDF"><i class="fa-solid fa-file-pdf"></i> PDF</a>` : ''}
-                                <button onclick="applyJob('${j.job_id}', this)" class="px-4 py-1.5 text-xs font-bold bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white rounded-lg shadow-md shadow-sky-500/20 flex items-center gap-1.5 transition">
-                                    <i class="fa-solid fa-bolt"></i> 1-Click Tailor & Apply
+                                <button onclick="revealInFinder('${escapeHtml(j.tailored_resume_pdf_path)}')" class="px-2.5 py-1.5 text-xs font-medium bg-[#181b28] hover:bg-[#222638] text-slate-300 hover:text-white rounded-xl border border-[#24283b] flex items-center gap-1 transition" title="Reveal PDF in Finder & copy path"><i class="fa-regular fa-folder-open text-amber-400"></i></button>
+                                <a href="/pdf?path=${encodeURIComponent(j.tailored_resume_pdf_path)}" target="_blank" class="px-3 py-1.5 text-xs font-medium bg-[#181b28] hover:bg-[#222638] text-sky-400 rounded-xl border border-[#24283b] flex items-center gap-1.5 transition" title="Open Tailored Resume PDF"><i class="fa-solid fa-file-pdf"></i> PDF</a>` : ''}
+                                <button onclick="applyJob('${j.job_id}', this)" class="px-4 py-1.5 text-xs font-bold bg-gradient-to-r from-sky-500 via-indigo-500 to-teal-500 hover:from-sky-400 hover:to-teal-400 text-white rounded-xl shadow-md shadow-sky-500/20 active:scale-95 transition flex items-center gap-1.5">
+                                    <i class="fa-solid fa-bolt text-yellow-300"></i> 1-Click Tailor & Apply
                                 </button>
                             </div>
                         </div>
@@ -813,13 +823,13 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             const badgesEl = document.getElementById('modal-badges');
             badgesEl.innerHTML = '';
             if (job.tier) {
-                badgesEl.innerHTML += `<span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">${job.tier.split(':')[0]}</span>`;
+                badgesEl.innerHTML += `<span class="text-[10px] px-2 py-0.5 rounded-md bg-[#181b28] text-slate-300 border border-[#24283b] font-medium">${job.tier.split(':')[0]}</span>`;
             }
             if (job.is_remote_verified) {
-                badgesEl.innerHTML += `<span class="text-[10px] px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-medium flex items-center gap-1"><i class="fa-solid fa-globe text-[9px]"></i> Remote</span>`;
+                badgesEl.innerHTML += `<span class="text-[10px] px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-medium flex items-center gap-1"><i class="fa-solid fa-globe text-[9px]"></i> Remote</span>`;
             }
             if (job.platform) {
-                badgesEl.innerHTML += `<span class="text-[10px] px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20 font-medium">${job.platform}</span>`;
+                badgesEl.innerHTML += `<span class="text-[10px] px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-400 border border-sky-500/20 font-mono">${job.platform}</span>`;
             }
             const datePosted = job.date_posted && job.date_posted !== 'nan' ? job.date_posted : 'Recent';
             badgesEl.innerHTML += `<span class="text-[10px] text-slate-400 flex items-center gap-1"><i class="fa-regular fa-clock"></i> ${datePosted}</span>`;
@@ -832,8 +842,10 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             const scoreEl = document.getElementById('modal-score-badge');
             scoreEl.innerText = `${job.score || 0}% Match`;
             scoreEl.className = (job.score >= 90)
-                ? 'px-2.5 py-0.5 rounded text-xs font-extrabold border text-amber-400 bg-amber-400/10 border-amber-400/20'
-                : 'px-2.5 py-0.5 rounded text-xs font-extrabold border text-sky-400 bg-sky-400/10 border-sky-400/20';
+                ? 'px-2.5 py-0.5 rounded-md text-xs font-extrabold border text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                : (job.score >= 80)
+                ? 'px-2.5 py-0.5 rounded-md text-xs font-extrabold border text-sky-400 bg-sky-500/10 border-sky-500/20'
+                : 'px-2.5 py-0.5 rounded-md text-xs font-extrabold border text-amber-400 bg-amber-500/10 border-amber-500/20';
 
             const matchSection = document.getElementById('modal-match-section');
             const notesEl = document.getElementById('modal-matching-notes');
@@ -865,7 +877,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 skillsList.forEach(skill => {
                     if (skill) {
                         const chip = document.createElement('span');
-                        chip.className = "text-[11px] px-2.5 py-1 rounded-md bg-slate-800 text-slate-200 border border-slate-700/80 font-mono";
+                        chip.className = "text-[11px] px-2.5 py-1 rounded-md bg-[#181b28] text-slate-200 border border-[#24283b] font-mono";
                         chip.innerText = skill;
                         skillsChips.appendChild(chip);
                     }
