@@ -33,8 +33,9 @@ class ListingQualityTests(unittest.TestCase):
 
     def test_unknown_company_is_not_auto_tier_one(self):
         self.assertTrue(classify_company_tier("Mystery Labs").startswith("Tier 3"))
-        self.assertTrue(classify_company_tier("Teradata").startswith("Tier 2"))
+        self.assertTrue(classify_company_tier("Infosys").startswith("Tier 2"))
         self.assertTrue(classify_company_tier("Coram AI").startswith("Tier 1"))
+        self.assertTrue("Big Tech" in classify_company_tier("Teradata"))
 
     def test_missing_description_enters_review_pool_with_capped_score(self):
         job = self.make_job(description="")

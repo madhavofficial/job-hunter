@@ -16,41 +16,54 @@ def load_resume():
     with open(resume_path, "r", encoding="utf-8") as f:
         return f.read()
 
-def fetch_description_from_web(url, site):
-    if not url:
+def fetch_description_from_web(url, site, job_id=None):
+    if not url and not job_id:
         return None
     headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
     }
     try:
-        if "linkedin.com" in url:
+        if (url and "linkedin.com" in url) or (site and "linkedin" in str(site).lower()):
             import re
             import requests
             from bs4 import BeautifulSoup
             
-            # Clean URL to standard view format: /jobs/view/ID
-            match = re.search(r"/jobs/view/(\d+)", url)
-            if match:
-                url = f"https://www.linkedin.com/jobs/view/{match.group(1)}"
-            
-            res = requests.get(url, headers=headers, timeout=10)
-            if res.status_code in {401, 403, 429} or any(marker in res.text.lower() for marker in ("authwall", "captcha", "challenge")):
-                print(f"Warning: LinkedIn description unavailable ({res.status_code}); continuing without it.", file=sys.stderr)
-                return None
-            if res.status_code == 200:
-                soup = BeautifulSoup(res.text, 'html.parser')
-                desc_div = soup.find(class_="show-more-less-html__markup")
-                if not desc_div:
-                    desc_div = soup.find(class_="description__text")
-                if desc_div:
-                    return desc_div.get_text(separator="\n").strip()
-                # If description container is missing but page loaded, check for closed/recommendation signs
-                page_text = soup.get_text().lower()
-                if "show more jobs like this" in page_text or "similar jobs" in page_text or "no longer accepting applications" in page_text:
+            # Extract numeric LinkedIn ID from url or job_id
+            lid_match = None
+            if url:
+                lid_match = re.search(r"/jobs/view/(\d+)", url) or re.search(r"currentJobId=(\d+)", url)
+            if not lid_match and job_id:
+                lid_match = re.search(r"(\d{9,12})", str(job_id))
+
+            if lid_match:
+                lid = lid_match.group(1)
+                guest_url = f"https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{lid}"
+                res = requests.get(guest_url, headers=headers, timeout=12)
+                if res.status_code == 200:
+                    soup = BeautifulSoup(res.text, "html.parser")
+                    desc_div = soup.find("div", class_="show-more-less-html__markup") or soup.find("div", class_="description__text")
+                    if desc_div:
+                        return desc_div.get_text(separator="\n").strip()
+                    page_text = soup.get_text().lower()
+                    if any(marker in page_text for marker in ("no longer accepting applications", "job is closed", "show more jobs like this")):
+                        return "EXPIRED_OR_CLOSED"
+                elif res.status_code in {404, 410}:
                     return "EXPIRED_OR_CLOSED"
+
+            # Fallback to direct URL if guest API didn't resolve
+            if url:
+                match = re.search(r"/jobs/view/(\d+)", url)
+                clean_url = f"https://www.linkedin.com/jobs/view/{match.group(1)}" if match else url
+                res = requests.get(clean_url, headers=headers, timeout=10)
+                if res.status_code == 200:
+                    soup = BeautifulSoup(res.text, 'html.parser')
+                    desc_div = soup.find(class_="show-more-less-html__markup") or soup.find(class_="description__text")
+                    if desc_div:
+                        return desc_div.get_text(separator="\n").strip()
     except Exception as e:
-        print(f"Warning: Failed to fetch description from {url}: {e}", file=sys.stderr)
+        print(f"Warning: Failed to fetch description from {url or job_id}: {e}", file=sys.stderr)
     return None
 
 def run_matcher(job_ids=None):
@@ -166,7 +179,7 @@ You MUST respond with a JSON object. Use the following structure:
         # Fetch description if empty
         if not description:
             print(f"Description empty for '{title}' at '{company}'. Fetching from web...")
-            fetched_desc = fetch_description_from_web(job_url, site)
+            fetched_desc = fetch_description_from_web(job_url, site, job_id=job_id)
             if fetched_desc == "EXPIRED_OR_CLOSED":
                 print(f"-> REJECTED: Listing closed / expired on {site.upper()}.")
                 db.update_job_match(
@@ -186,8 +199,8 @@ You MUST respond with a JSON object. Use the following structure:
                 conn.commit()
                 conn.close()
                 print(f"-> Successfully fetched and saved description ({len(description)} chars)")
-        else:
-            print("-> Could not fetch description. Proceeding with title-only matching.")
+            else:
+                print("-> Could not fetch description. Proceeding with title-only matching.")
 
         # Do not spend model calls on listings that cannot support a reliable
         # recommendation. A title-only match is discovery data, not a shortlist.

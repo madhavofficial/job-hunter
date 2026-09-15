@@ -70,16 +70,24 @@ def generate_dashboard():
 
     now_str = datetime.now().strftime("%d %b %Y, %I:%M %p")
 
+    big_tech_count = len([j for j in shortlisted if "Big Tech" in classify_company_tier(j["company"])])
+    unicorn_count = len([j for j in shortlisted if "Unicorn" in classify_company_tier(j["company"])])
+    startup_count = len([j for j in shortlisted if "Startup" in classify_company_tier(j["company"])])
+    it_services_count = len([j for j in shortlisted if "IT Services" in classify_company_tier(j["company"])])
+
     md_content = f"""# Job Hunter Dashboard — {now_str}
 
 ## 📊 Summary Statistics
 - **🔥 Fresh (Past 48h)**: {len(fresh_48h)} new opportunities
 - **🎯 Top Matches**: {len(top_matches)} evidence-backed recommendations
 - **🌐 Remote Roles**: {len(remote_jobs)} active opportunities
+- **🏛️ Big Tech & MNCs**: {big_tech_count} active roles
+- **🦄 Unicorns & Product Giants**: {unicorn_count} active roles
+- **🚀 AI & Tech Startups**: {startup_count} active roles
+- **🏢 IT Services & Consultancies**: {it_services_count} active roles
 - **📅 Yesterday ({yesterday_str})**: {len(yesterday_jobs)} active opportunities
 - **📁 Earlier This Week**: {len(earlier_jobs)} active opportunities
 - **✅ Applied Roles**: {len(applied)}
-- **🧹 Auto-Archived (>5d Old)**: {archived_stale}
 
 ---
 
@@ -89,35 +97,35 @@ def generate_dashboard():
         if not job_list:
             return f"## {icon} {section_title}\n*{section_desc}*\n\n*No opportunities in this bucket.*\n\n---\n\n"
 
-        tier1 = [j for j in job_list if classify_company_tier(j["company"]) == "Tier 1: Product Company / AI Startup"]
-        tier2 = [j for j in job_list if classify_company_tier(j["company"]) == "Tier 2: Global Enterprise / IT Services"]
-        other = [j for j in job_list if j not in tier1 and j not in tier2]
+        big_tech = [j for j in job_list if "Big Tech" in classify_company_tier(j["company"])]
+        unicorns = [j for j in job_list if "Unicorn" in classify_company_tier(j["company"])]
+        startups = [j for j in job_list if "Startup" in classify_company_tier(j["company"])]
+        it_services = [j for j in job_list if "IT Services" in classify_company_tier(j["company"])]
+        other = [j for j in job_list if j not in big_tech and j not in unicorns and j not in startups and j not in it_services]
 
         out = f"## {icon} {section_title} ({len(job_list)} Positions)\n*{section_desc}*\n\n"
 
-        if tier1:
-            out += "### 🌟 Tier 1: Product Companies & Verified AI Startups\n\n"
-            out += "| Score | Job ID | Company | Job Title | Location | Direct ATS Link | ⚡ Auto-Apply | ✕ Dismiss |\n"
-            out += "| :---: | :--- | :--- | :--- | :--- | :---: | :---: | :---: |\n"
-            for j in tier1:
+        def _render_subtable(sub_list, header_title):
+            res = f"{header_title}\n\n"
+            res += "| Score | Job ID | Company | Job Title | Location | Direct ATS Link | ⚡ Auto-Apply | ✕ Dismiss |\n"
+            res += "| :---: | :--- | :--- | :--- | :--- | :---: | :---: | :---: |\n"
+            for j in sub_list:
                 url = j["job_url_direct"] or j["job_url"] or "#"
                 url_text = "[Apply Direct ↗]" if j["job_url_direct"] else "[View Listing ↗]"
                 apply_link = f"http://127.0.0.1:8765/apply?id={j['job_id']}"
                 dismiss_link = f"http://127.0.0.1:8765/dismiss?id={j['job_id']}"
-                out += f"| **{j['score']}%** | `{j['job_id']}` | **{j['company']}** | {j['title']} | {j['location'] or 'India'} | [{url_text}]({url}) | [[⚡ Apply ↗]]({apply_link}) | [[✕ Do Not Consider]]({dismiss_link}) |\n"
-            out += "\n"
+                res += f"| **{j['score']}%** | `{j['job_id']}` | **{j['company']}** | {j['title']} | {j['location'] or 'India'} | [{url_text}]({url}) | [[⚡ Apply ↗]]({apply_link}) | [[✕ Do Not Consider]]({dismiss_link}) |\n"
+            res += "\n"
+            return res
 
-        if tier2:
-            out += "### 🏢 Tier 2: Global Enterprises & IT Services\n\n"
-            out += "| Score | Job ID | Company | Job Title | Location | Direct ATS Link | ⚡ Auto-Apply | ✕ Dismiss |\n"
-            out += "| :---: | :--- | :--- | :--- | :--- | :---: | :---: | :---: |\n"
-            for j in tier2:
-                url = j["job_url_direct"] or j["job_url"] or "#"
-                url_text = "[Apply Direct ↗]" if j["job_url_direct"] else "[View Listing ↗]"
-                apply_link = f"http://127.0.0.1:8765/apply?id={j['job_id']}"
-                dismiss_link = f"http://127.0.0.1:8765/dismiss?id={j['job_id']}"
-                out += f"| **{j['score']}%** | `{j['job_id']}` | **{j['company']}** | {j['title']} | {j['location'] or 'India'} | [{url_text}]({url}) | [[⚡ Apply ↗]]({apply_link}) | [[✕ Do Not Consider]]({dismiss_link}) |\n"
-            out += "\n"
+        if big_tech:
+            out += _render_subtable(big_tech, "### 🏛️ Big Tech & Global MNCs")
+        if unicorns:
+            out += _render_subtable(unicorns, "### 🦄 Unicorns & Product Giants")
+        if startups:
+            out += _render_subtable(startups, "### 🚀 AI & Tech Startups")
+        if it_services:
+            out += _render_subtable(it_services, "### 🏢 IT Services & Consultancies")
 
         if other:
             out += "<details><summary><b>Other Matched Roles (Click to expand)</b></summary>\n\n"

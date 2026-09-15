@@ -205,8 +205,15 @@ def get_dashboard_data():
 
     fresh_jobs = [j for j in valid_shortlisted if (j.get("created_at") or "") >= cutoff_48h]
     remote_jobs = [j for j in valid_shortlisted if j["is_remote_verified"]]
-    tier1_jobs = [j for j in valid_shortlisted if j["tier"] == "Tier 1: Product Company / AI Startup"]
-    tier2_jobs = [j for j in valid_shortlisted if j["tier"] == "Tier 2: Global Enterprise / IT Services"]
+    
+    big_tech_jobs = [j for j in valid_shortlisted if "Big Tech" in j["tier"]]
+    unicorn_jobs = [j for j in valid_shortlisted if "Unicorn" in j["tier"]]
+    startup_jobs = [j for j in valid_shortlisted if "Startup" in j["tier"]]
+    it_services_jobs = [j for j in valid_shortlisted if "IT Services" in j["tier"]]
+
+    tier1_jobs = [j for j in valid_shortlisted if ("Startup" in j["tier"] or "Unicorn" in j["tier"] or "Big Tech" in j["tier"])]
+    tier2_jobs = it_services_jobs
+
     recommended_jobs = [j for j in valid_shortlisted if j["recommended"]]
     discovery_jobs = [j for j in valid_shortlisted if not j["recommended"]]
     older_jobs = [j for j in valid_shortlisted if (j.get("created_at") or "") < cutoff_7d]
@@ -217,6 +224,10 @@ def get_dashboard_data():
             "recommended_count": len(recommended_jobs),
             "fresh_48h": len(fresh_jobs),
             "remote_count": len(remote_jobs),
+            "big_tech_count": len(big_tech_jobs),
+            "unicorn_count": len(unicorn_jobs),
+            "startup_count": len(startup_jobs),
+            "it_services_count": len(it_services_jobs),
             "tier1_count": len(tier1_jobs),
             "tier2_count": len(tier2_jobs),
             "total_applied": total_applied,
@@ -228,6 +239,10 @@ def get_dashboard_data():
         "recommended_jobs": recommended_jobs[:40],
         "discovery_jobs": discovery_jobs,
         "remote_jobs": remote_jobs[:50],
+        "big_tech_jobs": big_tech_jobs[:40],
+        "unicorn_jobs": unicorn_jobs[:40],
+        "startup_jobs": startup_jobs[:50],
+        "it_services_jobs": it_services_jobs[:35],
         "tier1_jobs": tier1_jobs[:50],
         "tier2_jobs": tier2_jobs[:35],
         "all_shortlisted": valid_shortlisted,
@@ -296,7 +311,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     <!-- Main Container -->
     <main class="max-w-7xl mx-auto px-4 py-6 sm:px-6 space-y-6">
         <!-- Metrics Ribbon -->
-        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3" id="stats-ribbon">
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3" id="stats-ribbon">
             <div class="bg-[#12141d] border border-[#1e2233] hover:border-[#2b3047] transition rounded-2xl p-4 flex items-center gap-3.5 shadow-sm group">
                 <div class="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 text-lg group-hover:scale-105 transition">
                     <i class="fa-solid fa-fire-flame-curved"></i>
@@ -308,11 +323,11 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             </div>
             <div class="bg-[#12141d] border border-[#1e2233] hover:border-[#2b3047] transition rounded-2xl p-4 flex items-center gap-3.5 shadow-sm group">
                 <div class="w-11 h-11 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 text-lg group-hover:scale-105 transition">
-                    <i class="fa-solid fa-globe"></i>
+                    <i class="fa-solid fa-building-columns"></i>
                 </div>
                 <div>
-                    <div class="text-2xl font-extrabold text-white tracking-tight" id="stat-remote">0</div>
-                    <div class="text-[11px] font-medium text-slate-400">Remote Roles</div>
+                    <div class="text-2xl font-extrabold text-white tracking-tight" id="stat-big-tech">0</div>
+                    <div class="text-[11px] font-medium text-slate-400">Big Tech & MNC</div>
                 </div>
             </div>
             <div class="bg-[#12141d] border border-[#1e2233] hover:border-[#2b3047] transition rounded-2xl p-4 flex items-center gap-3.5 shadow-sm group">
@@ -320,8 +335,17 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                     <i class="fa-solid fa-rocket"></i>
                 </div>
                 <div>
-                    <div class="text-2xl font-extrabold text-white tracking-tight" id="stat-tier1">0</div>
-                    <div class="text-[11px] font-medium text-slate-400">Tier 1 Startups</div>
+                    <div class="text-2xl font-extrabold text-white tracking-tight" id="stat-startups">0</div>
+                    <div class="text-[11px] font-medium text-slate-400">Startups & Giants</div>
+                </div>
+            </div>
+            <div class="bg-[#12141d] border border-[#1e2233] hover:border-[#2b3047] transition rounded-2xl p-4 flex items-center gap-3.5 shadow-sm group">
+                <div class="w-11 h-11 rounded-xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400 text-lg group-hover:scale-105 transition">
+                    <i class="fa-solid fa-globe"></i>
+                </div>
+                <div>
+                    <div class="text-2xl font-extrabold text-white tracking-tight" id="stat-remote">0</div>
+                    <div class="text-[11px] font-medium text-slate-400">Remote Roles</div>
                 </div>
             </div>
             <div class="bg-[#12141d] border border-[#1e2233] hover:border-[#2b3047] transition rounded-2xl p-4 flex items-center gap-3.5 shadow-sm group">
@@ -355,11 +379,17 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             <button onclick="switchTab('remote')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5" id="tab-btn-remote">
                 <i class="fa-solid fa-globe text-cyan-400 text-[11px]"></i> Remote <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-[#181b28] text-slate-300 border border-[#24283b]" id="badge-remote">0</span>
             </button>
-            <button onclick="switchTab('tier1')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5" id="tab-btn-tier1">
-                <i class="fa-solid fa-rocket text-indigo-400 text-[11px]"></i> Tier 1 Product Startups <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-[#181b28] text-slate-300 border border-[#24283b]" id="badge-tier1">0</span>
+            <button onclick="switchTab('big_tech')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5" id="tab-btn-big_tech">
+                <i class="fa-solid fa-building-columns text-cyan-400 text-[11px]"></i> Big Tech & MNCs <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-[#181b28] text-slate-300 border border-[#24283b]" id="badge-big_tech">0</span>
             </button>
-            <button onclick="switchTab('tier2')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5" id="tab-btn-tier2">
-                <i class="fa-solid fa-building text-slate-400 text-[11px]"></i> Enterprise & Global <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-[#181b28] text-slate-300 border border-[#24283b]" id="badge-tier2">0</span>
+            <button onclick="switchTab('unicorns')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5" id="tab-btn-unicorns">
+                <i class="fa-solid fa-wand-magic-sparkles text-amber-400 text-[11px]"></i> Unicorns & Giants <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-[#181b28] text-slate-300 border border-[#24283b]" id="badge-unicorns">0</span>
+            </button>
+            <button onclick="switchTab('startups')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5" id="tab-btn-startups">
+                <i class="fa-solid fa-rocket text-indigo-400 text-[11px]"></i> AI & Tech Startups <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-[#181b28] text-slate-300 border border-[#24283b]" id="badge-startups">0</span>
+            </button>
+            <button onclick="switchTab('it_services')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5" id="tab-btn-it_services">
+                <i class="fa-solid fa-building text-slate-400 text-[11px]"></i> IT Services <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-[#181b28] text-slate-300 border border-[#24283b]" id="badge-it_services">0</span>
             </button>
             <button onclick="switchTab('all')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5" id="tab-btn-all">
                 <i class="fa-solid fa-list-check text-[11px]"></i> All Shortlisted <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-[#181b28] text-slate-300 border border-[#24283b]" id="badge-all">0</span>
@@ -608,19 +638,22 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         function renderMetrics() {
             if (!rawData || !rawData.stats) return;
             const s = rawData.stats;
-            document.getElementById('stat-fresh').innerText = s.fresh_48h;
-            document.getElementById('stat-remote').innerText = s.remote_count || 0;
-            document.getElementById('stat-tier1').innerText = s.tier1_count;
-            document.getElementById('stat-applied').innerText = s.total_applied;
-            document.getElementById('stat-total').innerText = s.total_shortlisted;
+            if (document.getElementById('stat-fresh')) document.getElementById('stat-fresh').innerText = s.fresh_48h || 0;
+            if (document.getElementById('stat-big-tech')) document.getElementById('stat-big-tech').innerText = s.big_tech_count || 0;
+            if (document.getElementById('stat-startups')) document.getElementById('stat-startups').innerText = (s.startup_count || 0) + (s.unicorn_count || 0);
+            if (document.getElementById('stat-remote')) document.getElementById('stat-remote').innerText = s.remote_count || 0;
+            if (document.getElementById('stat-applied')) document.getElementById('stat-applied').innerText = s.total_applied || 0;
+            if (document.getElementById('stat-total')) document.getElementById('stat-total').innerText = s.total_shortlisted || 0;
 
-            document.getElementById('badge-fresh').innerText = s.fresh_48h;
-            document.getElementById('badge-recommended').innerText = s.recommended_count || 0;
-            document.getElementById('badge-remote').innerText = s.remote_count || 0;
-            document.getElementById('badge-tier1').innerText = s.tier1_count;
-            document.getElementById('badge-tier2').innerText = s.tier2_count;
-            document.getElementById('badge-all').innerText = s.total_shortlisted;
-            document.getElementById('badge-applied').innerText = s.total_applied;
+            if (document.getElementById('badge-fresh')) document.getElementById('badge-fresh').innerText = s.fresh_48h || 0;
+            if (document.getElementById('badge-recommended')) document.getElementById('badge-recommended').innerText = s.recommended_count || 0;
+            if (document.getElementById('badge-remote')) document.getElementById('badge-remote').innerText = s.remote_count || 0;
+            if (document.getElementById('badge-big_tech')) document.getElementById('badge-big_tech').innerText = s.big_tech_count || 0;
+            if (document.getElementById('badge-unicorns')) document.getElementById('badge-unicorns').innerText = s.unicorn_count || 0;
+            if (document.getElementById('badge-startups')) document.getElementById('badge-startups').innerText = s.startup_count || 0;
+            if (document.getElementById('badge-it_services')) document.getElementById('badge-it_services').innerText = s.it_services_count || 0;
+            if (document.getElementById('badge-all')) document.getElementById('badge-all').innerText = s.total_shortlisted || 0;
+            if (document.getElementById('badge-applied')) document.getElementById('badge-applied').innerText = s.total_applied || 0;
         }
 
         function switchTab(tab) {
@@ -713,6 +746,10 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             if (currentTab === 'recommended') list = rawData.recommended_jobs;
             else if (currentTab === 'fresh') list = rawData.fresh_jobs;
             else if (currentTab === 'remote') list = rawData.remote_jobs;
+            else if (currentTab === 'big_tech') list = rawData.big_tech_jobs;
+            else if (currentTab === 'unicorns') list = rawData.unicorn_jobs;
+            else if (currentTab === 'startups') list = rawData.startup_jobs;
+            else if (currentTab === 'it_services') list = rawData.it_services_jobs;
             else if (currentTab === 'tier1') list = rawData.tier1_jobs;
             else if (currentTab === 'tier2') list = rawData.tier2_jobs;
             else if (currentTab === 'all') list = rawData.all_shortlisted;
@@ -736,7 +773,20 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 const scoreColor = (j.score >= 90) ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
                                  : (j.score >= 80) ? 'text-sky-400 bg-sky-500/10 border-sky-500/20'
                                  : 'text-amber-400 bg-amber-500/10 border-amber-500/20';
-                const tierBadge = j.tier ? `<span class="text-[10px] px-2 py-0.5 rounded-md bg-[#181b28] text-slate-300 border border-[#24283b] font-medium">${j.tier.split(':')[0]}</span>` : '';
+                
+                let tierBadge = '';
+                const cat = (j.tier || '').toLowerCase();
+                if (cat.includes('big tech') || cat.includes('mnc')) {
+                    tierBadge = `<span class="text-[10px] px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-semibold flex items-center gap-1"><i class="fa-solid fa-building-columns text-[9px]"></i> Big Tech & MNC</span>`;
+                } else if (cat.includes('unicorn') || cat.includes('giant')) {
+                    tierBadge = `<span class="text-[10px] px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/20 font-semibold flex items-center gap-1"><i class="fa-solid fa-wand-magic-sparkles text-[9px]"></i> Unicorn</span>`;
+                } else if (cat.includes('startup')) {
+                    tierBadge = `<span class="text-[10px] px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-semibold flex items-center gap-1"><i class="fa-solid fa-rocket text-[9px]"></i> Startup</span>`;
+                } else if (cat.includes('it services') || cat.includes('service') || cat.includes('consult')) {
+                    tierBadge = `<span class="text-[10px] px-2 py-0.5 rounded-md bg-slate-500/15 text-slate-300 border border-slate-500/30 font-semibold flex items-center gap-1"><i class="fa-solid fa-building text-[9px]"></i> IT Services</span>`;
+                } else if (j.tier) {
+                    tierBadge = `<span class="text-[10px] px-2 py-0.5 rounded-md bg-[#181b28] text-slate-300 border border-[#24283b] font-medium">${escapeHtml(j.tier.split(':')[0])}</span>`;
+                }
                 const isRemote = j.is_remote_verified;
                 const remoteBadge = isRemote ? `<span class="text-[10px] px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-medium flex items-center gap-1"><i class="fa-solid fa-globe text-[9px]"></i> Remote</span>` : '';
                 const platformBadge = j.platform ? `<span class="text-[10px] px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-400 border border-sky-500/20 font-mono">${j.platform}</span>` : '';
@@ -833,7 +883,11 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         function openDetailsModal(jobId) {
             if (!rawData) return;
             let job = null;
-            const allLists = [rawData.recommended_jobs, rawData.fresh_jobs, rawData.remote_jobs, rawData.tier1_jobs, rawData.tier2_jobs, rawData.all_shortlisted, rawData.applied_jobs];
+            const allLists = [
+                rawData.recommended_jobs, rawData.fresh_jobs, rawData.remote_jobs,
+                rawData.big_tech_jobs, rawData.unicorn_jobs, rawData.startup_jobs, rawData.it_services_jobs,
+                rawData.tier1_jobs, rawData.tier2_jobs, rawData.all_shortlisted, rawData.applied_jobs
+            ];
             for (const list of allLists) {
                 if (list) {
                     const found = list.find(x => x.job_id === jobId);
@@ -846,7 +900,18 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             const badgesEl = document.getElementById('modal-badges');
             badgesEl.innerHTML = '';
             if (job.tier) {
-                badgesEl.innerHTML += `<span class="text-[10px] px-2 py-0.5 rounded-md bg-[#181b28] text-slate-300 border border-[#24283b] font-medium">${job.tier.split(':')[0]}</span>`;
+                const cat = (job.tier || '').toLowerCase();
+                if (cat.includes('big tech') || cat.includes('mnc')) {
+                    badgesEl.innerHTML += `<span class="text-[10px] px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-semibold flex items-center gap-1"><i class="fa-solid fa-building-columns text-[9px]"></i> Big Tech & MNC</span>`;
+                } else if (cat.includes('unicorn') || cat.includes('giant')) {
+                    badgesEl.innerHTML += `<span class="text-[10px] px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/20 font-semibold flex items-center gap-1"><i class="fa-solid fa-wand-magic-sparkles text-[9px]"></i> Unicorn</span>`;
+                } else if (cat.includes('startup')) {
+                    badgesEl.innerHTML += `<span class="text-[10px] px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-semibold flex items-center gap-1"><i class="fa-solid fa-rocket text-[9px]"></i> Startup</span>`;
+                } else if (cat.includes('it services') || cat.includes('service') || cat.includes('consult')) {
+                    badgesEl.innerHTML += `<span class="text-[10px] px-2 py-0.5 rounded-md bg-slate-500/15 text-slate-300 border border-slate-500/30 font-semibold flex items-center gap-1"><i class="fa-solid fa-building text-[9px]"></i> IT Services</span>`;
+                } else {
+                    badgesEl.innerHTML += `<span class="text-[10px] px-2 py-0.5 rounded-md bg-[#181b28] text-slate-300 border border-[#24283b] font-medium">${job.tier.split(':')[0]}</span>`;
+                }
             }
             if (job.is_remote_verified) {
                 badgesEl.innerHTML += `<span class="text-[10px] px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-medium flex items-center gap-1"><i class="fa-solid fa-globe text-[9px]"></i> Remote</span>`;

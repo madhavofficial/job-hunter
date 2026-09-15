@@ -50,26 +50,24 @@ AGENCY_MARKERS = (
 ENTERPRISE_PATTERNS = tuple(re.compile(rf"\b{re.escape(name)}\b", re.I) for name in sorted(KNOWN_ENTERPRISES, key=len, reverse=True))
 
 
+import company_classifier
+
+
 def classify_company_tier(company: str) -> str:
-    normalized = (company or "").strip().lower()
-    if (
-        not normalized
-        or normalized in {"none", "confidential", "private limited", "company name", "unknown", "mystery labs"}
-        or any(marker in normalized for marker in AGENCY_MARKERS)
-    ):
-        return "Tier 3: Staffing Agency / Unverified"
-    if any(p.search(normalized) for p in ENTERPRISE_PATTERNS):
-        return "Tier 2: Global Enterprise / IT Services"
-    return "Tier 1: Product Company / AI Startup"
+    category = company_classifier.get_company_category(company, allow_network=False)
+    tier_map = {
+        "Big Tech & Global MNC": "Tier 1: Big Tech & Global MNC",
+        "Unicorn / Tech Giant": "Tier 1: Unicorn / Tech Giant",
+        "AI & Tech Startup": "Tier 1: AI & Tech Startup",
+        "IT Services & Consultancies": "Tier 2: IT Services & Consultancies",
+        "Staffing Agency / Unverified": "Tier 3: Staffing Agency / Unverified",
+    }
+    return tier_map.get(category, "Tier 1: AI & Tech Startup")
 
 
 def is_explicitly_unverified_company(company: str) -> bool:
-    normalized = (company or "").strip().lower()
-    return (
-        not normalized
-        or normalized in {"none", "confidential", "private limited", "company name", "unknown", "mystery labs"}
-        or any(marker in normalized for marker in AGENCY_MARKERS)
-    )
+    category = company_classifier.get_company_category(company, allow_network=False)
+    return category == "Staffing Agency / Unverified"
 
 
 def deterministic_hard_filter(job: dict) -> tuple[bool, str | None]:
