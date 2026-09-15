@@ -1,6 +1,7 @@
+import io
 import os
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 import db
 import web_dashboard
 
@@ -123,6 +124,42 @@ class TestWebDashboard(unittest.TestCase):
             conn.execute("DELETE FROM jobs WHERE job_id = ?", (test_job_id,))
             conn.commit()
             conn.close()
+
+    def test_safe_tailored_path_validation(self):
+        tailored_dir = web_dashboard.TAILORED_DIR
+        valid_pdf = os.path.join(tailored_dir, "test_resume.pdf")
+
+        self.assertTrue(web_dashboard.is_safe_tailored_path(valid_pdf))
+        self.assertFalse(web_dashboard.is_safe_tailored_path(tailored_dir))
+        self.assertFalse(web_dashboard.is_safe_tailored_path("/etc/passwd"))
+        self.assertFalse(web_dashboard.is_safe_tailored_path(os.path.join(tailored_dir, "../web_dashboard.py")))
+        self.assertFalse(web_dashboard.is_safe_tailored_path("../../etc/passwd"))
+        self.assertFalse(web_dashboard.is_safe_tailored_path(""))
+        self.assertFalse(web_dashboard.is_safe_tailored_path(None))
+
+    def test_pdf_endpoint_path_traversal_blocked(self):
+        handler = web_dashboard.DashboardRequestHandler.__new__(web_dashboard.DashboardRequestHandler)
+        handler.path = "/pdf?path=/etc/passwd"
+        handler.send_response = MagicMock()
+        handler.send_header = MagicMock()
+        handler.end_headers = MagicMock()
+        handler.wfile = MagicMock()
+
+        handler.do_GET()
+        handler.send_response.assert_called_with(403)
+
+    def test_reveal_endpoint_path_traversal_blocked(self):
+        handler = web_dashboard.DashboardRequestHandler.__new__(web_dashboard.DashboardRequestHandler)
+        handler.path = "/api/reveal"
+        handler.headers = {"Content-Length": "24"}
+        handler.rfile = io.BytesIO(b'{"path": "/etc/passwd"}')
+        handler.send_response = MagicMock()
+        handler.send_header = MagicMock()
+        handler.end_headers = MagicMock()
+        handler.wfile = MagicMock()
+
+        handler.do_POST()
+        handler.send_response.assert_called_with(403)
 
 
 if __name__ == "__main__":

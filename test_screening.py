@@ -79,6 +79,38 @@ class ScreeningTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("phd", reason.lower())
 
+    def test_rejects_mba_in_description(self):
+        ok, reason = deterministic_hard_filter({
+            "title": "Business Analyst Intern",
+            "company": "FinCorp",
+            "description": "Must be currently enrolled in an MBA program or Master of Business Administration."
+        })
+        self.assertFalse(ok)
+        self.assertIn("mba", reason.lower())
+
+        ok, reason = deterministic_hard_filter({
+            "title": "Operations Intern",
+            "company": "LogisticsCo",
+            "description": "MBA candidates only. Graduation year 2027."
+        })
+        self.assertFalse(ok)
+        self.assertIn("mba", reason.lower())
+
+    def test_unknown_company_tier3_discovery(self):
+        # Unknown companies should be Tier 3 (unverified)
+        self.assertEqual(classify_company_tier("Acme Robotics"), "Tier 3: Staffing Agency / Unverified")
+        self.assertEqual(classify_company_tier("Random Labs"), "Tier 3: Staffing Agency / Unverified")
+
+        # But they must still pass the deterministic hard filter into the discovery pool
+        ok, reason = deterministic_hard_filter({
+            "title": "Backend Intern",
+            "company": "Acme Robotics",
+            "location": "Bengaluru, India",
+            "description": "Python and FastAPI development."
+        })
+        self.assertTrue(ok)
+        self.assertIsNone(reason)
+
 
 if __name__ == "__main__":
     unittest.main()

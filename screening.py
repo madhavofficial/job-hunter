@@ -62,12 +62,21 @@ def classify_company_tier(company: str) -> str:
         "IT Services & Consultancies": "Tier 2: IT Services & Consultancies",
         "Staffing Agency / Unverified": "Tier 3: Staffing Agency / Unverified",
     }
-    return tier_map.get(category, "Tier 1: AI & Tech Startup")
+    return tier_map.get(category, "Tier 3: Staffing Agency / Unverified")
 
 
 def is_explicitly_unverified_company(company: str) -> bool:
-    category = company_classifier.get_company_category(company, allow_network=False)
-    return category == "Staffing Agency / Unverified"
+    """Check whether employer has explicit agency/consultancy markers or placeholder names.
+    
+    Preserves the hard-filter contract: ordinary unknown employers pass into discovery
+    where quality scoring rates them lower, but explicit agencies/placeholders are rejected.
+    """
+    norm = company_classifier.normalize_company_key(company)
+    if not norm or norm in company_classifier.PLACEHOLDER_NAMES:
+        return True
+    if any(marker in norm for marker in company_classifier.AGENCY_MARKERS):
+        return True
+    return False
 
 
 def deterministic_hard_filter(job: dict) -> tuple[bool, str | None]:
@@ -89,8 +98,10 @@ def deterministic_hard_filter(job: dict) -> tuple[bool, str | None]:
         return False, "Role targets PhD/Doctoral candidates; candidate is an undergraduate B.Tech student."
     if re.search(r"\b(?:enrolled in a ph\.?d|pursuing a ph\.?d|ph\.?d (?:candidate|student|degree) required|must be enrolled in a (?:ph\.?d|doctoral))\b", searchable, re.I):
         return False, "Job explicitly requires enrollment in or completion of a PhD/Doctoral program."
-    if re.search(r"\b(?:mba intern(?:ship)?)\b", title, re.I):
+    if re.search(r"\b(?:mba|master of business administration)\b", title, re.I):
         return False, "Role targets MBA candidates; candidate is a B.Tech CSE student."
+    if re.search(r"\b(?:enrolled in an? mba|pursuing an? mba|must be enrolled in an? mba|mba (?:candidate|student|intern|internship)|(?:mba|master of business administration)\s*(?:students?|interns?|candidates?|graduates?|required|only))\b", searchable, re.I):
+        return False, "Job explicitly requires enrollment in or completion of an MBA program."
     if re.search(r"\b(?:[3-9]|[1-9][0-9])\s*\+?\s*(?:years?|yrs?)\b", searchable, re.I):
         return False, "Job explicitly requires at least three years of professional experience."
     if re.search(r"(?:2025|2026)\s*(?:batch|graduates?|pass[- ]?out)|(?:batch|graduates?|pass[- ]?out)\s*(?:of\s*)?(?:2025|2026)", searchable, re.I):

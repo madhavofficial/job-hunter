@@ -31,6 +31,22 @@ from quality import assess_listing_quality, quality_gate, weighted_match_score
 
 PORT = 8765
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+TAILORED_DIR = os.path.abspath(os.path.join(BASE_DIR, "tailored"))
+
+
+def is_safe_tailored_path(path: str) -> bool:
+    """Validate that path is strictly contained within the tailored directory."""
+    if not path:
+        return False
+    try:
+        abs_path = os.path.abspath(path)
+        return (
+            os.path.commonpath([TAILORED_DIR, abs_path]) == TAILORED_DIR
+            and abs_path != TAILORED_DIR
+        )
+    except (ValueError, Exception):
+        return False
+
 
 import uuid
 
@@ -1529,18 +1545,31 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
         elif path == "/pdf":
             query = urllib.parse.parse_qs(parsed.query)
             pdf_path = query.get("path", [""])[0]
-            if pdf_path and os.path.exists(pdf_path) and pdf_path.endswith(".pdf"):
-                self.send_response(200)
-                self.send_header("Content-Type", "application/pdf")
-                self.send_header("Content-Disposition", f'inline; filename="{os.path.basename(pdf_path)}"')
+            if not pdf_path:
+                self.send_response(400)
                 self.end_headers()
-                with open(pdf_path, "rb") as f:
-                    self.wfile.write(f.read())
                 return
-            else:
+
+            abs_path = os.path.abspath(pdf_path)
+            if not is_safe_tailored_path(abs_path) or not abs_path.endswith(".pdf"):
+                self.send_response(403)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "Access denied: outside tailored directory"}).encode("utf-8"))
+                return
+
+            if not os.path.isfile(abs_path):
                 self.send_response(404)
                 self.end_headers()
                 return
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/pdf")
+            self.send_header("Content-Disposition", f'inline; filename="{os.path.basename(abs_path)}"')
+            self.end_headers()
+            with open(abs_path, "rb") as f:
+                self.wfile.write(f.read())
+            return
 
         elif path == "/api/apply-status":
             query = urllib.parse.parse_qs(parsed.query)
@@ -1639,24 +1668,39 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
             return
 
         elif path == "/api/reveal":
-            pdf_path = params.get("path")
-            if pdf_path and os.path.exists(pdf_path):
-                if sys.platform == "darwin":
-                    try:
-                        subprocess.run(["open", "-R", pdf_path], check=False)
-                    except Exception:
-                        pass
-                self.send_response(200)
+            raw_path = params.get("path")
+            if not raw_path:
+                self.send_response(400)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
-                self.wfile.write(json.dumps({"success": True}).encode("utf-8"))
+                self.wfile.write(json.dumps({"error": "Path required"}).encode("utf-8"))
                 return
-            else:
+
+            abs_path = os.path.abspath(raw_path)
+            if not is_safe_tailored_path(abs_path):
+                self.send_response(403)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "Access denied: outside tailored directory"}).encode("utf-8"))
+                return
+
+            if not os.path.exists(abs_path):
                 self.send_response(404)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(json.dumps({"error": "File not found"}).encode("utf-8"))
                 return
+
+            if sys.platform == "darwin":
+                try:
+                    subprocess.run(["open", "-R", abs_path], check=False)
+                except Exception:
+                    pass
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": True}).encode("utf-8"))
+            return
 
         elif path == "/api/dismiss":
             job_id = params.get("job_id")

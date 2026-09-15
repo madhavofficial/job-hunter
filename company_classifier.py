@@ -13,6 +13,7 @@ import os
 import re
 import sqlite3
 import sys
+import unicodedata
 from datetime import datetime
 from typing import Dict, Optional, Tuple
 
@@ -53,18 +54,18 @@ SEED_BIG_TECH_MNC = {
     "dell", "hp", "hpe", "hewlett packard enterprise", "hewlett packard",
     "teradata", "ptc", "eaton", "siemens", "bosch", "philips", "honeywell",
     "general electric", "ge", "hitachi", "hitachi energy", "micron technology",
-    "samsung", "sony", "bt group", "comcast", "at&t", "verizon",
+    "samsung", "sony", "bt group", "comcast", "at&t", "at & t", "verizon",
     "jpmorgan", "jpmorganchase", "goldman sachs", "morgan stanley", "citi",
     "citigroup", "barclays", "wells fargo", "hsbc", "standard chartered",
     "deutsche bank", "bnp paribas", "ubs", "blackrock", "fidelity", "mastercard",
     "visa", "american express", "paypal", "nuvama", "idfc", "morningstar",
     "munich re", "metlife", "natwest", "natwest group", "lpl financial",
     "novartis", "amgen", "solventum", "edwards lifesciences", "pfizer",
-    "johnson & johnson", "astrazeneca", "electronic arts", "ea",
+    "johnson & johnson", "johnson and johnson", "astrazeneca", "electronic arts", "ea",
     "scientific games", "nielsen", "nielsen iq", "dhl", "fedex", "walmart",
     "target", "pearson", "celonis", "anaplan", "servicenow", "workday",
     "snowflake", "databricks", "splunk", "vmware", "atlassian", "intuit",
-    "autodesk", "atkinsréalis", "wsp",
+    "autodesk", "atkinsréalis", "atkinsrealis", "wsp",
 }
 
 SEED_UNICORNS = {
@@ -80,13 +81,21 @@ SEED_IT_SERVICES = {
     "capgemini", "accenture", "ibm", "hcl", "tech mahindra", "ltimindtree",
     "genpact", "ust", "indium", "hexaware", "mphasis", "birlasoft", "coforge",
     "zensar", "cyient", "virtusa", "persistent systems", "l&t technology services",
-    "kpit", "mindtree", "sonata software", "tata elxsi", "nihilent",
+    "l & t technology services", "kpit", "mindtree", "sonata software", "tata elxsi", "nihilent",
+}
+
+SEED_AI_STARTUPS = {
+    "coram ai", "weekday ai", "everseen", "revolte ai", "peryx ai", "startx med",
+    "coderound ai", "juicelabs ai", "wisdomai", "whatfix", "spearmint technologies",
+    "zenup health", "hasamex", "engradar", "deskbuddy", "newspace research",
+    "42 learn", "blackhawk network", "nxtpe", "freight tiger", "ixigo",
 }
 
 
 def normalize_company_key(company: str) -> str:
     """Normalize employer name for reliable caching and matching."""
-    text = re.sub(r"[^a-zA-Z0-9\s.]", " ", str(company or "").lower()).strip()
+    text = unicodedata.normalize("NFKD", str(company or "")).encode("ascii", "ignore").decode("utf-8").lower()
+    text = re.sub(r"[^a-z0-9\s.&]", " ", text).strip()
     text = re.sub(r"\s+", " ", text)
     for suffix in (" private limited", " pvt ltd", " pvt limited", " limited", " ltd", " inc", " llc"):
         if text.endswith(suffix):
@@ -293,8 +302,8 @@ Return ONLY a JSON object with this exact schema:
         except Exception as e:
             print(f"Notice: OpenRouter company classification fallback failed: {e}", file=sys.stderr)
 
-    # Deterministic default fallback
-    return "AI & Tech Startup", "Defaulted to tech startup based on tech job context."
+    # Deterministic default fallback: unverified rather than false promotion to Tier 1
+    return "Staffing Agency / Unverified", "Could not verify company identity; marked as unverified."
 
 
 def get_company_category(
@@ -307,11 +316,11 @@ def get_company_category(
 ) -> str:
     """Classify an employer into one of the 5 canonical categories.
     
-    1. Checks persistent SQLite cache (< 0.1ms).
-    2. Checks obvious agency markers / placeholders.
-    3. Checks curated anchors (Google, Swiggy, TCS).
-    4. If unknown and allow_network=True: AI + Web search resolution.
-    5. Caches the result in SQLite.
+    1. Checks obvious agency markers / placeholders.
+    2. Checks curated anchors (Google, Swiggy, TCS, AT&T) BEFORE cache.
+    3. Checks persistent SQLite cache (< 0.1ms).
+    4. If unknown and allow_network=False: returns "Staffing Agency / Unverified".
+    5. If unknown and allow_network=True: AI + Web search resolution.
     """
     raw_name = (company or "").strip()
     norm = normalize_company_key(raw_name)
@@ -322,12 +331,7 @@ def get_company_category(
     if any(marker in norm for marker in AGENCY_MARKERS):
         return "Staffing Agency / Unverified"
 
-    # Check cache
-    cached = get_cached_classification(norm, conn)
-    if cached and cached.get("category") in CANONICAL_CATEGORIES:
-        return cached["category"]
-
-    # Check curated seed anchors for instant sub-millisecond return
+    # Curated seed anchors take precedence over cache (ensures code updates override stale DB entries)
     for name in sorted(SEED_BIG_TECH_MNC, key=len, reverse=True):
         if re.search(rf"\b{re.escape(name)}\b", norm, re.I):
             cat = "Big Tech & Global MNC"
@@ -346,9 +350,20 @@ def get_company_category(
             save_classification(norm, raw_name, cat, "high", "seed", f"Matched IT services anchor: {name}", conn)
             return cat
 
-    # If network is not allowed (e.g. strict offline unit tests), default to startup
+    for name in sorted(SEED_AI_STARTUPS, key=len, reverse=True):
+        if re.search(rf"\b{re.escape(name)}\b", norm, re.I):
+            cat = "AI & Tech Startup"
+            save_classification(norm, raw_name, cat, "high", "seed", f"Matched curated AI/tech startup anchor: {name}", conn)
+            return cat
+
+    # Check cache for previously verified AI/search classifications
+    cached = get_cached_classification(norm, conn)
+    if cached and cached.get("category") in CANONICAL_CATEGORIES:
+        return cached["category"]
+
+    # Unknown companies offline must be unverified/discovery-only, not falsely promoted to Tier 1
     if not allow_network:
-        return "AI & Tech Startup"
+        return "Staffing Agency / Unverified"
 
     # AI + Web Search Classification
     web_context = ""
