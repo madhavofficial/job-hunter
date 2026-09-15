@@ -155,14 +155,15 @@ def get_dashboard_data():
         j["quality"] = assess_listing_quality(j, tier)
         j["quality_passes"], j["quality_reason"] = quality_gate(j, tier, j["quality"])
         if not j["quality_passes"]:
-            continue
+            j["recommended"] = False
+        else:
+            j["recommended"] = bool(
+                (j.get("recommendation_status") == "recommended" and not tier.startswith("Tier 3"))
+                or (not tier.startswith("Tier 3")
+                    and (j.get("score") or 0) >= 80 and j["quality"]["description_score"] >= 80)
+            )
         role_fit = j.get("role_fit_score") or j.get("score") or 0
         j["score"], _ = weighted_match_score(role_fit, j["quality"])
-        j["recommended"] = bool(
-            (j.get("recommendation_status") == "recommended" and not tier.startswith("Tier 3"))
-            or (j["quality_passes"] and not tier.startswith("Tier 3")
-                and (j.get("score") or 0) >= 80 and j["quality"]["description_score"] >= 80)
-        )
         plat = map_platform(j["apply_url"], j.get("site", ""), j.get("company", ""))
         j["platform"] = plat
         j["status_portal_url"] = derive_status_portal_url(j["apply_url"], plat, j.get("company", ""), j.get("job_id", ""))

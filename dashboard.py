@@ -46,9 +46,9 @@ def generate_dashboard():
         tier = classify_company_tier(job["company"])
         job["tier"] = tier
         quality = assess_listing_quality(job, tier)
-        passes, _ = quality_gate(job, tier, quality)
-        if not passes:
-            continue
+        passes, reason = quality_gate(job, tier, quality)
+        job["quality_passes"] = passes
+        job["quality_reason"] = reason
         role_fit = job.get("role_fit_score") or job.get("score") or 0
         adjusted_score, _ = weighted_match_score(role_fit, quality)
         job["score"] = adjusted_score
