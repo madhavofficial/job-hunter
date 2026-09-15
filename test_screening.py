@@ -56,6 +56,29 @@ class ScreeningTests(unittest.TestCase):
         self.assertFalse(is_job_truly_remote({"title": "Data Engineer", "location": "TS, IN"}))
         self.assertFalse(is_job_truly_remote({"title": "Software Developer", "location": ""}))
 
+    def test_rejects_phd_title(self):
+        ok, reason = deterministic_hard_filter({"title": "Software Engineering PhD Intern, Summer 2027", "company": "Google"})
+        self.assertFalse(ok)
+        self.assertIn("phd", reason.lower())
+
+        ok, reason = deterministic_hard_filter({"title": "PhD Intern, AI ML in Wireless L1/L2", "company": "NVIDIA"})
+        self.assertFalse(ok)
+        self.assertIn("phd", reason.lower())
+
+    def test_rejects_mba_title(self):
+        ok, reason = deterministic_hard_filter({"title": "MBA Intern, Strategy & Operations", "company": "Amazon"})
+        self.assertFalse(ok)
+        self.assertIn("mba", reason.lower())
+
+    def test_rejects_phd_enrollment_requirement(self):
+        ok, reason = deterministic_hard_filter({
+            "title": "AI Research Intern",
+            "company": "DeepResearch",
+            "description": "Must be currently enrolled in a PhD program in Computer Science or AI."
+        })
+        self.assertFalse(ok)
+        self.assertIn("phd", reason.lower())
+
 
 if __name__ == "__main__":
     unittest.main()

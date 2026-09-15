@@ -85,6 +85,12 @@ def deterministic_hard_filter(job: dict) -> tuple[bool, str | None]:
         return False, "Company appears to be a staffing agency, consultancy, or unverified aggregator."
     if re.search(r"\b(?:senior|sr\.?|lead|principal|staff|manager|director|head)\b", title, re.I):
         return False, "Role title indicates senior/leadership experience beyond the candidate's internship level."
+    if re.search(r"\b(?:ph\.?d\.?|doctoral|doctorate|postdoc|postdoctoral)\b", title, re.I):
+        return False, "Role targets PhD/Doctoral candidates; candidate is an undergraduate B.Tech student."
+    if re.search(r"\b(?:enrolled in a ph\.?d|pursuing a ph\.?d|ph\.?d (?:candidate|student|degree) required|must be enrolled in a (?:ph\.?d|doctoral))\b", searchable, re.I):
+        return False, "Job explicitly requires enrollment in or completion of a PhD/Doctoral program."
+    if re.search(r"\b(?:mba intern(?:ship)?)\b", title, re.I):
+        return False, "Role targets MBA candidates; candidate is a B.Tech CSE student."
     if re.search(r"\b(?:[3-9]|[1-9][0-9])\s*\+?\s*(?:years?|yrs?)\b", searchable, re.I):
         return False, "Job explicitly requires at least three years of professional experience."
     if re.search(r"(?:2025|2026)\s*(?:batch|graduates?|pass[- ]?out)|(?:batch|graduates?|pass[- ]?out)\s*(?:of\s*)?(?:2025|2026)", searchable, re.I):
