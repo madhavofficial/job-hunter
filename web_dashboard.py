@@ -43,15 +43,38 @@ _apply_tasks_lock = threading.Lock()
 def _run_tailor_worker(tid: str, jid: str, job_row: dict):
     """Tailor materials and open the listing without changing application status."""
     try:
-        materials = tailor.tailor_materials(jid)
+        job_row = dict(job_row) if job_row is not None else {}
+        existing_pdf = job_row.get("tailored_resume_pdf_path")
+        if not existing_pdf:
+            try:
+                conn = db.get_db_connection()
+                cur = conn.cursor()
+                cur.execute("SELECT tailored_resume_path, tailored_resume_pdf_path FROM jobs WHERE job_id = ?", (jid,))
+                db_row = cur.fetchone()
+                conn.close()
+                if db_row and db_row["tailored_resume_pdf_path"]:
+                    existing_pdf = db_row["tailored_resume_pdf_path"]
+            except Exception:
+                pass
+
+        if existing_pdf and os.path.exists(existing_pdf):
+            resume_pdf_path = existing_pdf
+            resume_path = existing_pdf.replace(".pdf", ".md")
+            materials = (resume_path, resume_pdf_path)
+        else:
+            materials = tailor.tailor_materials(jid)
+
         if not materials:
             with _apply_tasks_lock:
                 _apply_tasks[tid] = {"status": "error", "result": None, "error": "Failed to tailor materials"}
             return
         resume_path, resume_pdf_path = materials[0], materials[1]
-        target_url = job_row["job_url_direct"] or job_row["job_url"]
+        target_url = job_row.get("job_url_direct") or job_row.get("job_url")
         if target_url:
-            webbrowser.open(target_url)
+            try:
+                webbrowser.open(target_url)
+            except Exception:
+                pass
         if resume_pdf_path and os.path.exists(resume_pdf_path) and sys.platform == "darwin":
             try:
                 subprocess.run(["open", "-R", resume_pdf_path], check=False)
@@ -65,8 +88,8 @@ def _run_tailor_worker(tid: str, jid: str, job_row: dict):
                     "resume_path": resume_path,
                     "resume_pdf_path": resume_pdf_path,
                     "url": target_url,
-                    "title": job_row["title"],
-                    "company": job_row["company"],
+                    "title": job_row.get("title", ""),
+                    "company": job_row.get("company", ""),
                 },
                 "error": None,
             }
@@ -1281,7 +1304,7 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
             <h1 class="text-2xl font-bold text-white">Tailoring Your Resume...</h1>
             <p class="text-slate-400 text-sm mt-1">Generating materials for <b>{job['title']}</b> at <b>{job['company']}</b></p>
         </div>
-        <p id="elapsed" class="text-slate-500 text-xs">Elapsed: 0s — this usually takes 20–60 seconds</p>
+        <p id="elapsed" class="text-slate-500 text-xs">Elapsed: 0s — this usually takes 10–30 seconds</p>
         <p id="errmsg" class="text-red-400 text-sm hidden"></p>
     </div>
     <script>
@@ -1289,11 +1312,25 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
         const start = Date.now();
         const timer = setInterval(() => {{
             const s = Math.round((Date.now() - start) / 1000);
-            document.getElementById('elapsed').textContent = `Elapsed: ${{s}}s — this usually takes 20–60 seconds`;
+            const el = document.getElementById('elapsed');
+            if (s > 90) {{
+                el.innerHTML = `Elapsed: ${{s}}s — <span class="text-amber-400">Taking longer than usual.</span> <a href="/" class="underline text-sky-400 hover:text-sky-300 ml-1">Return to Dashboard</a>`;
+            }} else {{
+                el.textContent = `Elapsed: ${{s}}s — this usually takes 10–30 seconds`;
+            }}
         }}, 1000);
 
         async function poll() {{
             try {{
+                const elapsedSec = Math.round((Date.now() - start) / 1000);
+                if (elapsedSec > 180) {{
+                    clearInterval(timer);
+                    document.getElementById('icon').textContent = '✕';
+                    document.getElementById('icon').className = 'w-16 h-16 bg-red-500/10 text-red-400 border border-red-500/20 rounded-full flex items-center justify-center mx-auto text-3xl';
+                    document.getElementById('errmsg').innerHTML = 'Tailoring timed out after 3 minutes.<br><a href="/" class="underline text-sky-400 hover:text-sky-300 mt-2 inline-block">Return to Dashboard</a>';
+                    document.getElementById('errmsg').classList.remove('hidden');
+                    return;
+                }}
                 const r = await fetch('/api/apply-status?task_id=' + encodeURIComponent(taskId));
                 if (r.status === 404) {{
                     clearInterval(timer);

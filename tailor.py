@@ -9,8 +9,8 @@ import github_portfolio
 
 
 PREFERRED_OPENROUTER_MODELS = (
-    "nvidia/nemotron-3-ultra-550b-a55b:free",
-    "qwen/qwen3-coder:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "nvidia/nemotron-3.5-lightning:free",
     "openrouter/free",
 )
 
@@ -356,73 +356,72 @@ Please output the COMPLETE tailored resume in Markdown.
         # Generate Resume
         tailored_resume = None
 
-        # 1. Primary: Try OpenRouter in explicit capability order.
-        openrouter_key = os.getenv("OPENROUTER_API_KEY")
-        if openrouter_key:
-            from openai import OpenAI
-            or_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=openrouter_key, timeout=120)
-            configured_openrouter_model = os.getenv("OPENROUTER_MODEL")
-            openrouter_models = ([configured_openrouter_model] if configured_openrouter_model else list(PREFERRED_OPENROUTER_MODELS))
-            for openrouter_model in openrouter_models:
+        # 1. Primary: Groq Multi-Key & Model Cluster
+        candidate_models = [model_name] + [m for m in config.get_fallback_models() if m != model_name]
+        print("-> Generating tailored resume via Groq cluster...")
+        for active_model in candidate_models:
+            retries = 0
+            max_retries = max(1, config.key_manager.get_num_keys())
+            while retries < max_retries:
                 try:
-                    print(f"-> Trying OpenRouter model: {openrouter_model}")
-                    or_resp = or_client.chat.completions.create(
-                        model=openrouter_model,
+                    res_response = client.chat.completions.create(
+                        model=active_model,
                         messages=[{"role": "user", "content": resume_prompt}],
                         temperature=0.2,
-                        timeout=120,
+                        timeout=60,
                     )
-                    if or_resp and or_resp.choices and or_resp.choices[0].message:
-                        tailored_resume = or_resp.choices[0].message.content
-                        break
+                    tailored_resume = res_response.choices[0].message.content
+                    break
                 except Exception as e:
-                    print(f"Warning: OpenRouter model {openrouter_model} failed: {e}", file=sys.stderr)
-            if not tailored_resume:
-                print("Warning: all OpenRouter models failed. Falling back to Groq cluster...", file=sys.stderr)
+                    err_str = str(e).lower()
+                    if "expired_api_key" in err_str or ("401" in err_str and "invalid api key" in err_str):
+                        print(f"Invalid API key encountered. Dropping key and cycling...")
+                        client = config.cycle_groq_client(remove_current=True)
+                        retries += 1
+                        continue
+                    if any(term in err_str for term in ["request too large", "413", "tokens per minute", "tpm", "limit 8000", "context_length_exceeded", "request_too_large"]):
+                        print(f"Prompt exceeded TPM/context limit for {active_model}. Falling back to next model...")
+                        break
+                    if any(term in err_str for term in ["rate_limit", "429", "limit_exceeded", "tokens per day"]):
+                        print(f"Rate limit hit on {active_model} during resume tailoring: {e}")
+                        retries += 1
+                        if retries < max_retries:
+                            client = config.cycle_groq_client()
+                            continue
+                        else:
+                            print(f"-> All keys exhausted for {active_model}. Falling back to next model...")
+                            break
+                    print(f"Error on {active_model}: {e}. Falling back to next model...")
+                    break
+            if tailored_resume:
+                break
 
-        # 2. Fallback: Groq Multi-Key & Model Cluster
+        # 2. Fallback: OpenRouter (used only if Groq cluster failed or was exhausted)
         if not tailored_resume:
-            candidate_models = [model_name] + [m for m in config.get_fallback_models() if m != model_name]
-            print("-> Generating tailored resume via Groq cluster...")
-            for active_model in candidate_models:
-                retries = 0
-                max_retries = max(1, config.key_manager.get_num_keys())
-                while retries < max_retries:
+            print("Warning: Groq cluster exhausted. Falling back to OpenRouter...", file=sys.stderr)
+            openrouter_key = os.getenv("OPENROUTER_API_KEY")
+            if openrouter_key:
+                from openai import OpenAI
+                or_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=openrouter_key, timeout=35)
+                configured_openrouter_model = os.getenv("OPENROUTER_MODEL")
+                openrouter_models = ([configured_openrouter_model] if configured_openrouter_model else list(PREFERRED_OPENROUTER_MODELS))
+                for openrouter_model in openrouter_models:
                     try:
-                        res_response = client.chat.completions.create(
-                            model=active_model,
+                        print(f"-> Trying OpenRouter fallback model: {openrouter_model}")
+                        or_resp = or_client.chat.completions.create(
+                            model=openrouter_model,
                             messages=[{"role": "user", "content": resume_prompt}],
                             temperature=0.2,
-                            timeout=120,
+                            timeout=35,
                         )
-                        tailored_resume = res_response.choices[0].message.content
-                        break
-                    except Exception as e:
-                        err_str = str(e).lower()
-                        if "expired_api_key" in err_str or ("401" in err_str and "invalid api key" in err_str):
-                            print(f"Invalid API key encountered. Dropping key and cycling...")
-                            client = config.cycle_groq_client(remove_current=True)
-                            retries += 1
-                            continue
-                        if any(term in err_str for term in ["request too large", "413", "tokens per minute", "tpm", "limit 8000", "context_length_exceeded", "request_too_large"]):
-                            print(f"Prompt exceeded TPM/context limit for {active_model}. Falling back to next model...")
+                        if or_resp and or_resp.choices and or_resp.choices[0].message:
+                            tailored_resume = or_resp.choices[0].message.content
                             break
-                        if any(term in err_str for term in ["rate_limit", "429", "limit_exceeded", "tokens per day"]):
-                            print(f"Rate limit hit on {active_model} during resume tailoring: {e}")
-                            retries += 1
-                            if retries < max_retries:
-                                client = config.cycle_groq_client()
-                                continue
-                            else:
-                                print(f"-> All keys exhausted for {active_model}. Falling back to next model...")
-                                break
-                        print(f"Error on {active_model}: {e}. Falling back to next model...")
-                        break
-                if tailored_resume:
-                    break
-                
+                    except Exception as e:
+                        print(f"Warning: OpenRouter fallback model {openrouter_model} failed: {e}", file=sys.stderr)
+
         if not tailored_resume:
-            raise ValueError("Failed to generate tailored resume after trying all keys and fallback models.")
+            raise ValueError("Failed to generate tailored resume after trying Groq cluster and OpenRouter fallbacks.")
 
         tailored_resume = ensure_selected_project_github_links(tailored_resume, portfolio)
         tailored_resume = ensure_career_objective_target(tailored_resume, company, title)
