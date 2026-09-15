@@ -18,25 +18,14 @@ from quality import assess_listing_quality, quality_gate, weighted_match_score
 
 
 def auto_archive_stale_jobs(days: int = 5):
-    """Move unapplied shortlisted jobs older than `days` to rejected to keep shortlist fresh."""
-    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
-    conn = db.get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-    UPDATE jobs
-    SET status = 'rejected'
-    WHERE status = 'shortlisted' AND (created_at < ? OR created_at IS NULL)
-    """, (cutoff,))
-    archived_count = cursor.rowcount
-    conn.commit()
-    conn.close()
-    return archived_count
+    """Preserve unapplied shortlisted jobs. Date-based buckets handle freshness separation cleanly."""
+    return 0
 
 
 def generate_dashboard():
     db.init_db()
 
-    # 1. Auto-archive older backlog
+    # 1. Backlog retention
     archived_stale = auto_archive_stale_jobs(days=5)
 
     # 2. Retrieve active shortlisted jobs
