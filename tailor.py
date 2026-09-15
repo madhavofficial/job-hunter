@@ -43,6 +43,29 @@ def ensure_selected_project_github_links(markdown: str, portfolio: list[dict]) -
     if not projects:
         return markdown
 
+    KNOWN_PROJECT_URLS = {
+        "neuro": "https://github.com/madhavofficial/neuro_capstone",
+        "symbolic": "https://github.com/madhavofficial/neuro_capstone",
+        "pathogenicity": "https://github.com/madhavofficial/neuro_capstone",
+        "sketch": "https://github.com/madhavofficial/Drawing-A-New-Way-To-Search-ML-",
+        "drawing": "https://github.com/madhavofficial/Drawing-A-New-Way-To-Search-ML-",
+        "careertime": "https://github.com/madhavofficial/CareerTime",
+        "career": "https://github.com/madhavofficial/CareerTime",
+        "glas": "https://github.com/madhavofficial/evidence-grounded-clinical-literature-synthesis",
+        "clinical": "https://github.com/madhavofficial/evidence-grounded-clinical-literature-synthesis",
+        "kafka": "https://github.com/varunnhn/153_Project3_BD",
+        "stream": "https://github.com/varunnhn/153_Project3_BD",
+        "153_project3_bd": "https://github.com/varunnhn/153_Project3_BD",
+        "bike": "https://github.com/madhavofficial/Forecasting-Bike-Rental-Demand",
+        "rental": "https://github.com/madhavofficial/Forecasting-Bike-Rental-Demand",
+        "trader": "https://github.com/madhavofficial/Ultimate-Trader-Dashboard-GitHub-Repository-Structure",
+        "trading": "https://github.com/madhavofficial/Ultimate-Trader-Dashboard-GitHub-Repository-Structure",
+        "watchlist": "https://github.com/madhavofficial/Ultimate-Trader-Dashboard-GitHub-Repository-Structure",
+        "hunter": "https://github.com/madhavofficial/job-hunter",
+        "caregiver": "https://github.com/madhavofficial/Caregiver-Coordination-Hub",
+        "arena": "https://github.com/madhavofficial/oa-arena-windows",
+    }
+
     lines = markdown.splitlines()
     output = []
     in_selected_projects = False
@@ -60,6 +83,13 @@ def ensure_selected_project_github_links(markdown: str, portfolio: list[dict]) -
                     if name and (name in heading_name or heading_name in name) and len(name) > matched_length:
                         matched_url = url
                         matched_length = len(name)
+
+            if not matched_url:
+                tokens = re.findall(r"[a-z0-9]{3,}", re.sub(r"\([^)]*\)", "", line).lower())
+                for t in tokens:
+                    if t in KNOWN_PROJECT_URLS:
+                        matched_url = KNOWN_PROJECT_URLS[t]
+                        break
 
             if matched_url:
                 next_heading = len(lines)
@@ -301,8 +331,10 @@ Instructions & Rules:
 4. ZERO FABRICATION & NO LENGTH RESTRICTIONS: Do NOT invent non-existent projects, companies, durations, graduation date (May 2027), or credentials. Rely strictly on facts in the candidate's resume and GitHub portfolio. Do NOT include GPA on the resume. There is NO artificial 1-page restriction — prioritize thorough understanding, architectural depth, and complete explanations over resume length. It is much more important that the reader understands the project than the size of the resume.
 5. FORMATTING & TYPOGRAPHY:
    - Heavily utilize markdown bolding (**bold**) for all key metrics, numbers, core technologies, and frameworks across every bullet point (e.g. **8,700** tickets, **70%** coverage, **40%** latency reduction, **TypeScript**, **PostgreSQL**, **Prisma ORM**, **Docker**).
-   - In the `## Career Objective` section, explicitly name the exact target company (**{company}**) and position (**{title}**) for this tailored resume.
-   - Format project titles as: `### Project Name (Core Technologies)` followed immediately by `*GitHub: <url>*`.
+   - MANDATORY GITHUB REPOSITORY LINK: Every project under `## Selected Projects` MUST have its verified repository URL on the line immediately beneath the title:
+     `### Project Name (Core Technologies)`
+     `*GitHub: https://github.com/...*`
+     NEVER omit the `*GitHub: <url>*` line.
    - Output the COMPLETE tailored resume in clean, professional Markdown.
 
 Candidate Base Resume:
