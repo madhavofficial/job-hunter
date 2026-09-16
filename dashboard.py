@@ -68,10 +68,10 @@ def generate_dashboard():
 
     now_str = datetime.now().strftime("%d %b %Y, %I:%M %p")
 
-    big_tech_count = len([j for j in shortlisted if "Big Tech" in classify_company_tier(j["company"])])
-    unicorn_count = len([j for j in shortlisted if "Unicorn" in classify_company_tier(j["company"])])
-    startup_count = len([j for j in shortlisted if "Startup" in classify_company_tier(j["company"])])
-    it_services_count = len([j for j in shortlisted if "IT Services" in classify_company_tier(j["company"])])
+    big_tech_count = len([j for j in shortlisted if "Big Tech" in j.get("tier", "")])
+    unicorn_count = len([j for j in shortlisted if "Unicorn" in j.get("tier", "")])
+    startup_count = len([j for j in shortlisted if "Startup" in j.get("tier", "")])
+    it_services_count = len([j for j in shortlisted if "IT Services" in j.get("tier", "")])
 
     md_content = f"""# Job Hunter Dashboard — {now_str}
 
