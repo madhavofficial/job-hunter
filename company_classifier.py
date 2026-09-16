@@ -11,6 +11,7 @@ Classifies employers into 5 distinct categories:
 import json
 import os
 import re
+import logging
 import sqlite3
 import sys
 import unicodedata
@@ -22,6 +23,8 @@ from bs4 import BeautifulSoup
 
 import config
 import db
+
+logger = logging.getLogger(__name__)
 
 
 CANONICAL_CATEGORIES = (
@@ -172,6 +175,8 @@ def save_classification(
             updated_at = CURRENT_TIMESTAMP
         """, (company_norm, company_display, category, confidence, source, reasoning))
         conn.commit()
+    except sqlite3.OperationalError as e:
+        logger.warning(f"Could not persist company classification for {company_display}: {e}")
     finally:
         if close_conn:
             conn.close()

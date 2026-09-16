@@ -194,6 +194,22 @@ class TestWebDashboard(unittest.TestCase):
         top_dash_ids = [j["job_id"] for j in rec_jobs[:10]]
         self.assertEqual(top_db_ids, top_dash_ids)
 
+        # 4. Underlying Decision Invariants: Every recommended job MUST satisfy:
+        # - not Tier 3 (unverified)
+        # - score >= 80
+        # - recommendation_status == "recommended"
+        for j in rec_jobs:
+            self.assertEqual(j["recommendation_status"], "recommended")
+            self.assertTrue(j["recommended"])
+            self.assertGreaterEqual(j["score"], 80)
+            self.assertFalse(j["tier"].startswith("Tier 3"), f"{j['company']} is Tier 3 but was recommended")
+
+        # 5. Underlying Decision Invariants: No discovery job may be marked recommended
+        for j in dash_data["discovery_jobs"]:
+            self.assertNotEqual(j.get("recommendation_status"), "recommended")
+            self.assertFalse(j.get("recommended", False))
+
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -193,14 +193,7 @@ def get_dashboard_data():
         j["is_remote_verified"] = is_job_truly_remote(j)
         j["quality"] = assess_listing_quality(j, tier)
         j["quality_passes"], j["quality_reason"] = quality_gate(j, tier, j["quality"])
-        if not j["quality_passes"]:
-            j["recommended"] = False
-        else:
-            j["recommended"] = bool(
-                (j.get("recommendation_status") == "recommended" and not tier.startswith("Tier 3"))
-                or (not tier.startswith("Tier 3")
-                    and (j.get("score") or 0) >= 80 and j["quality"]["description_score"] >= 80)
-            )
+        j["recommended"] = (j.get("recommendation_status") == "recommended")
         role_fit = j.get("role_fit_score") or j.get("score") or 0
         j["score"], _ = weighted_match_score(role_fit, j["quality"])
         plat = map_platform(j["apply_url"], j.get("site", ""), j.get("company", ""))

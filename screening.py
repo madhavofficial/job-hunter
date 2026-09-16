@@ -50,11 +50,13 @@ AGENCY_MARKERS = (
 ENTERPRISE_PATTERNS = tuple(re.compile(rf"\b{re.escape(name)}\b", re.I) for name in sorted(KNOWN_ENTERPRISES, key=len, reverse=True))
 
 
+import sqlite3
+from typing import Optional
 import company_classifier
 
 
-def classify_company_tier(company: str) -> str:
-    category = company_classifier.get_company_category(company, allow_network=False)
+def classify_company_tier(company: str, conn: Optional[sqlite3.Connection] = None) -> str:
+    category = company_classifier.get_company_category(company, conn=conn, allow_network=False)
     tier_map = {
         "Big Tech & Global MNC": "Tier 1: Big Tech & Global MNC",
         "Unicorn / Tech Giant": "Tier 1: Unicorn / Tech Giant",

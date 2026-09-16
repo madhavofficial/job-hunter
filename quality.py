@@ -214,3 +214,22 @@ def weighted_match_score(role_fit: int, quality: dict) -> tuple[int, dict]:
 
 def components_json(components: dict) -> str:
     return json.dumps(components, sort_keys=True)
+
+
+def is_recommended_role(quality_passes: bool, company_tier: str, final_score: int, quality: dict) -> bool:
+    """Canonical single-source-of-truth rule determining whether a job qualifies as a Top Match recommendation.
+
+    A job is recommended if and only if:
+    1. It passes the quality gate (no irrelevant titles, known employer, sufficient role evidence).
+    2. The employer is verified (Tier 1 Big Tech/Unicorn/Startup or Tier 2 Global Enterprise/IT Services).
+       Tier 3 (Staffing Agency / Unverified) is strictly excluded from Top Matches.
+    3. The adjusted weighted match score is >= 80.
+    4. The job description evidence is full/comprehensive (description_score >= 80, >= 700 chars).
+    """
+    return bool(
+        quality_passes
+        and not company_tier.startswith("Tier 3")
+        and final_score >= 80
+        and quality.get("description_score", 0) >= 80
+    )
+

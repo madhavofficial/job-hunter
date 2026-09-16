@@ -41,10 +41,7 @@ def generate_dashboard():
         role_fit = job.get("role_fit_score") or job.get("score") or 0
         adjusted_score, _ = weighted_match_score(role_fit, quality)
         job["score"] = adjusted_score
-        job["recommended"] = bool(
-            passes and not tier.startswith("Tier 3")
-            and (job.get("score") or 0) >= 80 and quality["description_score"] >= 80
-        )
+        job["recommended"] = (job.get("recommendation_status") == "recommended")
     shortlisted.sort(key=lambda j: (j.get("score") or 0, j.get("created_at") or ""), reverse=True)
     applied = db.get_applied_jobs()
 

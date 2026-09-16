@@ -7,7 +7,8 @@ from quality import canonical_company, canonical_title
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "jobs.db")
 
 def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn.execute("PRAGMA journal_mode=WAL;")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -241,7 +242,7 @@ def sync_shortlisted_rankings(conn: sqlite3.Connection | None = None) -> int:
     Guarantees that database rankings match the evidence-based quality pipeline and company tiers.
     """
     from screening import classify_company_tier
-    from quality import assess_listing_quality, quality_gate, weighted_match_score
+    from quality import assess_listing_quality, quality_gate, weighted_match_score, is_recommended_role
 
     close_conn = False
     if conn is None:
@@ -257,7 +258,7 @@ def sync_shortlisted_rankings(conn: sqlite3.Connection | None = None) -> int:
         updates = []
         for j in rows:
             company = j.get("company", "")
-            tier = classify_company_tier(company)
+            tier = classify_company_tier(company, conn=conn)
             quality = assess_listing_quality(j, tier)
             passes, _ = quality_gate(j, tier, quality)
             role_fit = j.get("role_fit_score") or j.get("score") or 0
@@ -265,11 +266,7 @@ def sync_shortlisted_rankings(conn: sqlite3.Connection | None = None) -> int:
                 role_fit = j.get("score", 0)
             adj_score, components = weighted_match_score(role_fit, quality)
 
-            is_rec = bool(
-                passes and not tier.startswith("Tier 3")
-                and adj_score >= 80 and quality.get("description_score", 0) >= 80
-            )
-            rec_status = "recommended" if is_rec else "discovered"
+            rec_status = "recommended" if is_recommended_role(passes, tier, adj_score, quality) else "discovered"
 
             if (
                 j.get("score") != adj_score

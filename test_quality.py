@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from quality import (
     assess_listing_quality,
     canonical_job_key,
+    is_recommended_role,
     quality_gate,
     weighted_match_score,
 )
@@ -95,6 +96,71 @@ class ListingQualityTests(unittest.TestCase):
         job = self.make_job(created_at=(datetime.now() - timedelta(days=10)).strftime("%Y-%m-%d %H:%M:%S"))
         quality = assess_listing_quality(job, classify_company_tier(job["company"]))
         self.assertLess(quality["freshness_score"], 50)
+
+    def test_recommendation_decision_boundaries(self):
+        # 1. Negative Control: Tier 3 (Unverified) must NEVER be recommended, even with 100% role fit & full JD
+        unverified_job = self.make_job(company="Acme Robotics")
+        tier3 = classify_company_tier(unverified_job["company"])
+        self.assertTrue(tier3.startswith("Tier 3"))
+        quality = assess_listing_quality(unverified_job, tier3)
+        passes, _ = quality_gate(unverified_job, tier3, quality)
+        score, _ = weighted_match_score(100, quality)
+        self.assertFalse(is_recommended_role(passes, tier3, score, quality))
+
+        # 2. Negative Control: Truncated description (< 700 chars / description_score < 80) must NEVER be recommended
+        truncated_job = self.make_job(company="Google", description="Short job description.")
+        tier1 = classify_company_tier(truncated_job["company"])
+        self.assertTrue(tier1.startswith("Tier 1"))
+        quality = assess_listing_quality(truncated_job, tier1)
+        passes, _ = quality_gate(truncated_job, tier1, quality)
+        score, _ = weighted_match_score(100, quality)
+        self.assertLess(quality["description_score"], 80)
+        self.assertFalse(is_recommended_role(passes, tier1, score, quality))
+
+        # 3. Negative Control: Low compatibility score (< 80) must NEVER be recommended
+        low_score_job = self.make_job(company="Google")
+        tier1 = classify_company_tier(low_score_job["company"])
+        quality = assess_listing_quality(low_score_job, tier1)
+        passes, _ = quality_gate(low_score_job, tier1, quality)
+        score, _ = weighted_match_score(50, quality)
+        self.assertLess(score, 80)
+        self.assertFalse(is_recommended_role(passes, tier1, score, quality))
+
+        # 4. Negative Control: Quality Gate Failure (irrelevant title) must NEVER be recommended
+        irrelevant_job = self.make_job(company="Google", title="Marketing Manager")
+        tier1 = classify_company_tier(irrelevant_job["company"])
+        quality = assess_listing_quality(irrelevant_job, tier1)
+        passes, _ = quality_gate(irrelevant_job, tier1, quality)
+        self.assertFalse(passes)
+        self.assertFalse(is_recommended_role(passes, tier1, 95, quality))
+
+        # 5. Positive Control: Tier 1 Big Tech + Full Description + Score >= 80 -> Recommended
+        good_big_tech = self.make_job(company="Google")
+        tier1 = classify_company_tier(good_big_tech["company"])
+        quality = assess_listing_quality(good_big_tech, tier1)
+        passes, _ = quality_gate(good_big_tech, tier1, quality)
+        score, _ = weighted_match_score(90, quality)
+        self.assertTrue(passes)
+        self.assertGreaterEqual(score, 80)
+        self.assertGreaterEqual(quality["description_score"], 80)
+        self.assertTrue(is_recommended_role(passes, tier1, score, quality))
+
+        # 6. Positive Control: Tier 1 AI Startup + Full Description + Score >= 80 -> Recommended
+        good_startup = self.make_job(company="Coram AI")
+        tier1 = classify_company_tier(good_startup["company"])
+        quality = assess_listing_quality(good_startup, tier1)
+        passes, _ = quality_gate(good_startup, tier1, quality)
+        score, _ = weighted_match_score(90, quality)
+        self.assertTrue(is_recommended_role(passes, tier1, score, quality))
+
+        # 7. Positive Control: Tier 2 Global IT Services + Full Description + Score >= 80 -> Recommended
+        good_it_services = self.make_job(company="Infosys")
+        tier2 = classify_company_tier(good_it_services["company"])
+        self.assertTrue(tier2.startswith("Tier 2"))
+        quality = assess_listing_quality(good_it_services, tier2)
+        passes, _ = quality_gate(good_it_services, tier2, quality)
+        score, _ = weighted_match_score(90, quality)
+        self.assertTrue(is_recommended_role(passes, tier2, score, quality))
 
 
 if __name__ == "__main__":

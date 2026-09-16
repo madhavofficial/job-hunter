@@ -6,7 +6,7 @@ from groq import Groq
 import db
 import config
 from screening import classify_company_tier, deterministic_hard_filter
-from quality import assess_listing_quality, quality_gate, weighted_match_score
+from quality import assess_listing_quality, is_recommended_role, quality_gate, weighted_match_score
 
 def load_resume():
     resume_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resume.md")
@@ -319,9 +319,7 @@ Description:
                 status = "shortlisted"
                 recommendation_status = (
                     "recommended"
-                    if not company_tier.startswith("Tier 3")
-                    and final_score >= 80
-                    and quality.get("description_score", 0) >= 80
+                    if is_recommended_role(quality_passes, company_tier, final_score, quality)
                     else "discovered"
                 )
                 score = final_score
