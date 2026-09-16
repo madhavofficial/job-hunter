@@ -8,6 +8,7 @@ import os
 import re
 import sys
 import time
+import urllib.parse
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 import requests
@@ -258,14 +259,33 @@ def derive_status_portal_url(url: str, platform: str = "", company: str = "", jo
 
 
 def normalize_job_url(url: str) -> str:
-    """Normalize job URL for robust cross-system matching (strip params, trailing slash, www)."""
+    """Normalize job URL for robust cross-system matching."""
     if not url:
         return ""
-    u = url.strip()
-    u = re.sub(r"[?#].*$", "", u)
-    u = u.rstrip("/")
-    u = re.sub(r"^https?://(www\.)?", "https://", u, flags=re.IGNORECASE)
-    return u.lower()
+    try:
+        parsed = urllib.parse.urlparse(url.strip())
+        query_params = urllib.parse.parse_qs(parsed.query)
+        # Unwrap redirect URLs if they embed the actual target
+        if "recruitics.com" in parsed.netloc and "rx_url" in query_params:
+            return normalize_job_url(query_params["rx_url"][0])
+
+        keep_params = {}
+        for k, v in query_params.items():
+            k_lower = k.lower()
+            if k_lower in ("jk", "id", "jobid", "requisitionid", "req_id"):
+                keep_params[k] = v[0]
+            elif not (
+                k_lower.startswith("utm_") or k_lower.startswith("rx_")
+                or k_lower in ("refid", "trackingid", "ref", "trk", "midtoken", "trkinfo", "originalsubdomain", "fbclid", "gclid")
+            ):
+                pass
+
+        netloc = re.sub(r"^www\.", "", parsed.netloc.lower())
+        path = parsed.path.rstrip("/").lower()
+        new_query = urllib.parse.urlencode(sorted(keep_params.items()))
+        return urllib.parse.urlunparse(("https", netloc, path, "", new_query, ""))
+    except Exception:
+        return url.strip().lower()
 
 
 def extract_linkedin_id(url: str) -> Optional[str]:

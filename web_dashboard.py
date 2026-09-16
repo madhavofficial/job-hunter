@@ -498,10 +498,37 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                     <button id="modal-reveal-btn" onclick="revealInFinder(currentModalPdfPath)" class="hidden px-3 py-2 text-xs font-medium bg-[#181b28] hover:bg-[#222638] text-slate-300 rounded-xl border border-[#24283b] flex items-center gap-1.5 transition" title="Reveal PDF in Finder & copy path">
                         <i class="fa-regular fa-folder-open text-amber-400"></i> Finder
                     </button>
+                    <button id="modal-mark-applied-btn" class="px-4 py-2 text-xs font-semibold text-emerald-400 hover:text-white bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-xl transition flex items-center gap-1.5" title="Mark as applied and sync to Notion">
+                        <i class="fa-solid fa-check"></i> Mark Applied
+                    </button>
                     <button id="modal-apply-btn" class="px-5 py-2 text-xs font-bold bg-gradient-to-r from-sky-500 via-indigo-500 to-teal-500 hover:from-sky-400 hover:to-teal-400 text-white rounded-xl shadow-md shadow-sky-500/20 flex items-center gap-1.5 transition">
                         <i class="fa-solid fa-bolt text-yellow-300"></i> 1-Click Tailor & Apply
                     </button>
                 </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Apply Outcome Confirmation Modal -->
+    <dialog id="apply-outcome-modal" class="bg-[#12141d] text-slate-100 border border-[#24283b] rounded-2xl p-6 w-full max-w-md shadow-2xl shadow-black/80 m-auto backdrop:bg-black/70">
+        <div class="text-center space-y-4">
+            <div class="w-14 h-14 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full flex items-center justify-center mx-auto text-2xl">
+                <i class="fa-solid fa-paper-plane"></i>
+            </div>
+            <div>
+                <h3 class="text-lg font-bold text-white" id="outcome-modal-title">Application Submitted?</h3>
+                <p id="outcome-modal-subtitle" class="text-xs text-slate-400 mt-1">Target listing opened & resume ready. Did you submit the application?</p>
+            </div>
+            <div class="flex flex-col gap-2 pt-2">
+                <button id="outcome-applied-btn" class="w-full py-2.5 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-emerald-500/20 transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-check"></i> Yes, Mark as Applied (Sync to Notion)
+                </button>
+                <button id="outcome-skip-btn" class="w-full py-2 px-4 bg-[#181b28] hover:bg-[#222638] text-slate-300 font-medium text-xs rounded-xl border border-[#24283b] transition">
+                    Keep in Shortlist (Decide Later)
+                </button>
+                <button id="outcome-expired-btn" class="w-full py-1.5 px-4 text-slate-500 hover:text-rose-400 text-xs transition">
+                    Job is Expired / Closed
+                </button>
             </div>
         </div>
     </dialog>
@@ -880,6 +907,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                                 ${hasPdf ? `
                                 <button onclick="revealInFinder('${escapeHtml(j.tailored_resume_pdf_path)}')" class="px-2.5 py-1.5 text-xs font-medium bg-[#181b28] hover:bg-[#222638] text-slate-300 hover:text-white rounded-xl border border-[#24283b] flex items-center gap-1 transition" title="Reveal PDF in Finder & copy path"><i class="fa-regular fa-folder-open text-amber-400"></i></button>
                                 <a href="/pdf?path=${encodeURIComponent(j.tailored_resume_pdf_path)}" target="_blank" class="px-3 py-1.5 text-xs font-medium bg-[#181b28] hover:bg-[#222638] text-sky-400 rounded-xl border border-[#24283b] flex items-center gap-1.5 transition" title="Open Tailored Resume PDF"><i class="fa-solid fa-file-pdf"></i> PDF</a>` : ''}
+                                <button onclick="markAppliedDirect('${j.job_id}', this)" class="px-3 py-1.5 text-xs font-semibold text-emerald-400 hover:text-white bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-xl transition flex items-center gap-1.5 shadow-sm" title="Mark as applied & sync to Notion">
+                                    <i class="fa-solid fa-check"></i> Applied
+                                </button>
                                 <button onclick="applyJob('${j.job_id}', this)" class="px-4 py-1.5 text-xs font-bold bg-gradient-to-r from-sky-500 via-indigo-500 to-teal-500 hover:from-sky-400 hover:to-teal-400 text-white rounded-xl shadow-md shadow-sky-500/20 active:scale-95 transition flex items-center gap-1.5">
                                     <i class="fa-solid fa-bolt text-yellow-300"></i> 1-Click Tailor & Apply
                                 </button>
@@ -1015,6 +1045,16 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             const dismissBtn = document.getElementById('modal-dismiss-btn');
             dismissBtn.onclick = () => dismissJob(job.job_id);
 
+            const markAppliedBtn = document.getElementById('modal-mark-applied-btn');
+            if (markAppliedBtn) {
+                if (job.status === 'applied') {
+                    markAppliedBtn.classList.add('hidden');
+                } else {
+                    markAppliedBtn.classList.remove('hidden');
+                    markAppliedBtn.onclick = () => markAppliedDirect(job.job_id, markAppliedBtn);
+                }
+            }
+
             const applyBtn = document.getElementById('modal-apply-btn');
             applyBtn.onclick = () => applyJob(job.job_id, applyBtn);
 
@@ -1095,6 +1135,68 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             }
         }
 
+        function askApplicationOutcome(taskId, jobId, jobTitle, company) {
+            return new Promise((resolve) => {
+                const modal = document.getElementById('apply-outcome-modal');
+                const titleEl = document.getElementById('outcome-modal-title');
+                const subEl = document.getElementById('outcome-modal-subtitle');
+                if (titleEl) titleEl.textContent = 'Application Submitted?';
+                if (subEl) subEl.textContent = `${jobTitle || 'Role'} at ${company || 'Company'}: did you submit your application?`;
+
+                const appliedBtn = document.getElementById('outcome-applied-btn');
+                const skipBtn = document.getElementById('outcome-skip-btn');
+                const expiredBtn = document.getElementById('outcome-expired-btn');
+
+                const cleanup = (outcome) => {
+                    appliedBtn.onclick = null;
+                    skipBtn.onclick = null;
+                    expiredBtn.onclick = null;
+                    if (modal && modal.open) modal.close();
+                    resolve(outcome);
+                };
+
+                appliedBtn.onclick = () => cleanup('applied');
+                skipBtn.onclick = () => cleanup('skipped');
+                expiredBtn.onclick = () => cleanup('expired');
+
+                modal.showModal();
+            });
+        }
+
+        async function markAppliedDirect(jobId, btn) {
+            if (!confirm('Mark this job as Applied and sync to Notion tracker?')) return;
+            const originalText = btn ? btn.innerHTML : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+            }
+            try {
+                const res = await fetch('/api/mark-applied', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ job_id: jobId })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    showToast('✓ Job marked as applied & syncing to Notion!');
+                    fetchJobs();
+                    closeDetailsModal();
+                } else {
+                    showToast('Failed to mark applied: ' + (data.error || 'Unknown error'), true);
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = originalText;
+                    }
+                }
+            } catch (e) {
+                showToast('Error marking applied: ' + e.message, true);
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                }
+            }
+        }
+
         async function applyJob(jobId, btn) {
             const originalText = btn.innerHTML;
             btn.disabled = true;
@@ -1154,8 +1256,11 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                             } catch (_) {}
                             window.open('/pdf?path=' + encodeURIComponent(pollData.resume_pdf_path), '_blank');
                         }
-                        const answer = (window.prompt('Did you submit the application? [Y]es (mark as applied) / [S]kip / [E]xpired:') || 'S').trim().toUpperCase();
-                        const outcome = answer === 'Y' ? 'applied' : (answer === 'E' ? 'expired' : 'skipped');
+                        let jobInfo = null;
+                        if (rawData && rawData.all_shortlisted) {
+                            jobInfo = rawData.all_shortlisted.find(x => x.job_id === jobId);
+                        }
+                        const outcome = await askApplicationOutcome(taskId, jobId, jobInfo ? jobInfo.title : '', jobInfo ? jobInfo.company : '');
                         const confirmRes = await fetch('/api/confirm-application', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -1168,7 +1273,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                             btn.innerHTML = originalText;
                             return;
                         }
-                        showToast(outcome === 'applied' ? 'Marked as applied.' : outcome === 'expired' ? 'Marked as expired / rejected.' : 'Kept in shortlist.');
+                        showToast(outcome === 'applied' ? '✓ Marked as applied & syncing to Notion!' : outcome === 'expired' ? 'Marked as expired / rejected.' : 'Kept in shortlist.');
                         fetchJobs();
                         closeDetailsModal();
                         return;
@@ -1423,35 +1528,36 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
                     clearInterval(timer);
                     const pdfPath = d.resume_pdf_path || '';
                     const targetUrl = d.url || '';
-                    const answer = (window.prompt('Did you submit the application? [Y]es (mark as applied) / [S]kip / [E]xpired:') || 'S').trim().toUpperCase();
-                    const outcome = answer === 'Y' ? 'applied' : (answer === 'E' ? 'expired' : 'skipped');
-                    const confirmResponse = await fetch('/api/confirm-application', {{
-                        method: 'POST',
-                        headers: {{ 'Content-Type': 'application/json' }},
-                        body: JSON.stringify({{ task_id: taskId, job_id: {json.dumps(job_id)}, outcome }})
-                    }});
-                    const confirmation = await confirmResponse.json();
-                    if (!confirmResponse.ok) {{
-                        throw new Error(confirmation.error || 'Could not save application status');
-                    }}
-                    const statusLabel = outcome === 'applied' ? 'Marked as Applied' : outcome === 'expired' ? 'Marked as Expired / Rejected' : 'Kept as Shortlisted';
                     document.getElementById('icon').textContent = '✓';
                     document.getElementById('icon').className = 'w-16 h-16 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full flex items-center justify-center mx-auto text-3xl';
                     document.getElementById('card').innerHTML = `
                         <div class="w-16 h-16 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full flex items-center justify-center mx-auto text-3xl">✓</div>
                         <div>
-                            <h1 class="text-2xl font-bold text-white">Application Triggered!</h1>
+                            <h1 class="text-2xl font-bold text-white">Application Materials Ready!</h1>
                             <p class="text-slate-400 text-sm mt-1">Materials generated for <b>{job['title']}</b> at <b>{job['company']}</b></p>
                         </div>
                         <div class="bg-slate-950 p-4 rounded-xl text-left text-xs space-y-2 border border-slate-800 text-slate-300">
                             <div><b>Target URL Opened:</b> <a href="${{targetUrl}}" target="_blank" class="text-sky-400 underline truncate block">${{targetUrl || '(none)'}}</a></div>
-                            <div><b>Status:</b> <span class="text-amber-400 font-semibold">${{statusLabel}}</span></div>
+                            <div id="status-line"><b>Status:</b> <span id="status-badge" class="text-amber-400 font-semibold">Ready for submission</span></div>
                         </div>
-                        <div class="flex items-center justify-center gap-3">
+                        <div id="confirm-box" class="space-y-2 pt-2">
+                            <p class="text-xs text-slate-400 font-medium">Did you submit your application on the company portal?</p>
+                            <div class="flex flex-col sm:flex-row items-center justify-center gap-2">
+                                <button onclick="confirmOutcome('applied')" class="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold rounded-xl text-xs transition shadow-lg shadow-emerald-500/20">
+                                    ✓ Yes, Mark as Applied (Sync to Notion)
+                                </button>
+                                <button onclick="confirmOutcome('skipped')" class="w-full sm:w-auto px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium rounded-xl text-xs transition border border-slate-700">
+                                    Keep in Shortlist
+                                </button>
+                                <button onclick="confirmOutcome('expired')" class="w-full sm:w-auto px-3 py-2.5 text-slate-500 hover:text-rose-400 text-xs transition">
+                                    Expired / Closed
+                                </button>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-center gap-3 pt-2">
                             ${{pdfPath ? `<a href="/pdf?path=${{encodeURIComponent(pdfPath)}}" target="_blank" class="px-5 py-2.5 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-medium rounded-xl text-sm transition shadow-lg shadow-sky-500/20">📄 Open Tailored Resume PDF</a>` : ''}}
                             <a href="/" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium rounded-xl text-sm transition border border-slate-700">← Return to Dashboard</a>
                         </div>
-                        <p class="text-slate-500 text-xs">A confirmation prompt will record whether you submitted, skipped, or found the listing expired.</p>
                     `;
                 }} else if (d.status === 'error' || d.error) {{
                     clearInterval(timer);
@@ -1467,6 +1573,30 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
                 setTimeout(poll, 3000);
             }}
         }}
+
+        async function confirmOutcome(outcome) {{
+            try {{
+                const confirmResponse = await fetch('/api/confirm-application', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ task_id: taskId, job_id: {json.dumps(job_id)}, outcome }})
+                }});
+                const confirmation = await confirmResponse.json();
+                if (!confirmResponse.ok) throw new Error(confirmation.error || 'Could not save application status');
+                const badge = document.getElementById('status-badge');
+                if (badge) {{
+                    badge.textContent = outcome === 'applied' ? 'Marked as Applied & Syncing to Notion' : outcome === 'expired' ? 'Marked as Expired / Rejected' : 'Kept as Shortlisted';
+                    badge.className = outcome === 'applied' ? 'text-emerald-400 font-bold' : outcome === 'expired' ? 'text-rose-400 font-bold' : 'text-slate-400 font-bold';
+                }}
+                const box = document.getElementById('confirm-box');
+                if (box) {{
+                    box.innerHTML = `<div class="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-400 font-semibold">✓ Status updated successfully! You can return to the dashboard.</div>`;
+                }}
+            }} catch(e) {{
+                alert('Error updating status: ' + e.message);
+            }}
+        }}
+
         setTimeout(poll, 3000);
     </script>
 </body>
@@ -1661,6 +1791,46 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(json.dumps({"error": str(exc)}).encode("utf-8"))
+            return
+
+        elif path == "/api/mark-applied":
+            job_id = params.get("job_id")
+            if not job_id:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "job_id is required"}).encode("utf-8"))
+                return
+
+            conn = db.get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT tailored_resume_path, tailored_cover_letter_path,
+                       tailored_resume_pdf_path, tailored_cover_letter_pdf_path
+                FROM jobs WHERE job_id = ?
+            """, (job_id,))
+            row = cursor.fetchone()
+            conn.close()
+
+            if not row:
+                self.send_response(404)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "Job not found"}).encode("utf-8"))
+                return
+
+            db.mark_as_applied(
+                job_id,
+                row["tailored_resume_path"] if row else None,
+                row["tailored_cover_letter_path"] if row else None,
+                row["tailored_resume_pdf_path"] if row else None,
+                row["tailored_cover_letter_pdf_path"] if row else None,
+            )
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": True, "job_id": job_id, "status": "applied"}).encode("utf-8"))
             return
 
         elif path == "/api/reveal":

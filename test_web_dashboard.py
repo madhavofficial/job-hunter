@@ -126,6 +126,48 @@ class TestWebDashboard(unittest.TestCase):
             conn.commit()
             conn.close()
 
+    def test_mark_applied_endpoint(self):
+        import json
+        test_job_id = "test_direct_mark_applied_999"
+        conn = db.get_db_connection()
+        conn.execute("DELETE FROM jobs WHERE job_id = ?", (test_job_id,))
+        conn.execute("""
+        INSERT INTO jobs (job_id, site, job_url, title, company, status, score, tailored_resume_pdf_path)
+        VALUES (?, 'custom', 'https://example.com/direct-apply', 'AI Scientist', 'FutureCo', 'shortlisted', 95, '/path/to/pdf.pdf')
+        """, (test_job_id,))
+        conn.commit()
+        conn.close()
+
+        try:
+            handler = web_dashboard.DashboardRequestHandler.__new__(web_dashboard.DashboardRequestHandler)
+            handler.path = "/api/mark-applied"
+            body = json.dumps({"job_id": test_job_id}).encode("utf-8")
+            handler.headers = {"Content-Length": str(len(body))}
+            handler.rfile = io.BytesIO(body)
+            handler.send_response = MagicMock()
+            handler.send_header = MagicMock()
+            handler.end_headers = MagicMock()
+            handler.wfile = io.BytesIO()
+
+            with patch("notion_sync.sync_applied_to_notion", return_value=1):
+                handler.do_POST()
+
+            handler.send_response.assert_called_with(200)
+            res = json.loads(handler.wfile.getvalue().decode("utf-8"))
+            self.assertTrue(res.get("success"))
+            self.assertEqual(res.get("status"), "applied")
+
+            conn = db.get_db_connection()
+            row = conn.execute("SELECT status, tailored_resume_pdf_path FROM jobs WHERE job_id = ?", (test_job_id,)).fetchone()
+            self.assertEqual(row["status"], "applied")
+            self.assertEqual(row["tailored_resume_pdf_path"], "/path/to/pdf.pdf")
+            conn.close()
+        finally:
+            conn = db.get_db_connection()
+            conn.execute("DELETE FROM jobs WHERE job_id = ?", (test_job_id,))
+            conn.commit()
+            conn.close()
+
     def test_safe_tailored_path_validation(self):
         tailored_dir = web_dashboard.TAILORED_DIR
         valid_pdf = os.path.join(tailored_dir, "test_resume.pdf")
