@@ -45,6 +45,7 @@ def generate_dashboard():
             passes and not tier.startswith("Tier 3")
             and (job.get("score") or 0) >= 80 and quality["description_score"] >= 80
         )
+    shortlisted.sort(key=lambda j: (j.get("score") or 0, j.get("created_at") or ""), reverse=True)
     applied = db.get_applied_jobs()
 
     # Database stats

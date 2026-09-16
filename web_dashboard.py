@@ -208,6 +208,9 @@ def get_dashboard_data():
         j["status_portal_url"] = derive_status_portal_url(j["apply_url"], plat, j.get("company", ""), j.get("job_id", ""))
         valid_shortlisted.append(j)
 
+    # Ensure all category slices are strictly ordered by descending weighted match score
+    valid_shortlisted.sort(key=lambda j: (j.get("score") or 0, j.get("created_at") or ""), reverse=True)
+
     # Enrich applied jobs with platform & status tracking portal
     for j in applied:
         j["apply_url"] = j["job_url_direct"] or j["job_url"]

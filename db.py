@@ -72,6 +72,7 @@ def init_db():
             "UPDATE jobs SET canonical_job_id = ? WHERE job_id = ?",
             (f"{canonical_company(row['company'])}|{canonical_title(row['title'])}", row['job_id']),
         )
+    sync_shortlisted_rankings(conn)
     conn.commit()
     conn.close()
 
@@ -233,6 +234,79 @@ def update_job_match(job_id: str, score: int, status: str, evidence: str, matchi
     cursor.execute(f"UPDATE jobs SET {', '.join(updates)} WHERE job_id = ?", values)
     conn.commit()
     conn.close()
+
+def sync_shortlisted_rankings(conn: sqlite3.Connection | None = None) -> int:
+    """Synchronize scores, components, and recommendation status for all shortlisted jobs in SQLite.
+
+    Guarantees that database rankings match the evidence-based quality pipeline and company tiers.
+    """
+    from screening import classify_company_tier
+    from quality import assess_listing_quality, quality_gate, weighted_match_score
+
+    close_conn = False
+    if conn is None:
+        conn = get_db_connection()
+        close_conn = True
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM jobs WHERE status = 'shortlisted'")
+        rows = [dict(r) for r in cursor.fetchall()]
+        if not rows:
+            return 0
+
+        updates = []
+        for j in rows:
+            company = j.get("company", "")
+            tier = classify_company_tier(company)
+            quality = assess_listing_quality(j, tier)
+            passes, _ = quality_gate(j, tier, quality)
+            role_fit = j.get("role_fit_score") or j.get("score") or 0
+            if role_fit == 0:
+                role_fit = j.get("score", 0)
+            adj_score, components = weighted_match_score(role_fit, quality)
+
+            is_rec = bool(
+                passes and not tier.startswith("Tier 3")
+                and adj_score >= 80 and quality.get("description_score", 0) >= 80
+            )
+            rec_status = "recommended" if is_rec else "discovered"
+
+            if (
+                j.get("score") != adj_score
+                or j.get("recommendation_status") != rec_status
+                or j.get("role_fit_score") != role_fit
+                or j.get("company_quality_score") != components.get("company_quality")
+            ):
+                updates.append((
+                    adj_score,
+                    role_fit,
+                    components.get("company_quality", 0),
+                    components.get("evidence_quality", 0),
+                    components.get("freshness", 0),
+                    components.get("directness", 0),
+                    json.dumps(components, sort_keys=True),
+                    rec_status,
+                    j["job_id"],
+                ))
+
+        if updates:
+            cursor.executemany("""
+            UPDATE jobs SET
+                score = ?,
+                role_fit_score = ?,
+                company_quality_score = ?,
+                evidence_quality_score = ?,
+                freshness_score = ?,
+                directness_score = ?,
+                match_components = ?,
+                recommendation_status = ?
+            WHERE job_id = ?
+            """, updates)
+            conn.commit()
+        return len(updates)
+    finally:
+        if close_conn:
+            conn.close()
 
 def get_shortlisted_jobs():
     conn = get_db_connection()

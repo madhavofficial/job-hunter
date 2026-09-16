@@ -321,7 +321,7 @@ Description:
                     "recommended"
                     if not company_tier.startswith("Tier 3")
                     and final_score >= 80
-                    and quality["evidence_score"] >= 80
+                    and quality.get("description_score", 0) >= 80
                     else "discovered"
                 )
                 score = final_score

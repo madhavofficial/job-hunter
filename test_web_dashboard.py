@@ -161,6 +161,39 @@ class TestWebDashboard(unittest.TestCase):
         handler.do_POST()
         handler.send_response.assert_called_with(403)
 
+    def test_database_and_dashboard_rankings_synchronized(self):
+        # Synchronize database
+        db.sync_shortlisted_rankings()
+
+        # Check DB rankings
+        conn = db.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT job_id, company, score, recommendation_status FROM jobs WHERE status = 'shortlisted' ORDER BY score DESC, created_at DESC")
+        db_jobs = [dict(r) for r in cursor.fetchall()]
+        conn.close()
+
+        # Check Web Dashboard rankings
+        dash_data = web_dashboard.get_dashboard_data()
+        rec_jobs = dash_data["recommended_jobs"]
+        all_shortlisted = dash_data["all_shortlisted"]
+
+        # 1. Dashboard recommended jobs must be in strictly descending order
+        rec_scores = [j["score"] for j in rec_jobs]
+        self.assertEqual(rec_scores, sorted(rec_scores, reverse=True))
+
+        # 2. All shortlisted jobs in dashboard must be in strictly descending score order
+        all_scores = [j["score"] for j in all_shortlisted]
+        self.assertEqual(all_scores, sorted(all_scores, reverse=True))
+
+        # 3. The top recommended jobs in DB must match dashboard top recommended jobs
+        db_recs = [j for j in db_jobs if j["recommendation_status"] == "recommended"]
+        self.assertGreater(len(db_recs), 0)
+        self.assertGreater(len(rec_jobs), 0)
+
+        top_db_ids = [j["job_id"] for j in db_recs[:10]]
+        top_dash_ids = [j["job_id"] for j in rec_jobs[:10]]
+        self.assertEqual(top_db_ids, top_dash_ids)
+
 
 if __name__ == "__main__":
     unittest.main()
