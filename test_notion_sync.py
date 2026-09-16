@@ -84,6 +84,93 @@ class NotionSyncTests(unittest.TestCase):
         # When token is present in .env, is_notion_configured returns True
         self.assertTrue(is_notion_configured())
 
+    def test_normalize_job_url(self):
+        from notion_sync import normalize_job_url
+        self.assertEqual(normalize_job_url("https://www.linkedin.com/jobs/view/12345/?refId=abc&tracking=1"), "https://linkedin.com/jobs/view/12345")
+        self.assertEqual(normalize_job_url("http://example.com/careers/job/"), "https://example.com/careers/job")
+        self.assertEqual(normalize_job_url("https://hpe.wd5.myworkdayjobs.com/Jobs/123"), "https://hpe.wd5.myworkdayjobs.com/jobs/123")
+        self.assertEqual(normalize_job_url(""), "")
+
+    def test_extract_linkedin_id(self):
+        from notion_sync import extract_linkedin_id
+        self.assertEqual(extract_linkedin_id("https://www.linkedin.com/jobs/view/4459407986/"), "li-4459407986")
+        self.assertEqual(extract_linkedin_id("https://linkedin.com/jobs/view/123456789?refId=xyz"), "li-123456789")
+        self.assertIsNone(extract_linkedin_id("https://boards.greenhouse.io/stripe/jobs/123"))
+
+    def test_push_job_to_notion_filters_dummy_and_test_jobs(self):
+        from notion_sync import push_job_to_notion
+        # Dummy records should be rejected before any API call
+        self.assertIsNone(push_job_to_notion({"company": "Not Found", "title": "Not Found"}, 1))
+        self.assertIsNone(push_job_to_notion({"company": "TestCo", "title": "Backend Engineer"}, 1))
+        self.assertIsNone(push_job_to_notion({"job_id": "test_123", "company": "Google", "title": "SWE"}, 1))
+
+    def test_sync_notion_to_db_inbound(self):
+        import db
+        from notion_sync import sync_notion_to_db
+
+        mock_entries = [
+            {
+                "id": "mock-page-id-123",
+                "properties": {
+                    "Company": {"title": [{"plain_text": "Mock Enterprise Inc"}]},
+                    "Role": {"rich_text": [{"plain_text": "AI Engineer"}]},
+                    "Job Listing Link": {"url": "https://careers.example.com/mock-123"},
+                    "Date Applied": {"date": {"start": "2026-09-15"}},
+                    "Status": {"select": {"name": "Applied"}},
+                    "S.No": {"number": 999},
+                    "Req ID / Job ID": {"rich_text": [{"plain_text": "mock-req-123"}]},
+                }
+            },
+            {
+                "id": "mock-page-id-456",
+                "properties": {
+                    "Company": {"title": [{"plain_text": "Mock Rejected Corp"}]},
+                    "Role": {"rich_text": [{"plain_text": "Data Scientist"}]},
+                    "Job Listing Link": {"url": "https://careers.example.com/mock-456"},
+                    "Date Applied": {"date": {"start": "2026-09-14"}},
+                    "Status": {"select": {"name": "Rejected"}},
+                    "S.No": {"number": 998},
+                    "Req ID / Job ID": {"rich_text": [{"plain_text": "mock-req-456"}]},
+                }
+            }
+        ]
+
+        conn = db.get_db_connection()
+        conn.execute("DELETE FROM jobs WHERE job_id IN ('mock-req-123', 'mock-req-456')")
+        conn.commit()
+        conn.close()
+
+        try:
+            updated, inserted = sync_notion_to_db(entries=mock_entries)
+            self.assertEqual(inserted, 2)
+
+            conn = db.get_db_connection()
+            r1 = conn.execute("SELECT * FROM jobs WHERE job_id = 'mock-req-123'").fetchone()
+            self.assertIsNotNone(r1)
+            self.assertEqual(r1["status"], "applied")
+            self.assertEqual(r1["company"], "Mock Enterprise Inc")
+
+            r2 = conn.execute("SELECT * FROM jobs WHERE job_id = 'mock-req-456'").fetchone()
+            self.assertIsNotNone(r2)
+            self.assertEqual(r2["status"], "rejected")
+            conn.close()
+
+            # Now test update behavior: change status of mock-123 to Rejected
+            mock_entries[0]["properties"]["Status"]["select"]["name"] = "Rejected"
+            updated2, inserted2 = sync_notion_to_db(entries=mock_entries)
+            self.assertEqual(updated2, 1)
+            self.assertEqual(inserted2, 0)
+
+            conn = db.get_db_connection()
+            r1_updated = conn.execute("SELECT status FROM jobs WHERE job_id = 'mock-req-123'").fetchone()
+            self.assertEqual(r1_updated["status"], "rejected")
+            conn.close()
+        finally:
+            conn = db.get_db_connection()
+            conn.execute("DELETE FROM jobs WHERE job_id IN ('mock-req-123', 'mock-req-456')")
+            conn.commit()
+            conn.close()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -350,13 +350,14 @@ def mark_as_applied(job_id: str, tailored_resume_path: str = None, tailored_cove
     conn.commit()
     conn.close()
 
-    # Automatically sync to Notion tracker
+    # Automatically sync to Notion tracker in background thread
     try:
+        import threading
         import notion_sync
-        notion_sync.sync_applied_to_notion(job_id)
+        threading.Thread(target=notion_sync.sync_applied_to_notion, args=(job_id,), daemon=True).start()
     except Exception as e:
         import sys
-        print(f"Warning: Could not sync applied job {job_id} to Notion: {e}", file=sys.stderr)
+        print(f"Warning: Could not launch Notion sync thread for {job_id}: {e}", file=sys.stderr)
 
 def mark_as_rejected(job_id: str):
     conn = get_db_connection()

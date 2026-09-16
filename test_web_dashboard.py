@@ -91,7 +91,8 @@ class TestWebDashboard(unittest.TestCase):
 
         try:
             with patch.object(web_dashboard.tailor, "tailor_materials", return_value=(resume_path, resume_pdf_path)), \
-                 patch.object(web_dashboard.webbrowser, "open", return_value=True):
+                 patch.object(web_dashboard.webbrowser, "open", return_value=True), \
+                 patch("notion_sync.sync_applied_to_notion", return_value=1):
                 web_dashboard._run_tailor_worker(task_id, test_job_id, {
                     "job_url": "https://example.com/job",
                     "job_url_direct": "",
@@ -99,15 +100,15 @@ class TestWebDashboard(unittest.TestCase):
                     "company": "TestCo",
                 })
 
-            conn = db.get_db_connection()
-            self.assertEqual(
-                conn.execute("SELECT status FROM jobs WHERE job_id = ?", (test_job_id,)).fetchone()["status"],
-                "shortlisted",
-            )
-            conn.close()
+                conn = db.get_db_connection()
+                self.assertEqual(
+                    conn.execute("SELECT status FROM jobs WHERE job_id = ?", (test_job_id,)).fetchone()["status"],
+                    "shortlisted",
+                )
+                conn.close()
 
-            result = web_dashboard.finalize_application(task_id, test_job_id, "applied")
-            self.assertEqual(result["application_status"], "applied")
+                result = web_dashboard.finalize_application(task_id, test_job_id, "applied")
+                self.assertEqual(result["application_status"], "applied")
             conn = db.get_db_connection()
             row = conn.execute(
                 "SELECT status, tailored_resume_path, tailored_resume_pdf_path FROM jobs WHERE job_id = ?",
