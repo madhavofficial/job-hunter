@@ -9,8 +9,8 @@ import github_portfolio
 
 
 PREFERRED_OPENROUTER_MODELS = (
-    "google/gemma-4-26b-a4b-it:free",
-    "nvidia/nemotron-3.5-lightning:free",
+    "nex-agi/nex-n2.5-mini:free",
+    "nex-agi/nex-n2.5-pro:free",
     "openrouter/free",
 )
 
@@ -379,18 +379,23 @@ Please output the COMPLETE tailored resume in Markdown.
                         client = config.cycle_groq_client(remove_current=True)
                         retries += 1
                         continue
-                    if any(term in err_str for term in ["request too large", "413", "tokens per minute", "tpm", "limit 8000", "context_length_exceeded", "request_too_large"]):
-                        print(f"Prompt exceeded TPM/context limit for {active_model}. Falling back to next model...")
-                        break
-                    if any(term in err_str for term in ["rate_limit", "429", "limit_exceeded", "tokens per day"]):
-                        print(f"Rate limit hit on {active_model} during resume tailoring: {e}")
+
+                    # Rate limits (TPM, RPM, TPD, 429) -> Key-specific quota, cycle to the next Groq key!
+                    if any(term in err_str for term in ["rate_limit", "rate limit", "429", "limit_exceeded", "tokens per minute", "tpm", "tokens per day"]):
                         retries += 1
                         if retries < max_retries:
+                            print(f"Rate/TPM limit hit on {active_model}. Cycling to next Groq key ({retries}/{max_retries})...")
                             client = config.cycle_groq_client()
                             continue
                         else:
-                            print(f"-> All keys exhausted for {active_model}. Falling back to next model...")
+                            print(f"-> All {max_retries} keys exhausted for {active_model}. Falling back to next model...")
                             break
+
+                    # True single-request prompt size violation for this model architecture
+                    if any(term in err_str for term in ["request too large", "413", "context_length_exceeded", "request_too_large"]):
+                        print(f"Prompt exceeded context limit for {active_model}. Falling back to next model...")
+                        break
+
                     print(f"Error on {active_model}: {e}. Falling back to next model...")
                     break
             if tailored_resume:
@@ -402,7 +407,7 @@ Please output the COMPLETE tailored resume in Markdown.
             openrouter_key = os.getenv("OPENROUTER_API_KEY")
             if openrouter_key:
                 from openai import OpenAI
-                or_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=openrouter_key, timeout=35)
+                or_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=openrouter_key, timeout=25)
                 configured_openrouter_model = os.getenv("OPENROUTER_MODEL")
                 openrouter_models = ([configured_openrouter_model] if configured_openrouter_model else list(PREFERRED_OPENROUTER_MODELS))
                 for openrouter_model in openrouter_models:
@@ -412,10 +417,11 @@ Please output the COMPLETE tailored resume in Markdown.
                             model=openrouter_model,
                             messages=[{"role": "user", "content": resume_prompt}],
                             temperature=0.2,
-                            timeout=35,
+                            max_tokens=4096,
+                            timeout=25,
                         )
-                        if or_resp and or_resp.choices and or_resp.choices[0].message:
-                            tailored_resume = or_resp.choices[0].message.content
+                        if or_resp and or_resp.choices and or_resp.choices[0].message and or_resp.choices[0].message.content:
+                            tailored_resume = or_resp.choices[0].message.content.strip()
                             break
                     except Exception as e:
                         print(f"Warning: OpenRouter fallback model {openrouter_model} failed: {e}", file=sys.stderr)

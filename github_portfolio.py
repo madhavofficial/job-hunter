@@ -537,7 +537,14 @@ def format_github_portfolio_for_prompt(portfolio: list[dict]) -> str:
             block += f" | Key Dependencies: {', '.join(deps[:10])}"
         block += "\n"
         if p_desc:
-            block += f"- **Overview & Core Features**: {p_desc}\n"
+            clean_desc = p_desc.strip()
+            if len(clean_desc) > 380:
+                sentence_end = clean_desc[:380].rfind(". ")
+                if sentence_end > 180:
+                    clean_desc = clean_desc[:sentence_end + 1]
+                else:
+                    clean_desc = clean_desc[:380].rstrip() + "..."
+            block += f"- **Overview & Core Features**: {clean_desc}\n"
 
         sections.append(block)
 
