@@ -25,6 +25,11 @@ def _clean_glyphs(text: str) -> str:
     """Normalize unicode and replace non-ASCII / missing glyph characters."""
     if not text:
         return ""
+    # Clean common UTF-8 decoding mojibake (CP1252 / MacRoman decoding artifacts)
+    text = text.replace("‚Äî", "-").replace("‚Üí", "->").replace("‚â•", ">=")
+    text = text.replace("â€\"", "-").replace("â†'", "->").replace("â‰¥", ">=")
+    text = text.replace("â€“", "-").replace("â€™", "'").replace("â€œ", '"').replace("â€\x9d", '"')
+
     text = unicodedata.normalize("NFKD", text)
     # Replace all unicode hyphens and dashes with standard ASCII hyphen
     text = re.sub(r"[\u2010\u2011\u2012\u2013\u2014\u2015\u2212\u00ad]", "-", text)
@@ -139,6 +144,7 @@ def _build_flowables(markdown_text: str):
         textColor=color_primary,
         spaceBefore=3.5,
         spaceAfter=0.5,
+        keepWithNext=True,
     )
 
     item_heading_style = ParagraphStyle(
@@ -151,6 +157,7 @@ def _build_flowables(markdown_text: str):
         textColor=color_primary,
         spaceBefore=2.5,
         spaceAfter=0.5,
+        keepWithNext=True,
     )
 
     item_subheading_style = ParagraphStyle(
@@ -163,6 +170,7 @@ def _build_flowables(markdown_text: str):
         textColor=color_muted,
         spaceBefore=0,
         spaceAfter=0.8,
+        keepWithNext=True,
     )
 
     body_style = ParagraphStyle(
@@ -258,8 +266,21 @@ def _build_flowables(markdown_text: str):
     return flow
 
 
-def markdown_to_pdf(markdown_text: str, output_path: str, single_page: bool = False) -> str:
-    """Render Markdown into a clean, executive ATS PDF allowing natural multi-page flow."""
+def markdown_to_pdf(markdown_text: str, output_path: str, single_page: bool = False, engine: str = "auto") -> str:
+    """Render Markdown into a clean, executive ATS PDF allowing natural multi-page flow.
+    
+    Uses Tectonic LaTeX engine if available for publication-grade typography, falling back to ReportLab.
+    """
+    if engine in ("auto", "tectonic", "latex"):
+        try:
+            import latex_utils
+            tex_content = latex_utils.markdown_to_latex(markdown_text)
+            tex_path = output_path.replace(".pdf", ".tex")
+            if latex_utils.compile_latex_to_pdf(tex_content, output_path, tex_path):
+                return output_path
+        except Exception:
+            pass
+
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     doc = SimpleDocTemplate(
         output_path,

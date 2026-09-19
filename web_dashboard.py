@@ -25,6 +25,7 @@ from datetime import datetime, timedelta
 
 import db
 import tailor
+import profiles
 from notion_sync import derive_status_portal_url, map_platform
 from screening import classify_company_tier, is_job_truly_remote
 from quality import assess_listing_quality, quality_gate, weighted_match_score
@@ -56,9 +57,10 @@ _apply_tasks: dict = {}
 _apply_tasks_lock = threading.Lock()
 
 
-def _run_tailor_worker(tid: str, jid: str, job_row: dict):
+def _run_tailor_worker(tid: str, jid: str, job_row: dict, profile_name: str = "madhav"):
     """Tailor materials and open the listing without changing application status."""
     try:
+        profile_obj = profiles.get_profile(profile_name)
         job_row = dict(job_row) if job_row is not None else {}
         existing_pdf = job_row.get("tailored_resume_pdf_path")
         if not existing_pdf:
@@ -73,12 +75,13 @@ def _run_tailor_worker(tid: str, jid: str, job_row: dict):
             except Exception:
                 pass
 
-        if existing_pdf and os.path.exists(existing_pdf):
+        # Ensure existing PDF belongs to requested profile before reusing
+        if existing_pdf and os.path.exists(existing_pdf) and (profile_obj.file_prefix in os.path.basename(existing_pdf)):
             resume_pdf_path = existing_pdf
             resume_path = existing_pdf.replace(".pdf", ".md")
             materials = (resume_path, resume_pdf_path)
         else:
-            materials = tailor.tailor_materials(jid)
+            materials = tailor.tailor_materials(jid, profile_name=profile_name)
 
         if not materials:
             with _apply_tasks_lock:
@@ -307,6 +310,14 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 </div>
             </div>
             <div class="flex items-center gap-2">
+                <div class="flex items-center gap-1.5 bg-[#151824] border border-[#24283b] rounded-xl px-2.5 py-1.5 text-xs shadow-sm">
+                    <i class="fa-solid fa-user-gear text-sky-400"></i>
+                    <span class="text-slate-400 text-[11px] font-medium hidden md:inline">Profile:</span>
+                    <select id="activeProfileSelect" onchange="onProfileChange(this.value)" class="bg-transparent text-slate-200 text-xs font-semibold focus:outline-none cursor-pointer">
+                        <option value="madhav" class="bg-[#12141d] text-slate-200">Madhav Jayam</option>
+                        <option value="mahika" class="bg-[#12141d] text-slate-200">Mahika Neranjen</option>
+                    </select>
+                </div>
                 <button onclick="openCustomJobModal()" class="px-3.5 py-1.5 text-xs font-semibold bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white rounded-xl shadow-sm shadow-emerald-500/20 flex items-center gap-1.5 transition">
                     <i class="fa-solid fa-plus"></i> Add Custom Link
                 </button>
@@ -600,6 +611,13 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         let currentSort = 'match_desc';
         let toastTimer = null;
         let currentModalPdfPath = '';
+        let currentProfile = localStorage.getItem('active_profile') || 'madhav';
+
+        function onProfileChange(val) {
+            currentProfile = val;
+            localStorage.setItem('active_profile', val);
+            showToast(`Active Profile: ${val === 'mahika' ? 'Mahika Neranjen' : 'Madhav Jayam'}`);
+        }
 
         async function revealInFinder(pdfPath) {
             if (!pdfPath) return;
@@ -1121,7 +1139,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                     statusText.innerText = 'Success! Opening tailored application workflow...';
                     setTimeout(() => {
                         closeCustomJobModal();
-                        window.location.href = '/apply?id=' + encodeURIComponent(data.job_id);
+                        window.location.href = '/apply?id=' + encodeURIComponent(data.job_id) + (currentProfile ? '&profile=' + encodeURIComponent(currentProfile) : '');
                     }, 600);
                 } else {
                     progress.classList.add('hidden');
@@ -1207,7 +1225,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 const res = await fetch('/api/apply', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ job_id: jobId })
+                    body: JSON.stringify({ job_id: jobId, profile: currentProfile })
                 });
                 const initData = await res.json();
                 if (res.status === 404 || res.status === 400) {
@@ -1391,6 +1409,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         });
 
         // Initialize
+        const pSel = document.getElementById('activeProfileSelect');
+        if (pSel) pSel.value = currentProfile;
         fetchJobs();
     </script>
 </body>
@@ -1422,6 +1442,7 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
         elif path == "/custom":
             query = urllib.parse.parse_qs(parsed.query)
             target_url = query.get("url", [""])[0]
+            profile_name = query.get("profile", ["madhav"])[0]
             if not target_url:
                 self.send_response(400)
                 self.end_headers()
@@ -1438,13 +1459,14 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
 
             # Redirect to /apply
             self.send_response(302)
-            self.send_header("Location", f"/apply?id={job_id}")
+            self.send_header("Location", f"/apply?id={job_id}&profile={profile_name}")
             self.end_headers()
             return
 
         elif path == "/apply":
             query = urllib.parse.parse_qs(parsed.query)
             job_id = query.get("id", [""])[0]
+            profile_name = query.get("profile", ["madhav"])[0]
             if not job_id:
                 self.send_response(400)
                 self.end_headers()
@@ -1468,7 +1490,7 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
             with _apply_tasks_lock:
                 _apply_tasks[task_id] = {"status": "pending", "result": None, "error": None}
 
-            threading.Thread(target=_run_tailor_worker, args=(task_id, job_id, job), daemon=True).start()
+            threading.Thread(target=_run_tailor_worker, args=(task_id, job_id, job, profile_name), daemon=True).start()
 
             # Serve a self-polling "Generating..." page immediately
             loading_html = f"""<!DOCTYPE html>
@@ -1720,6 +1742,13 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps(payload).encode("utf-8"))
             return
 
+        elif path == "/api/profiles":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(profiles.list_profiles()).encode("utf-8"))
+            return
+
         super().do_GET()
 
     def do_POST(self):
@@ -1735,6 +1764,7 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         if path == "/api/apply":
             job_id = params.get("job_id")
+            profile_name = params.get("profile", "madhav")
             if not job_id:
                 self.send_response(400)
                 self.send_header("Content-Type", "application/json")
@@ -1761,7 +1791,7 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
             with _apply_tasks_lock:
                 _apply_tasks[task_id] = {"status": "pending", "result": None, "error": None}
 
-            threading.Thread(target=_run_tailor_worker, args=(task_id, job_id, job), daemon=True).start()
+            threading.Thread(target=_run_tailor_worker, args=(task_id, job_id, job, profile_name), daemon=True).start()
 
             self.send_response(202)
             self.send_header("Content-Type", "application/json")

@@ -4,7 +4,10 @@
 resume.md
 *resume*.md
 *resume*.pdf
+*resume*.tex
+*Resume*.tex
 *.docx
+scratch/
 
 # Generated reports, tailored applications, and live job findings
 jobs.db
@@ -28,5 +31,6 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .github_portfolio_cache.json
+github_portfolio_cache_*.json
 .DS_Store
 *.pdf

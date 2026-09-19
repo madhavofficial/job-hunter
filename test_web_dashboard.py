@@ -252,6 +252,45 @@ class TestWebDashboard(unittest.TestCase):
             self.assertNotEqual(j.get("recommendation_status"), "recommended")
             self.assertFalse(j.get("recommended", False))
 
+    def test_profiles_endpoint(self):
+        import json
+        handler = web_dashboard.DashboardRequestHandler.__new__(web_dashboard.DashboardRequestHandler)
+        handler.path = "/api/profiles"
+        handler.wfile = io.BytesIO()
+        handler.send_response = MagicMock()
+        handler.send_header = MagicMock()
+        handler.end_headers = MagicMock()
+
+        handler.do_GET()
+
+        handler.send_response.assert_called_with(200)
+        data = json.loads(handler.wfile.getvalue().decode("utf-8"))
+        self.assertIsInstance(data, list)
+        profile_ids = [p["id"] for p in data]
+        self.assertIn("madhav", profile_ids)
+        self.assertIn("mahika", profile_ids)
+
+    def test_apply_worker_passes_profile(self):
+        task_id = "test_profile_task_555"
+        test_job_id = "test_profile_job_555"
+        resume_path = "/tmp/Mahika_Neranjen_Test_Resume.md"
+        resume_pdf_path = "/tmp/Mahika_Neranjen_Test_Resume.pdf"
+
+        with patch.object(web_dashboard.tailor, "tailor_materials", return_value=(resume_path, resume_pdf_path)) as mock_tailor, \
+             patch.object(web_dashboard.webbrowser, "open", return_value=True):
+            web_dashboard._run_tailor_worker(task_id, test_job_id, {
+                "job_url": "https://example.com/job",
+                "title": "Data Scientist",
+                "company": "DeepTech",
+            }, profile_name="mahika")
+
+            mock_tailor.assert_called_once_with(test_job_id, profile_name="mahika")
+
+        with web_dashboard._apply_tasks_lock:
+            task = web_dashboard._apply_tasks.pop(task_id, None)
+            self.assertIsNotNone(task)
+            self.assertEqual(task["status"], "done")
+            self.assertEqual(task["result"]["resume_pdf_path"], resume_pdf_path)
 
 
 if __name__ == "__main__":

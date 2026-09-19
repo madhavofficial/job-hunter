@@ -17,7 +17,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".github_portfolio_cache.json")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CACHE_FILE = os.path.join(BASE_DIR, ".github_portfolio_cache.json")
 CACHE_TTL_SECONDS = 86400  # 24 hours
 USER_HOME = os.path.expanduser("~")
 
@@ -29,6 +30,8 @@ EXCLUDED_REPOSITORIES = {
     "quadrarobo",
     "mar_quadrupled_robo",
     "hyperdog",
+    "portfolio",
+    "portfoliotemplate",
 }
 
 FEATURED_EXTERNAL_REPOSITORIES = [
@@ -344,13 +347,18 @@ def inspect_remote_repository(username: str, repo_name: str, headers: dict) -> d
     }
 
 
-def fetch_github_portfolio(username: str = None, force_refresh: bool = False) -> list[dict]:
+def fetch_github_portfolio(username: str = None, force_refresh: bool = False, profile = None) -> list[dict]:
     """Fetch all repositories with deep codebase inspection (local first, then remote)."""
+    if profile is not None:
+        p_user = getattr(profile, "github_user", None) or (profile.get("github_user") if isinstance(profile, dict) else None)
+        username = username or p_user
     username = username or get_github_username()
 
-    if not force_refresh and os.path.exists(CACHE_FILE):
+    cache_file = os.path.join(BASE_DIR, f"github_portfolio_cache_{username}.json") if username != "madhavofficial" else CACHE_FILE
+
+    if not force_refresh and os.path.exists(cache_file):
         try:
-            with open(CACHE_FILE, "r", encoding="utf-8") as f:
+            with open(cache_file, "r", encoding="utf-8") as f:
                 cached_data = json.load(f)
                 cached_time = cached_data.get("timestamp", 0)
                 if time.time() - cached_time < CACHE_TTL_SECONDS and cached_data.get("username") == username:
@@ -367,21 +375,24 @@ def fetch_github_portfolio(username: str = None, force_refresh: bool = False) ->
     if github_token:
         headers["Authorization"] = f"Bearer {github_token}"
 
-    # 1. Try gh CLI first for full collaborator & org repo access
-    repos = []
-    try:
-        gh_res = subprocess.run(
-            ["gh", "api", "user/repos?affiliation=owner,collaborator,organization_member", "--paginate"],
-            capture_output=True,
-            text=True,
-            timeout=12
-        )
-        if gh_res.returncode == 0:
-            repos = json.loads(gh_res.stdout)
-    except Exception:
-        pass
+    is_default_user = (username == "madhavofficial" and (profile is None or getattr(profile, "id", "") == "madhav"))
 
-    # 2. Fallback to standard GitHub REST API
+    # 1. Try gh CLI first for default user for full collaborator & org repo access
+    repos = []
+    if is_default_user:
+        try:
+            gh_res = subprocess.run(
+                ["gh", "api", "user/repos?affiliation=owner,collaborator,organization_member", "--paginate"],
+                capture_output=True,
+                text=True,
+                timeout=12
+            )
+            if gh_res.returncode == 0:
+                repos = json.loads(gh_res.stdout)
+        except Exception:
+            pass
+
+    # 2. Fallback or direct fetch for standard GitHub REST API
     if not repos:
         try:
             url = f"https://api.github.com/users/{username}/repos?per_page=100&sort=updated"
@@ -391,19 +402,20 @@ def fetch_github_portfolio(username: str = None, force_refresh: bool = False) ->
         except Exception as e:
             print(f"Warning: GitHub API error: {e}", file=sys.stderr)
 
-    # 3. Always ensure featured research & organization repositories are included
-    for feat in FEATURED_EXTERNAL_REPOSITORIES:
-        if not any(r.get("name") == feat["name"] for r in repos):
-            repos.append({
-                "name": feat["name"],
-                "full_name": feat["full_name"],
-                "owner": {"login": feat["owner"]},
-                "html_url": feat["url"],
-                "description": feat["description"],
-                "language": feat["language"],
-                "topics": feat["topics"],
-                "fork": False
-            })
+    # 3. Add featured external repositories for default user profile
+    if is_default_user:
+        for feat in FEATURED_EXTERNAL_REPOSITORIES:
+            if not any(r.get("name") == feat["name"] for r in repos):
+                repos.append({
+                    "name": feat["name"],
+                    "full_name": feat["full_name"],
+                    "owner": {"login": feat["owner"]},
+                    "html_url": feat["url"],
+                    "description": feat["description"],
+                    "language": feat["language"],
+                    "topics": feat["topics"],
+                    "fork": False
+                })
 
     portfolio = []
     seen_names = set()
@@ -484,9 +496,27 @@ def fetch_github_portfolio(username: str = None, force_refresh: bool = False) ->
         }
         portfolio.append(project_item)
 
+    # Merge profile-specific curated projects
+    curated_map = getattr(profile, "curated_projects", {}) if profile else {}
+    for c_name, c_data in curated_map.items():
+        if not any(r.get("name") == c_name for r in portfolio):
+            portfolio.append({
+                "name": c_name,
+                "display_name": c_data.get("display_name", c_name),
+                "full_name": f"{username}/{c_name}",
+                "owner": username,
+                "url": c_data.get("url"),
+                "language": "Python",
+                "description": c_data.get("description", ""),
+                "topics": c_data.get("topics", []),
+                "source_type": "curated_profile",
+                "manifests": {},
+                "readme_features": [],
+            })
+
     # Save to cache
     try:
-        with open(CACHE_FILE, "w", encoding="utf-8") as f:
+        with open(cache_file, "w", encoding="utf-8") as f:
             json.dump({
                 "username": username,
                 "timestamp": time.time(),
@@ -531,7 +561,10 @@ def format_github_portfolio_for_prompt(portfolio: list[dict]) -> str:
                         deps.append(cleaned)
 
         block = f"### Project: {p_name}\n"
-        block += f"- **Repository**: {p_url}\n"
+        if p_url:
+            block += f"- **Repository**: {p_url}\n"
+        else:
+            block += "- **Repository**: None (Internal/Academic Project - No public GitHub repository)\n"
         block += f"- **Primary Language**: {lang}"
         if deps:
             block += f" | Key Dependencies: {', '.join(deps[:10])}"
