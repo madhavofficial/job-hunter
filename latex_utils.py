@@ -231,11 +231,11 @@ def markdown_to_latex(markdown_text: str) -> str:
         r"\renewcommand{\footrulewidth}{0pt}",
         r"",
         r"% Adjust margins",
-        r"\addtolength{\oddsidemargin}{-0.5in}",
-        r"\addtolength{\evensidemargin}{-0.5in}",
-        r"\addtolength{\textwidth}{1in}",
-        r"\addtolength{\topmargin}{-.5in}",
-        r"\addtolength{\textheight}{1.0in}",
+        r"\addtolength{\oddsidemargin}{-0.55in}",
+        r"\addtolength{\evensidemargin}{-0.55in}",
+        r"\addtolength{\textwidth}{1.1in}",
+        r"\addtolength{\topmargin}{-.65in}",
+        r"\addtolength{\textheight}{1.3in}",
         r"",
         r"\urlstyle{same}",
         r"\raggedbottom",
@@ -352,6 +352,18 @@ def markdown_to_latex(markdown_text: str) -> str:
                         f"    \\resumeSubheading\n"
                         f"      {{{format_inline_latex(clean_item)}}}{{}}\n"
                         f"      {{{format_inline_latex(clean_meta)}}}{{}}"
+                    )
+                elif clean_meta.lower().startswith("github:"):
+                    m_gh = re.search(r"https?://[^\s)\]\"'>]+", clean_meta)
+                    if m_gh:
+                        gh_url = m_gh.group(0).rstrip("/")
+                        clean_u = gh_url.replace("%", "\\%")
+                        date_or_link = f"\\href{{{clean_u}}}{{\\underline{{GitHub}}}}"
+                    else:
+                        date_or_link = format_inline_latex(clean_meta)
+                    latex_parts.append(
+                        f"    \\resumeProjectHeading\n"
+                        f"      {{\\textbf{{{format_inline_latex(clean_item)}}}}}{{{date_or_link}}}"
                     )
                 else:
                     date_or_link = format_inline_latex(clean_meta)

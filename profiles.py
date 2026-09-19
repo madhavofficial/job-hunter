@@ -76,8 +76,8 @@ MADHAV_PROFILE = Profile(
     include_gpa=False,
     gpa_text=None,
     gpa_instruction="Do NOT include GPA on the resume.",
-    include_certifications=True,
-    certifications_instruction="ALWAYS INCLUDE the candidate's verified Certifications section under '## Certifications' exactly as listed in the base resume (HackerRank Problem Solving (Basic), Android App Development - MyCaptain, Machine Learning and Deep Learning - IBM SkillsBuild).",
+    include_certifications=False,
+    certifications_instruction="Do NOT include a Certifications section on the resume under any circumstances.",
     experience_instruction="""1. PROFESSIONAL EXPERIENCE: Preserve all professional internships (Qualcomm, O.C. Tanner) with all hard metrics (8,700 tickets, 15+ skills, 50+ tickets, 70% coverage), technical depth, and guardrails. Do not compress or delete these experiences.""",
     flagship_instruction="""2.5. PUBLICATIONS & FLAGSHIP RESEARCH:
    - The candidate co-authored the research paper: 'A Multi-Agent Generative AI System for Scientific Literature Analysis' (Adishree Gupta, Uma D, Madhav Jayam, Sai Roshini Kolla - PES University), which was SELECTED FOR IEEE SPICES (IEEE International Conference on Signal Processing, Informatics, Communication and Energy Systems) with Zenodo DOI: 10.5281/zenodo.22676649 and GitHub: https://github.com/GenAI-Scientific-Literature-System/GenAI-Scientific-Literature-System-multi-agent-system.
