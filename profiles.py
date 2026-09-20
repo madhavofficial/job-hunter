@@ -129,21 +129,15 @@ MADHAV_PROFILE = Profile(
     gpa_instruction="Do NOT include GPA on the resume.",
     include_certifications=False,
     certifications_instruction="CRITICAL: Do NOT include any 'Certifications', 'Courses', or 'Licenses' section on the resume under any circumstances.",
-    experience_instruction="""1. PROFESSIONAL EXPERIENCE & 1-PAGE CURATION:
-   - Preserve professional internships (Qualcomm, O.C. Tanner) with all hard metrics (8,700 tickets, 15+ skills, 50+ tickets, 70% coverage), technical depth, and guardrails.
-   - For specially curated 1-page resumes: Condense Qualcomm into 3-4 high-impact bullets and O.C. Tanner into 2 bullets while retaining key numbers and technologies.
+    experience_instruction="""1. PROFESSIONAL EXPERIENCE (STRICT 1-PAGE BUDGET):
+   - Qualcomm India Pvt. Ltd.: Condense into EXACTLY 3 high-impact bullets (autonomous Jira agent + Claude Code Skills + MCP, deterministic routing + pre-validated Splunk queries, Pydantic validation guardrails + 8,700 analyzed tickets). DO NOT output more than 3 bullets.
+   - O.C. Tanner India Pvt. Ltd.: Condense into EXACTLY 2 bullets (50+ Jira tickets for Kotlin accessibility API, 10% to 70% automated test coverage across Scala/Android).
    - DO NOT remove Career Objective — keep it targeted to the company and role.""",
-    flagship_instruction="""2.5. PUBLICATIONS & FLAGSHIP RESEARCH:
-   - The candidate co-authored the research paper: 'A Multi-Agent Generative AI System for Scientific Literature Analysis' (Adishree Gupta, Uma D, Madhav Jayam, Sai Roshini Kolla - PES University), which was SELECTED FOR IEEE SPICES (IEEE International Conference on Signal Processing, Informatics, Communication and Energy Systems) with Zenodo DOI: 10.5281/zenodo.22676649 and GitHub: https://github.com/GenAI-Scientific-Literature-System/GenAI-Scientific-Literature-System-multi-agent-system.
-   - ALWAYS include this publication prominently in the '## Publications' section!
-     * **Conference Acceptance**: Selected for **IEEE SPICES** (IEEE International Conference on Signal Processing, Informatics, Communication and Energy Systems).
-     * **Links**: DOI: [10.5281/zenodo.22676649](https://doi.org/10.5281/zenodo.22676649) | GitHub: [GenAI-Scientific-Literature-System](https://github.com/GenAI-Scientific-Literature-System/GenAI-Scientific-Literature-System-multi-agent-system)
-     * For specially curated 1-page resumes: Condense to 2-3 high-impact bullets (multi-agent retrieval architecture ingesting 300-800 papers, graph clustering with 5-agent ensemble, 92.7% accuracy / 89.8% F1 score).
-   - RESEARCH REPOSITORY vs. PRODUCTION ENHANCEMENT IN SELECTED PROJECTS:
-     * In '## Publications', feature the academic paper as published at IEEE SPICES.
-     * In '## Selected Projects', if you include a project associated with this research, DO NOT duplicate the basic publication title or bullets! Instead, feature its full clinical and production engineering enhancement:
-       `### GLAS-Med: Evidence-Grounded Clinical Literature Synthesis (Clinical & Production Enhancement of IEEE SPICES Architecture)`
-       `*GitHub: https://github.com/madhavofficial/evidence-grounded-clinical-literature-synthesis*`""",
+    flagship_instruction="""2.5. PUBLICATIONS (STRICT 1-PAGE BUDGET):
+   - Under '## Publications', include the IEEE SPICES paper with EXACTLY 2 bullets:
+     * **Conference Acceptance**: Selected for **IEEE SPICES**; DOI: [10.5281/zenodo.22676649](https://doi.org/10.5281/zenodo.22676649) | GitHub: [GenAI-Scientific-Literature-System](https://github.com/GenAI-Scientific-Literature-System/GenAI-Scientific-Literature-System-multi-agent-system).
+     * Built an evidence-grounded multi-agent system querying arXiv, PubMed, and Semantic Scholar (300-800 papers) with Louvain graph clustering and 5-agent ensemble, demonstrating 92.7% accuracy and 89.8% F1 score across benchmarks.
+   - DO NOT write more than 2 bullets for Publications.""",
     skills_instruction="Update the Technical Skills section to highlight the exact languages and tools used across the selected projects and experience (e.g., add TypeScript, Docker, Prisma, Kafka, etc. if featuring those projects).",
     known_project_urls=MADHAV_KNOWN_PROJECT_URLS,
     curated_projects=MADHAV_CURATED_PROJECTS,

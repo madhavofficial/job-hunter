@@ -390,9 +390,6 @@ def markdown_to_latex(markdown_text: str) -> str:
                 continue
 
             # Standard Experience/Project bullet
-            if not in_subheading_list:
-                latex_parts.append(r"\resumeSubHeadingListStart")
-                in_subheading_list = True
             if not in_item_list:
                 latex_parts.append(r"\resumeItemListStart")
                 in_item_list = True

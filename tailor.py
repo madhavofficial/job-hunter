@@ -145,7 +145,93 @@ def scrub_unverified_metrics(markdown: str, profile_id: str = "") -> str:
     # 4. Remove banned projects if present
     markdown = re.sub(r"###\s*.*?(?:PC\s+Parts|University\s+Database).*?(?=\n###|\n##|\Z)", "", markdown, flags=re.DOTALL | re.IGNORECASE)
 
+    # 5. Normalize bold job titles to ### headings if LLM output **Role - Company** (Dates)
+    markdown = re.sub(
+        r"^\*\*(Software Engineering Intern\s*[–-]\s*[^*]+)\*\*\s*(?:\(([^)]+)\))?",
+        r"### \1\n*\2*",
+        markdown,
+        flags=re.MULTILINE
+    )
+
     return markdown
+
+
+def enforce_one_page_budget(markdown: str, profile_id: str = "madhav", strict_mode: bool = False) -> str:
+    """Deterministically enforce 1-page bullet and project limits for 1-page curated profiles."""
+    if profile_id != "madhav" or not markdown:
+        return markdown
+
+    lines = markdown.splitlines()
+    output = []
+    current_sec = None
+    current_item = None
+    item_bullets = 0
+    projects_count = 0
+
+    max_qualcomm = 3
+    max_octanner = 1 if strict_mode else 2
+    max_pub = 2
+    max_proj_count = 2 if strict_mode else 3
+    max_proj_bullets = 2
+
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+
+        # Section header
+        if re.match(r"^##\s+", line):
+            current_sec = re.sub(r"[*_#]", "", line).strip().lower()
+            current_item = None
+            item_bullets = 0
+            output.append(line)
+            i += 1
+            continue
+
+        # Item header: ### Title
+        if re.match(r"^###\s+", line):
+            current_item = line.strip().lower()
+            item_bullets = 0
+            if any(k in (current_sec or "") for k in ["project", "academic", "selected"]):
+                projects_count += 1
+                if projects_count > max_proj_count:
+                    # Skip projects beyond the budget
+                    i += 1
+                    while i < len(lines) and not re.match(r"^##\s+", lines[i]):
+                        i += 1
+                    continue
+            output.append(line)
+            i += 1
+            continue
+
+        # Bullet point
+        if re.match(r"^(?:[-*]|\d+[.)])\s+", line):
+            if "qualcomm" in (current_item or ""):
+                if item_bullets >= max_qualcomm:
+                    i += 1
+                    continue
+            elif "tanner" in (current_item or ""):
+                if item_bullets >= max_octanner:
+                    i += 1
+                    continue
+            elif "publication" in (current_sec or ""):
+                if item_bullets >= max_pub:
+                    i += 1
+                    continue
+            elif any(k in (current_sec or "") for k in ["project", "academic", "selected"]):
+                if item_bullets >= max_proj_bullets:
+                    i += 1
+                    continue
+
+            item_bullets += 1
+            output.append(line)
+            i += 1
+            continue
+
+        output.append(line)
+        i += 1
+
+    return "\n".join(output) + ("\n" if markdown.endswith("\n") else "")
+
 
 
 def ensure_gpa(markdown: str, profile=None) -> str:
@@ -633,9 +719,15 @@ Please output the COMPLETE tailored resume in Markdown.
                         model=active_model,
                         messages=[{"role": "user", "content": resume_prompt}],
                         temperature=0.2,
+                        max_tokens=4096,
                         timeout=60,
                     )
-                    tailored_resume = res_response.choices[0].message.content
+                    content = res_response.choices[0].message.content or ""
+                    finish_reason = getattr(res_response.choices[0], "finish_reason", "")
+                    if finish_reason == "length" or "technical skills" not in content.lower():
+                        print(f"Warning: Model {active_model} generated incomplete/truncated response (finish_reason={finish_reason}). Trying next model...")
+                        break
+                    tailored_resume = content
                     break
                 except Exception as e:
                     err_str = str(e).lower()
@@ -700,6 +792,8 @@ Please output the COMPLETE tailored resume in Markdown.
         tailored_resume = ensure_career_objective_target(tailored_resume, company, title)
         tailored_resume = ensure_gpa(tailored_resume, profile=profile)
         tailored_resume = scrub_unverified_metrics(tailored_resume, profile_id=getattr(profile, "id", ""))
+        if getattr(profile, "id", "") == "madhav":
+            tailored_resume = enforce_one_page_budget(tailored_resume, profile_id="madhav")
         
         # Save files in dedicated company directory with <profile.file_prefix>_ naming scheme
         clean_company = "".join([c for c in company if c.isalnum() or c in (' ', '_')]).replace(' ', '_')
@@ -728,6 +822,23 @@ Please output the COMPLETE tailored resume in Markdown.
             f.write(tex_content)
 
         compiled_with_tectonic = latex_utils.compile_latex_to_pdf(tex_content, resume_pdf_filepath, resume_tex_filepath)
+        if compiled_with_tectonic and getattr(profile, "id", "") == "madhav":
+            import subprocess
+            try:
+                p_info = subprocess.run(["pdfinfo", resume_pdf_filepath], capture_output=True, text=True)
+                m_pages = re.search(r"Pages:\s+(\d+)", p_info.stdout)
+                if m_pages and int(m_pages.group(1)) > 1:
+                    print(f"Warning: Compiled PDF has {m_pages.group(1)} pages. Applying strict 1-page compression...")
+                    tailored_resume = enforce_one_page_budget(tailored_resume, profile_id="madhav", strict_mode=True)
+                    with open(resume_filepath, "w", encoding="utf-8") as f:
+                        f.write(tailored_resume)
+                    tex_content = latex_utils.markdown_to_latex(tailored_resume)
+                    with open(resume_tex_filepath, "w", encoding="utf-8") as f:
+                        f.write(tex_content)
+                    latex_utils.compile_latex_to_pdf(tex_content, resume_pdf_filepath, resume_tex_filepath)
+            except Exception as e:
+                print(f"Page check error: {e}")
+
         if not compiled_with_tectonic:
             markdown_to_pdf(tailored_resume, resume_pdf_filepath, engine="reportlab")
 

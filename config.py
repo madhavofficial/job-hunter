@@ -9,9 +9,9 @@ load_dotenv()
 # fallback for resume tailoring and job matching. Only models returned by the
 # account's model API are used; unavailable/deprecated IDs are skipped.
 PREFERRED_GROQ_MODELS = (
-    "openai/gpt-oss-120b",
     "qwen/qwen3.8-27b",
     "qwen/qwen3.6-27b",
+    "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
     "groq/compound",
     "groq/compound-mini",
