@@ -517,36 +517,30 @@ def tailor_materials(job_id: str, profile_name: str = "madhav"):
     else:
         if is_ambiguous:
             print(f"-> Ambiguous / multi-track role detected: {ambiguity_reason}")
-            print("-> Applying Broad Versatility Strategy: Maximizing viable projects across diverse domains...")
-            project_strategy = f"""2. DYNAMIC PROJECT SELECTION & ALIGNMENT — AMBIGUOUS / MULTI-TRACK / GENERAL JD STRATEGY:
+            print("-> Applying Broad Versatility Strategy: Selecting top 3 diverse projects across pillars...")
+            project_strategy = f"""2. DYNAMIC PROJECT SELECTION & ALIGNMENT — 1-PAGE CURATED STRATEGY (AMBIGUOUS / MULTI-TRACK):
    - DETECTED CONTEXT: The Job Posting is AMBIGUOUS, MULTI-TRACK, or a GENERAL HIRING POOL ({ambiguity_reason}).
-   - CORE DIRECTIVE: INCLUDE AS MANY HIGH-SIGNAL, VIABLE PROJECTS AS POSSIBLE (INCLUDE 4 TO 5 DIVERSE PROJECTS) from the candidate's verified pool (Base Resume + GitHub Portfolio).
-   - DO NOT limit the resume to a single narrow track or only 2-3 projects. Showcase broad engineering versatility across multiple technical domains:
-      * Pillar 1 (Computer Vision / Deep Learning / Embedded AI): 'Sketch Recognition System' (Hierarchical CNN, Squeeze-and-Excitation attention, PyTorch, multi-worker out-of-core streaming)
-      * Pillar 2 (Distributed Systems / Big Data / Streaming / Concurrency): '153_Project3_BD' (Distributed Stream & Image Processing with Apache Kafka, Docker, Python)
-      * Pillar 3 (Full-Stack / Systems Architecture / Web): 'Ultimate-Trader-Dashboard' (TypeScript, Next.js, WebSockets, PostgreSQL, Docker) or 'University-DBMS-Management-'
-      * Pillar 4 (AI Agents / Tooling / Workflow Automation): 'job-hunter' (Agentic automation, multi-source scraping, Pydantic guardrails) or 'CareerTime' (Groq LPU, LangChain)
-      * Pillar 5 (Epistemic Multi-Agent Systems / Research / Clinical RAG / Graph Clustering): 'GLAS-Med: Evidence-Grounded Clinical Literature Synthesis' (GitHub: https://github.com/madhavofficial/evidence-grounded-clinical-literature-synthesis) — An advanced clinical and production microservice enhancement of the IEEE SPICES research paper adding PICO tuple projection, Oxford CEBM evidence hierarchy classification, 8-factor study reliability scoring, and 9-microservice deployment (FastAPI, MongoDB, Neo4j, FAISS, Docker) OR 'Multi-Modal AI Protein Analysis & Pathogenicity Reasoning Platform'
-     - DEPTH, TECHNICAL SUBSTANCE & IMPACT RULES:
-      * There is NO artificial 1-page restriction — prioritize technical substance, architectural depth, and quantitative metrics over arbitrary length limits. It is far more important that the reader understands the project than the size of the resume. For each project, write 3 to 4 comprehensive, punchy, high-density bullet points.
-      * Bullet 1: MUST state WHAT the project is and WHAT it does (core product capability and problem solved).
-       * Bullets 2-4: Detail deep technical architecture, libraries, concurrency/data flow, and performance optimizations. Include ONLY quantitative metrics that are explicitly documented in the candidate's base resume or portfolio. NEVER invent or hallucinate metrics, percentages, test counts, or benchmarks.
-    - EXPANDED SKILLS: Ensure the Technical Skills section covers the full breadth of languages, frameworks, and tools across all included projects (e.g. Python, TypeScript, Java, C, Kotlin, Scala, PyTorch, Apache Kafka, Next.js, PostgreSQL, Docker, Android)."""
+   - CORE DIRECTIVE: Select EXACTLY the TOP 3 DIVERSE, HIGH-SIGNAL PROJECTS from the candidate's verified pool (Base Resume + GitHub Portfolio) to showcase versatile technical breadth while fitting strictly on 1 page:
+       * Project 1 (AI / Multi-Agent / Research): 'GLAS-Med: Evidence-Grounded Clinical Literature Synthesis' (GitHub: https://github.com/madhavofficial/evidence-grounded-clinical-literature-synthesis) OR 'Multi-Modal AI Protein Analysis & Pathogenicity Reasoning Platform' (GitHub: https://github.com/madhavofficial/neuro_capstone)
+       * Project 2 (Distributed Systems / Big Data / CV): 'Distributed High-Throughput Stream & Image Processing Pipeline with Apache Kafka' (GitHub: https://github.com/varunnhn/153_Project3_BD) OR 'Sketch Recognition System' (GitHub: https://github.com/madhavofficial/Drawing-A-New-Way-To-Search-ML-)
+       * Project 3 (Full-Stack / Automation / FinTech): 'Smart Market Watchlist & Real-Time Trading Terminal' (GitHub: https://github.com/madhavofficial/Ultimate-Trader-Dashboard-GitHub-Repository-Structure) OR 'Autonomous Job Discovery, Career Intelligence & Application Automation Engine' (GitHub: https://github.com/madhavofficial/job-hunter) OR 'CareerTime - AI Career Intelligence Platform' (GitHub: https://github.com/madhavofficial/CareerTime)
+   - For each selected project, write 2 to 3 concise, punchy, high-density bullet points (Bullet 1: WHAT it does; Bullets 2-3: architecture & metrics).
+   - EXPANDED SKILLS: Ensure the Technical Skills section covers the languages and tools from the selected projects."""
         else:
             print("-> Targeted role detected. Applying Deep Specialization Strategy...")
-            project_strategy = """2. DYNAMIC PROJECT SELECTION & ALIGNMENT — TARGETED / SPECIALIZED JD STRATEGY:
+            project_strategy = """2. DYNAMIC PROJECT SELECTION & ALIGNMENT — 1-PAGE CURATED STRATEGY (TARGETED ROLE):
    - Carefully review the Job Posting requirements (required languages, frameworks, domain, e.g. DevOps, TypeScript, Full-Stack Web, Backend, Distributed Systems, AI/ML, Data Science, Databases).
    - Compare the candidate's Current Resume Projects with the candidate's Verified GitHub Project Portfolio.
-   - Select the 3 to 4 BEST-FITTING projects from the combined pool of projects (Current Resume + GitHub Portfolio).
-   - REPLACE less relevant projects on the base resume with stronger-matching GitHub projects where appropriate:
-      * For AI / RAG / Agent / NLP / Generative AI / Research / Machine Learning roles -> STRONGLY PRIORITIZE 'GLAS-Med: Evidence-Grounded Clinical Literature Synthesis' (GitHub: https://github.com/madhavofficial/evidence-grounded-clinical-literature-synthesis) as an advanced clinical & production engineering enhancement of the IEEE SPICES paper (featuring PICO extraction, Oxford CEBM evidence tiers, 8-factor reliability scoring, Neo4j knowledge graphs, and microservices), alongside 'Multi-Modal AI Protein Analysis & Pathogenicity Reasoning Platform'.
-      * For DevOps / Cloud / Automation / Tooling roles -> prioritize 'job-hunter'.
-      * For Big Data / Data Engineering / Streaming / Spark / Kafka / Distributed Systems / Batch Processing -> prioritize '153_Project3_BD' (Distributed Stream & Image Processing with Apache Kafka, Docker, Python) and 'Forecasting-Bike-Rental-Demand'.
-      * For Full-Stack / TypeScript / FinTech / Database roles -> prioritize 'Ultimate-Trader-Dashboard' or 'University-DBMS-Management-'.
-      * For Computer Vision / Deep Learning -> prioritize 'Sketch Recognition System'.
-      * For Data Science / Regression / Analytics -> prioritize 'Forecasting-Bike-Rental-Demand'.
-   - FIRST BULLET EXPLAINS WHAT THE PROJECT DOES: For EVERY project on the resume, the FIRST bullet point MUST clearly state WHAT the project is and WHAT it does (its core product capability, user function, and problem solved). The remaining bullets should then detail the deep engineering architecture, database design, concurrency models, performance optimizations, and only authentic quantitative metrics from source materials.
-   - For each selected project, write 3 to 4 detailed, highly technical bullet points demonstrating real engineering architecture, libraries, and design patterns from its verified documentation."""
+   - Select EXACTLY the TOP 3 BEST-FITTING projects from the combined pool of projects (Current Resume + GitHub Portfolio).
+   - Alignment recommendations:
+       * For AI / RAG / Agent / NLP / Generative AI / Research / Machine Learning roles -> STRONGLY PRIORITIZE 'GLAS-Med: Evidence-Grounded Clinical Literature Synthesis' (GitHub: https://github.com/madhavofficial/evidence-grounded-clinical-literature-synthesis) and 'Multi-Modal AI Protein Analysis & Pathogenicity Reasoning Platform' (GitHub: https://github.com/madhavofficial/neuro_capstone).
+       * For DevOps / Cloud / Automation / Tooling roles -> prioritize 'Autonomous Job Discovery, Career Intelligence & Application Automation Engine' (GitHub: https://github.com/madhavofficial/job-hunter).
+       * For Big Data / Data Engineering / Streaming / Kafka / Distributed Systems -> prioritize 'Distributed High-Throughput Stream & Image Processing Pipeline with Apache Kafka' (GitHub: https://github.com/varunnhn/153_Project3_BD) and 'Hourly Bike-Sharing Demand Forecasting & Time-Series Regression Pipeline' (GitHub: https://github.com/madhavofficial/Forecasting-Bike-Rental-Demand).
+       * For Full-Stack / TypeScript / FinTech / Database roles -> prioritize 'Smart Market Watchlist & Real-Time Trading Terminal' (GitHub: https://github.com/madhavofficial/Ultimate-Trader-Dashboard-GitHub-Repository-Structure).
+       * For Computer Vision / Deep Learning -> prioritize 'Sketch Recognition System' (GitHub: https://github.com/madhavofficial/Drawing-A-New-Way-To-Search-ML-).
+       * For Data Science / Regression / Analytics -> prioritize 'Hourly Bike-Sharing Demand Forecasting & Time-Series Regression Pipeline' (GitHub: https://github.com/madhavofficial/Forecasting-Bike-Rental-Demand).
+   - For each selected project, write 2 to 3 concise, punchy, high-density bullet points (Bullet 1: WHAT it does; Bullets 2-3: architecture & metrics).
+   - EXPANDED SKILLS: Highlight the exact languages, frameworks, and tools used across the 3 selected projects and experience."""
     
     # Init Groq
     from dotenv import load_dotenv
@@ -564,21 +558,38 @@ def tailor_materials(job_id: str, profile_name: str = "madhav"):
     tailored_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tailored")
     os.makedirs(tailored_dir, exist_ok=True)
     
+    if profile.id == "madhav":
+        length_curation_instruction = """4. STRICT 1-PAGE TARGET & SPECIALLY CURATED SELECTION:
+   - TARGET EXACTLY 1 PAGE: The tailored resume MUST fit cleanly onto EXACTLY ONE PAGE when compiled with LaTeX.
+   - CURATED PROJECT SELECTION: Select EXACTLY the TOP 3 BEST-FITTING projects for this role from the candidate's verified pool (2 to 3 concise, punchy bullets per project). DO NOT include more than 3 projects under any circumstances.
+   - CONDENSED PROFESSIONAL EXPERIENCE:
+     * Condense Qualcomm into 3 to 4 high-impact bullets focusing on autonomous agents, Claude Code Skills, MCP integrations, Jira/Splunk automation, and Pydantic guardrails.
+     * Condense O.C. Tanner into 2 bullets (Kotlin accessibility Jira tickets, 10% to 70% automated test coverage across Scala/Android).
+   - CONDENSED PUBLICATIONS:
+     * In '## Publications', include the IEEE SPICES paper condensed into 2 to 3 high-impact bullets (multi-agent retrieval architecture ingesting 300-800 papers, graph clustering with 5-agent ensemble, 92.7% accuracy / 89.8% F1 score).
+   - CAREER OBJECTIVE: Keep the Career Objective intact, tailored specifically to the target company and role.
+   - CERTIFICATIONS: Do NOT include any Certifications section under any circumstances.
+   - ZERO FACT FABRICATION: Rely strictly on facts and verified metrics in the source material."""
+        ambiguity_eval_instruction = """   - 1-PAGE CONSTRAINT PRIORITY: Even if the role is broad, general development centre (IDC), or rotational, maintain the 1-PAGE limit by selecting exactly the top 3 projects across different domains."""
+    else:
+        length_curation_instruction = f"""4. ZERO METRIC OR FACT FABRICATION & NO LENGTH RESTRICTIONS:
+   - Do NOT invent non-existent projects, companies, durations, graduation date (May 2027), or credentials. Rely strictly on facts in the candidate's resume and project portfolio.
+   - ABSOLUTE BAN ON FABRICATED NUMBERS & METRICS: ONLY cite quantitative metrics (percentages, accuracy, latency, scale, test coverage, counts) that appear verbatim in the candidate's base resume or portfolio. If a project or role does not have a metric in the source material, explain the engineering architecture and algorithms — NEVER invent numbers.
+   - DO NOT invent unverified frameworks or integrations (e.g. do not invent SAP/ERP integrations or FastAPI if not present in the base resume or portfolio).
+   - {profile.gpa_instruction} {profile.certifications_instruction}
+   - There is NO artificial 1-page restriction - prioritize thorough understanding, architectural depth, and complete explanations over resume length. It is much more important that the reader understands the project than the size of the resume."""
+        ambiguity_eval_instruction = """   - AUTONOMOUS AMBIGUITY EVALUATION: If the prompt marked this as targeted, but YOU evaluate from the Job Description that the role is actually broad, multi-track, general development centre (e.g. IDC), rotational, or lacks specific single-domain constraints, OVERRIDE and apply the AMBIGUOUS / BROAD JOB DIRECTIVE: include 4 to 5 diverse projects with 3-4 detailed, high-density bullets per project to showcase maximum engineering breadth."""
+
     # Tailor Resume Prompt
     resume_prompt = f"""You are an expert resume optimizer and technical hiring specialist. Your task is to adapt the candidate's resume for a specific job posting.
 
 Instructions & Rules:
 {profile.experience_instruction}
 {project_strategy}
-   - AUTONOMOUS AMBIGUITY EVALUATION: If the prompt marked this as targeted, but YOU evaluate from the Job Description that the role is actually broad, multi-track, general development centre (e.g. IDC), rotational, or lacks specific single-domain constraints, OVERRIDE and apply the AMBIGUOUS / BROAD JOB DIRECTIVE: include 4 to 5 diverse projects with 3-4 detailed, high-density bullets per project to showcase maximum engineering breadth.
+{ambiguity_eval_instruction}
 {profile.flagship_instruction}
 3. SKILLS SECTION: {profile.skills_instruction}
-4. ZERO METRIC OR FACT FABRICATION & NO LENGTH RESTRICTIONS:
-   - Do NOT invent non-existent projects, companies, durations, graduation date (May 2027), or credentials. Rely strictly on facts in the candidate's resume and project portfolio.
-   - ABSOLUTE BAN ON FABRICATED NUMBERS & METRICS: ONLY cite quantitative metrics (percentages, accuracy, latency, scale, test coverage, counts) that appear verbatim in the candidate's base resume or portfolio. If a project or role does not have a metric in the source material, explain the engineering architecture and algorithms — NEVER invent numbers (e.g., do NOT invent '20% student proficiency', '30% event registrations', '95% coverage', '12 vulnerabilities', '200 TPS', 'AUC 0.92', etc.).
-   - DO NOT invent unverified frameworks or integrations (e.g. do not invent SAP/ERP integrations or FastAPI if not present in the base resume or portfolio).
-   - {profile.gpa_instruction} {profile.certifications_instruction}
-   - There is NO artificial 1-page restriction - prioritize thorough understanding, architectural depth, and complete explanations over resume length. It is much more important that the reader understands the project than the size of the resume.
+{length_curation_instruction}
 5. FORMATTING & TYPOGRAPHY:
    - Heavily utilize markdown bolding (**bold**) for all key metrics, numbers, core technologies, and frameworks across every bullet point.
    - GITHUB REPOSITORY LINKS RULE:

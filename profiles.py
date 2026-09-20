@@ -61,6 +61,57 @@ MADHAV_KNOWN_PROJECT_URLS = {
     "arena": "https://github.com/madhavofficial/oa-arena-windows",
 }
 
+MADHAV_CURATED_PROJECTS = {
+    "neuro_capstone": {
+        "display_name": "Multi-Modal AI Protein Analysis & Pathogenicity Reasoning Platform",
+        "description": "Architected an end-to-end clinical AI platform predicting neurodegenerative mutation pathogenicity by fusing 3D AlphaFold structures, evolutionary biophysics, and biomedical literature. Full-stack React 18, TypeScript, Vite, Tailwind CSS web application with an interactive 3D molecular protein viewer (PDB rendering) and diagnostic verdict dashboards backed by FastAPI. 3D structural biophysics pipeline in BioPython (ShrakeRupley SASA, DSSP secondary structure, steric clash detection, salt bridge/H-bond analysis) using virtual residue swapping against AlphaFold and ESMFold models. Dual-RAG retrieval engine indexing PubMed/Europe PMC literature into FAISS via SBERT embeddings to ground LLM clinical reasoning (Llama 3.3, Qwen 235B) in peer-reviewed evidence (72% top-5 relevance). Relational data layer in Supabase (PostgreSQL) with Row-Level Security (RLS) and index-optimized variant caching; 144-run ablation benchmarking harness achieving 98.6% completion and 100% JSON schema validity against ClinVar ground truth.",
+        "topics": ["bioinformatics", "alphafold", "biopython", "fastapi", "react", "typescript", "supabase", "faiss", "rag", "clinvar", "python"],
+        "url": "https://github.com/madhavofficial/neuro_capstone",
+    },
+    "evidence-grounded-clinical-literature-synthesis": {
+        "display_name": "GLAS-Med: Evidence-Grounded Clinical Literature Synthesis",
+        "description": "Evidence-grounded clinical literature synthesis pipeline designed as an advanced clinical and production microservice enhancement of the IEEE SPICES multi-agent scientific synthesis architecture. Deployed across 9 containerized services orchestrated via Docker. Automated PICO clinical trial parameter extraction (Population, Intervention, Comparator, Outcome) and Oxford CEBM evidence hierarchy classifier. 8-factor clinical study reliability scoring engine evaluating sample sizes, randomization, blinding, and attrition. Neo4j clinical knowledge graph paired with FAISS vector indexing to map consensus, divergence, and therapeutic contradictions across biomedical corpora.",
+        "topics": ["clinical-nlp", "evidence-based-medicine", "knowledge-graphs", "pico-extraction", "oxford-cebm", "multi-agent", "python", "bioinformatics", "fastapi", "docker", "neo4j", "mongodb"],
+        "url": "https://github.com/madhavofficial/evidence-grounded-clinical-literature-synthesis",
+    },
+    "153_Project3_BD": {
+        "display_name": "Distributed High-Throughput Stream & Image Processing Pipeline with Apache Kafka",
+        "description": "Distributed real-time stream processing architecture utilizing Apache Kafka, Zookeeper, Docker, Python, and OpenCV. High-throughput producers streaming image and numerical sensor data over partitioned Kafka topics with configurable batching and replication. Multi-worker consumer groups executing edge image processing, feature extraction, and anomaly detection under low-latency constraints. Pipeline health monitoring, lag tracking, and fault tolerance across broker failure scenarios.",
+        "topics": ["kafka", "apache-kafka", "distributed-systems", "docker", "python", "opencv", "stream-processing", "flask"],
+        "url": "https://github.com/varunnhn/153_Project3_BD",
+    },
+    "Drawing-A-New-Way-To-Search-ML-": {
+        "display_name": "Sketch Recognition System",
+        "description": "Interactive deep learning web application classifying freehand sketches across 50 ambiguous object classes from Google QuickDraw. Deep hierarchical CNN in PyTorch integrating custom residual blocks and Squeeze-and-Excitation (SE) channel attention mechanisms achieving 86% test accuracy. Multi-worker data pipeline with pinned-memory optimization streaming 500,000 samples out-of-core, reducing per-epoch training time by over 30%. Custom batch augmentations with Mixup image blending (alpha=0.2), Cutout block masking, and label smoothing regularization. Flask inference API and JavaScript frontend.",
+        "topics": ["pytorch", "cnn", "deep-learning", "computer-vision", "quickdraw", "flask", "python"],
+        "url": "https://github.com/madhavofficial/Drawing-A-New-Way-To-Search-ML-",
+    },
+    "CareerTime": {
+        "display_name": "CareerTime - AI Career Intelligence Platform",
+        "description": "AI-powered career advisor platform delivering real-time hiring intelligence, market compensation trends, and role roadmaps grounded in live web search data. Low-latency inference using Groq LPU acceleration and LangChain orchestration with dynamic prompt routing and intent classification. Automated web citation extraction and Markdown parsing producing inline clickable references without hallucinations. Streamlit dark UI featuring inline message editing, real-time prompt resubmission, and persistent multi-session JSON history.",
+        "topics": ["streamlit", "langchain", "groq", "lpu", "duckduckgo-search", "career-advisor", "rag", "python"],
+        "url": "https://github.com/madhavofficial/CareerTime",
+    },
+    "job-hunter": {
+        "display_name": "Autonomous Job Discovery, Career Intelligence & Application Automation Engine",
+        "description": "Autonomous career intelligence and application workflow engine integrating multi-source job discovery, heuristic semantic matching, and automated resume tailoring. Multi-profile architectural separation supporting concurrent candidate profiles with role-specific constraints, GPA policies, and typography guardrails. Automated Tectonic LaTeX compilation pipeline with orphan prevention, ATS-compliant ASCII hygiene, and dual 1-page/2-page compilation workflows. Interactive Flask/HTML web dashboard with SQLite persistence for real-time application tracking.",
+        "topics": ["python", "automation", "sqlite", "latex", "tectonic", "flask", "groq", "playwright"],
+        "url": "https://github.com/madhavofficial/job-hunter",
+    },
+    "Ultimate-Trader-Dashboard-GitHub-Repository-Structure": {
+        "display_name": "Smart Market Watchlist & Real-Time Trading Terminal",
+        "description": "Full-stack real-time financial market analytics terminal and watchlist tracker built with TypeScript, Next.js, and Tailwind CSS. WebSocket streaming client for live market tick feeds, dynamic order book depth visualization, and real-time portfolio P&L calculation. Relational data schemas in PostgreSQL with Prisma ORM for persistent watchlist curation, user alerts, and historical trade logging. Containerized services using Docker Compose.",
+        "topics": ["fintech", "nextjs", "typescript", "prisma", "postgresql", "websockets", "trading-terminal", "docker"],
+        "url": "https://github.com/madhavofficial/Ultimate-Trader-Dashboard-GitHub-Repository-Structure",
+    },
+    "Forecasting-Bike-Rental-Demand": {
+        "display_name": "Hourly Bike-Sharing Demand Forecasting & Time-Series Regression Pipeline",
+        "description": "End-to-end time-series regression and demand forecasting pipeline predicting hourly municipal bike-sharing rental counts from meteorological and seasonal variables. Exploratory data analysis, cyclical feature engineering (hour-of-day sine/cosine encoding, workday/holiday interaction), and collinearity analysis across weather indicators. Trained and benchmarked multiple regression models (Random Forest, Gradient Boosting, Ridge, Lasso) evaluated via RMSE and R-squared metrics. Automated training and evaluation pipeline with cross-validation and hyperparameter tuning via GridSearch.",
+        "topics": ["machine-learning", "scikit-learn", "time-series", "regression", "feature-engineering", "random-forest", "python"],
+        "url": "https://github.com/madhavofficial/Forecasting-Bike-Rental-Demand",
+    },
+}
+
 MADHAV_PROFILE = Profile(
     id="madhav",
     name="Madhav Jayam",
@@ -77,25 +128,25 @@ MADHAV_PROFILE = Profile(
     gpa_text=None,
     gpa_instruction="Do NOT include GPA on the resume.",
     include_certifications=False,
-    certifications_instruction="Do NOT include a Certifications section on the resume under any circumstances.",
-    experience_instruction="""1. PROFESSIONAL EXPERIENCE: Preserve all professional internships (Qualcomm, O.C. Tanner) with all hard metrics (8,700 tickets, 15+ skills, 50+ tickets, 70% coverage), technical depth, and guardrails. Do not compress or delete these experiences.""",
+    certifications_instruction="CRITICAL: Do NOT include any 'Certifications', 'Courses', or 'Licenses' section on the resume under any circumstances.",
+    experience_instruction="""1. PROFESSIONAL EXPERIENCE & 1-PAGE CURATION:
+   - Preserve professional internships (Qualcomm, O.C. Tanner) with all hard metrics (8,700 tickets, 15+ skills, 50+ tickets, 70% coverage), technical depth, and guardrails.
+   - For specially curated 1-page resumes: Condense Qualcomm into 3-4 high-impact bullets and O.C. Tanner into 2 bullets while retaining key numbers and technologies.
+   - DO NOT remove Career Objective — keep it targeted to the company and role.""",
     flagship_instruction="""2.5. PUBLICATIONS & FLAGSHIP RESEARCH:
    - The candidate co-authored the research paper: 'A Multi-Agent Generative AI System for Scientific Literature Analysis' (Adishree Gupta, Uma D, Madhav Jayam, Sai Roshini Kolla - PES University), which was SELECTED FOR IEEE SPICES (IEEE International Conference on Signal Processing, Informatics, Communication and Energy Systems) with Zenodo DOI: 10.5281/zenodo.22676649 and GitHub: https://github.com/GenAI-Scientific-Literature-System/GenAI-Scientific-Literature-System-multi-agent-system.
    - ALWAYS include this publication prominently in the '## Publications' section!
      * **Conference Acceptance**: Selected for **IEEE SPICES** (IEEE International Conference on Signal Processing, Informatics, Communication and Energy Systems).
      * **Links**: DOI: [10.5281/zenodo.22676649](https://doi.org/10.5281/zenodo.22676649) | GitHub: [GenAI-Scientific-Literature-System](https://github.com/GenAI-Scientific-Literature-System/GenAI-Scientific-Literature-System-multi-agent-system)
-     * **NEVER condense this into a single vague line, and DO NOT include raw math formulas**. Focus purely on system architecture and pipeline engineering:
-       1. Built an end-to-end, evidence-grounded multi-agent system that synthesizes scientific literature by querying live scholarly databases (arXiv, PubMed, Semantic Scholar) and ingesting **300-800 papers** per query to eliminate citation hallucination.
-       2. Engineered semantic similarity graph clustering over dense document representations to segment retrieved literature into cohesive thematic sub-corpora and filter cross-domain noise before agent dispatch.
-       3. Coordinated five specialized agents running concurrently to extract declarative claims (with an automated Hallucination Guard), map empirical evidence, evaluate study methodological reliability, detect cross-paper consensus vs. contradictions, and prioritize unresolved research frontiers.
-       4. Demonstrated **92.7% accuracy** and **89.8% F1 score** across multi-domain scientific benchmarks, outperforming standalone LLMs by **+14.2% F1** and standard RAG baselines by **+6.8% F1**.
+     * For specially curated 1-page resumes: Condense to 2-3 high-impact bullets (multi-agent retrieval architecture ingesting 300-800 papers, graph clustering with 5-agent ensemble, 92.7% accuracy / 89.8% F1 score).
    - RESEARCH REPOSITORY vs. PRODUCTION ENHANCEMENT IN SELECTED PROJECTS:
      * In '## Publications', feature the academic paper as published at IEEE SPICES.
      * In '## Selected Projects', if you include a project associated with this research, DO NOT duplicate the basic publication title or bullets! Instead, feature its full clinical and production engineering enhancement:
        `### GLAS-Med: Evidence-Grounded Clinical Literature Synthesis (Clinical & Production Enhancement of IEEE SPICES Architecture)`
        `*GitHub: https://github.com/madhavofficial/evidence-grounded-clinical-literature-synthesis*`""",
-    skills_instruction="Update the Technical Skills section to highlight the exact languages and tools used across the selected projects and experience (e.g., add TypeScript, Docker, Prisma, etc. if featuring TypeScript/Full-Stack projects).",
+    skills_instruction="Update the Technical Skills section to highlight the exact languages and tools used across the selected projects and experience (e.g., add TypeScript, Docker, Prisma, Kafka, etc. if featuring those projects).",
     known_project_urls=MADHAV_KNOWN_PROJECT_URLS,
+    curated_projects=MADHAV_CURATED_PROJECTS,
 )
 
 

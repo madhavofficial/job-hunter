@@ -120,5 +120,33 @@ Worked here.
         self.assertIn("*GitHub: https://github.com/Mahika6/mini-unionfs*", result)
 
 
+    def test_madhav_curated_projects_and_master_resume(self):
+        p_madhav = profiles.get_profile("madhav")
+        self.assertEqual(len(p_madhav.curated_projects), 8)
+        self.assertIn("neuro_capstone", p_madhav.curated_projects)
+        self.assertIn("evidence-grounded-clinical-literature-synthesis", p_madhav.curated_projects)
+        self.assertIn("153_Project3_BD", p_madhav.curated_projects)
+        self.assertIn("Drawing-A-New-Way-To-Search-ML-", p_madhav.curated_projects)
+        self.assertIn("CareerTime", p_madhav.curated_projects)
+        self.assertIn("job-hunter", p_madhav.curated_projects)
+        self.assertIn("Ultimate-Trader-Dashboard-GitHub-Repository-Structure", p_madhav.curated_projects)
+        self.assertIn("Forecasting-Bike-Rental-Demand", p_madhav.curated_projects)
+
+        with open(p_madhav.resume_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        self.assertNotIn("Certifications", content)
+        self.assertNotIn("HackerRank", content)
+        self.assertIn("Multi-Modal AI Protein Analysis", content)
+        self.assertIn("GLAS-Med", content)
+        self.assertIn("153_Project3_BD", content)
+        self.assertIn("Sketch Recognition System", content)
+        self.assertIn("CareerTime", content)
+        self.assertIn("Autonomous Job Discovery", content)
+        self.assertIn("Smart Market Watchlist", content)
+        self.assertIn("Hourly Bike-Sharing Demand Forecasting", content)
+        self.assertIn("Career Objective", content)
+
+
 if __name__ == "__main__":
     unittest.main()
+
