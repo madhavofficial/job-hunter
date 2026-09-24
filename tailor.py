@@ -10,8 +10,7 @@ import profiles
 
 
 PREFERRED_OPENROUTER_MODELS = (
-    "nex-agi/nex-n2.5-mini:free",
-    "nex-agi/nex-n2.5-pro:free",
+    "meta-llama/llama-3.3-70b-instruct",
     "openrouter/free",
 )
 
@@ -53,81 +52,105 @@ def strip_certifications(markdown: str) -> str:
 
 def scrub_unverified_metrics(markdown: str, profile_id: str = "") -> str:
     """Scrub known hallucinated metrics from candidate resume."""
-    if not markdown or profile_id != "mahika":
-        return markdown
+    if not markdown:
+        return ""
 
-    # Strip hallucinated test coverage percentages (e.g. >90%, >95%)
-    markdown = re.sub(
-        r"(?:covering\s+)?(?:>|≥|approximately|~)?\s*\d{2,3}\s*%\s*(?:of\s+service\s+layer\s+methods|test\s+coverage)",
-        "comprehensive unit and integration test coverage",
-        markdown,
-        flags=re.IGNORECASE
-    )
-    # Strip hallucinated TA proficiency percentages and student counts
-    markdown = re.sub(
-        r"(?:improving|improved|enhancing|strengthening)\s+(?:student\s+)?(?:coding\s+proficiency|code\s+quality)?\s*(?:by\s+)?(?:≈|~|approximately)?\s*\d{1,2}\s*%\s*(?:\([^)]*assessment\s+scores[^)]*\)|across\s+(?:≈|~|approximately)?\s*\d+\s+students)?",
-        "strengthening students' foundational programming concepts",
-        markdown,
-        flags=re.IGNORECASE
-    )
-    markdown = re.sub(
-        r"(?:by\s+)?(?:≈|~|approximately)?\s*\d{1,2}\s*%\s*\([^)]*assessment\s+scores[^)]*\)",
-        "strengthening foundational programming concepts",
-        markdown,
-        flags=re.IGNORECASE
-    )
-    markdown = re.sub(
-        r"across\s+(?:≈|~|approximately)?\s*\d+\s+students",
-        "for first-year B.Tech students",
-        markdown,
-        flags=re.IGNORECASE
-    )
-    # Strip hallucinated TAMS registration percentages
-    markdown = re.sub(
-        r"(?:increasing|increased|boosting)\s+participant\s+registrations\s+(?:by\s+)?(?:≈|~|approximately)?\s*\d{1,2}\s*%\s*(?:through\s+targeted\s+campaigns)?",
-        "driving participant outreach and technical event engagement",
-        markdown,
-        flags=re.IGNORECASE
-    )
-    markdown = re.sub(
-        r"increasing\s+participant\s+registrations\s+by\s+(?:≈|~|approximately)?\s*\d{1,2}\s*%\s*(?:through\s+targeted\s+campaigns)?",
-        "driving participant outreach and technical event engagement",
-        markdown,
-        flags=re.IGNORECASE
-    )
-    # Strip hallucinated TPS (e.g. 200 TPS)
-    markdown = re.sub(
-        r"\s*\((?:simulated\s+)?\d+\s*TPS\)",
-        "",
-        markdown,
-        flags=re.IGNORECASE
-    )
-    # Strip hallucinated AUC in Matcher
-    markdown = re.sub(
-        r"\s*\((?:AUC|ROC-AUC)\s*=\s*0\.\d+\)",
-        "",
-        markdown,
-        flags=re.IGNORECASE
-    )
-    # Strip hallucinated vulnerability counts (e.g. 12 critical vulnerabilities)
-    markdown = re.sub(
-        r"identifying\s+and\s+remediating\s+\d+\s+critical\s+vulnerabilities",
-        "identifying and remediating application security vulnerabilities",
-        markdown,
-        flags=re.IGNORECASE
-    )
+    if profile_id in ("secondary", "mahika", "partner"):
+        # Strip hallucinated test coverage percentages (e.g. >90%, >95%)
+        markdown = re.sub(
+            r"(?:covering\s+)?(?:>|≥|approximately|~)?\s*\d{2,3}\s*%\s*(?:of\s+service\s+layer\s+methods|test\s+coverage)",
+            "comprehensive unit and integration test coverage",
+            markdown,
+            flags=re.IGNORECASE
+        )
+        # Strip hallucinated TA proficiency percentages and student counts
+        markdown = re.sub(
+            r"(?:improving|improved|enhancing|strengthening)\s+(?:student\s+)?(?:coding\s+proficiency|code\s+quality)?\s*(?:by\s+)?(?:≈|~|approximately)?\s*\d{1,2}\s*%\s*(?:\([^)]*assessment\s+scores[^)]*\)|across\s+(?:≈|~|approximately)?\s*\d+\s+students)?",
+            "strengthening students' foundational programming concepts",
+            markdown,
+            flags=re.IGNORECASE
+        )
+        markdown = re.sub(
+            r"(?:by\s+)?(?:≈|~|approximately)?\s*\d{1,2}\s*%\s*\([^)]*assessment\s+scores[^)]*\)",
+            "strengthening foundational programming concepts",
+            markdown,
+            flags=re.IGNORECASE
+        )
+        markdown = re.sub(
+            r"across\s+(?:≈|~|approximately)?\s*\d+\s+students",
+            "for first-year B.Tech students",
+            markdown,
+            flags=re.IGNORECASE
+        )
+        # Strip hallucinated TAMS registration percentages
+        markdown = re.sub(
+            r"(?:increasing|increased|boosting)\s+participant\s+registrations\s+(?:by\s+)?(?:≈|~|approximately)?\s*\d{1,2}\s*%\s*(?:through\s+targeted\s+campaigns)?",
+            "driving participant outreach and technical event engagement",
+            markdown,
+            flags=re.IGNORECASE
+        )
+        markdown = re.sub(
+            r"increasing\s+participant\s+registrations\s+by\s+(?:≈|~|approximately)?\s*\d{1,2}\s*%\s*(?:through\s+targeted\s+campaigns)?",
+            "driving participant outreach and technical event engagement",
+            markdown,
+            flags=re.IGNORECASE
+        )
+        # Strip hallucinated TPS (e.g. 200 TPS)
+        markdown = re.sub(
+            r"\s*\((?:simulated\s+)?\d+\s*TPS\)",
+            "",
+            markdown,
+            flags=re.IGNORECASE
+        )
+        # Strip hallucinated AUC in Matcher
+        markdown = re.sub(
+            r"\s*\((?:AUC|ROC-AUC)\s*=\s*0\.\d+\)",
+            "",
+            markdown,
+            flags=re.IGNORECASE
+        )
+        # Strip hallucinated vulnerability counts (e.g. 12 critical vulnerabilities)
+        markdown = re.sub(
+            r"identifying\s+and\s+remediating\s+\d+\s+critical\s+vulnerabilities",
+            "identifying and remediating application security vulnerabilities",
+            markdown,
+            flags=re.IGNORECASE
+        )
 
-    # 1. Strip 'robotics' from Career Objective
+    # 1. Strip 'robotics' and fabricated non-CS hardware/FPGA terms from Career Objective
     def _clean_obj(m):
         block = m.group(0)
         cleaned = re.sub(r",?\s*(?:embedded\s+)?robotics\s*,?", ", ", block, flags=re.IGNORECASE)
         cleaned = re.sub(r"\band\s+robotics\b", "and full-stack development", cleaned, flags=re.IGNORECASE)
+        # Scrub fabricated non-CS electronics, analog, and FPGA claims
+        cleaned = re.sub(r"\b(?:solid\s+grounding\s+in\s+)?electronic\s+circuits\b", "strong grounding in low-level C programming", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\b(?:digital/analogue|analogue/digital|digital/analog|analog/digital)\s+(?:circuit\s+)?design\b", "operating-system internals", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\bhigh-speed\s+board\s+(?:and\s+FPGA\s+development|design)\b", "high-performance telecom networking platforms", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\bhardware\s+engineering\s+internship\b", "embedded software engineering internship", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\btelecom-grade\s+hardware\s+R&D\b", "telecom-grade embedded software R&D", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\b(?:contribute\s+to\s+)?high-performance\s+hardware\s+and\s+FPGA\s+design\b", "contribute to high-performance networking platforms and embedded system software", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r",?\s*and\s+FPGA(?:\s+design|\s+development)?\b", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\bFPGA(?:\s+design|\s+development)?\b", "embedded software", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r",\s*,", ", ", cleaned)
         cleaned = re.sub(r",\s*and\b", " and", cleaned)
-        cleaned = re.sub(r"\s{2,}", " ", cleaned)
+        cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
         return cleaned
 
     markdown = re.sub(r"##\s*Career Objective.*?(?=\n##|\Z)", _clean_obj, markdown, flags=re.DOTALL | re.IGNORECASE)
+
+    # 1.5. Clean fabricated non-CS hardware/FPGA terms from Technical Skills
+    def _clean_skills(m):
+        skills_block = m.group(0)
+        cleaned = re.sub(r",?\s*VHDL/Verilog\s*(?:\([^)]*\))?", "", skills_block, flags=re.IGNORECASE)
+        cleaned = re.sub(r",?\s*(?:digital/analogue|analogue/digital|digital/analog|analog/digital)\s+circuit\s+fundamentals", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r",?\s*electronic\s+circuits", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r",?\s*(?:high-speed\s+board\s+design|FPGA(?:\s+design|\s+development)?)", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\bEmbedded\s*/\s*Hardware:", "Embedded & Systems Software:", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r",\s*,", ", ", cleaned)
+        cleaned = re.sub(r",\s*$", "", cleaned, flags=re.MULTILINE)
+        return cleaned
+
+    markdown = re.sub(r"##\s*Technical Skills.*?(?=\n##|\Z)", _clean_skills, markdown, flags=re.DOTALL | re.IGNORECASE)
 
     # 2. Enforce explicit long forms ONLY for the requested terms
     markdown = re.sub(r"\bDBMS\b", "Database management systems", markdown)
@@ -138,16 +161,30 @@ def scrub_unverified_metrics(markdown: str, profile_id: str = "") -> str:
     markdown = markdown.replace("‚Äî", "-").replace("‚Üí", "->").replace("‚â•", ">=")
     markdown = markdown.replace("â€\"", "-").replace("â†'", "->").replace("â‰¥", ">=")
     markdown = markdown.replace("â€“", "-").replace("â€™", "'").replace("â€œ", '"').replace("â€\x9d", '"')
-    markdown = markdown.replace("—", "-").replace("–", "-").replace("‑", "-")
+    markdown = markdown.replace("--", "-").replace("-", "-").replace("‑", "-")
     markdown = markdown.replace("→", "->").replace("←", "<-").replace("≥", ">=").replace("≤", "<=")
     markdown = markdown.replace("\u202f", " ").replace("\u00a0", " ")
 
     # 4. Remove banned projects if present
     markdown = re.sub(r"###\s*.*?(?:PC\s+Parts|University\s+Database).*?(?=\n###|\n##|\Z)", "", markdown, flags=re.DOTALL | re.IGNORECASE)
 
+    # 4.5. Remove duplicate scientific literature projects if GLAS-Med is already present in Selected Projects
+    if "glas-med" in markdown.lower() or "clinical literature synthesis" in markdown.lower():
+        def _dedup_projects(m):
+            sec_text = m.group(0)
+            cleaned_sec = re.sub(
+                r"###\s*[^\n]*(?:scientific\s+literature\s+analysis|genai-scientific-literature).*?(?=(?:\n###|\Z))",
+                "",
+                sec_text,
+                flags=re.DOTALL | re.IGNORECASE
+            )
+            return cleaned_sec
+
+        markdown = re.sub(r"##\s*(?:Selected\s+Projects|Academic\s+Projects|Projects)\b.*?(?=\n##\s+[^\n#]|\Z)", _dedup_projects, markdown, flags=re.DOTALL | re.IGNORECASE)
+
     # 5. Normalize bold job titles to ### headings if LLM output **Role - Company** (Dates)
     markdown = re.sub(
-        r"^\*\*(Software Engineering Intern\s*[–-]\s*[^*]+)\*\*\s*(?:\(([^)]+)\))?",
+        r"^\*\*(Software Engineering Intern\s*[--]\s*[^*]+)\*\*\s*(?:\(([^)]+)\))?",
         r"### \1\n*\2*",
         markdown,
         flags=re.MULTILINE
@@ -158,7 +195,7 @@ def scrub_unverified_metrics(markdown: str, profile_id: str = "") -> str:
 
 def enforce_one_page_budget(markdown: str, profile_id: str = "madhav", strict_mode: bool = False) -> str:
     """Deterministically enforce 1-page bullet and project limits for 1-page curated profiles."""
-    if profile_id != "madhav" or not markdown:
+    if not markdown:
         return markdown
 
     lines = markdown.splitlines()
@@ -171,8 +208,13 @@ def enforce_one_page_budget(markdown: str, profile_id: str = "madhav", strict_mo
     max_qualcomm = 3
     max_octanner = 1 if strict_mode else 2
     max_pub = 2
+    max_drdo = 2 if strict_mode else 3
+    max_leadership = 2
     max_proj_count = 2 if strict_mode else 3
     max_proj_bullets = 2
+
+    # Track seen roles to avoid duplicate listings across sections
+    seen_roles = set()
 
     i = 0
     while i < len(lines):
@@ -191,6 +233,23 @@ def enforce_one_page_budget(markdown: str, profile_id: str = "madhav", strict_mo
         if re.match(r"^###\s+", line):
             current_item = line.strip().lower()
             item_bullets = 0
+
+            # Deduplication: If teaching assistant or tams was already added, skip duplicate
+            if "teaching assistant" in current_item:
+                if "ta" in seen_roles:
+                    i += 1
+                    while i < len(lines) and not re.match(r"^###?\s+", lines[i]) and lines[i] != "---":
+                        i += 1
+                    continue
+                seen_roles.add("ta")
+            elif "social media" in current_item or "tams" in current_item:
+                if "tams" in seen_roles:
+                    i += 1
+                    while i < len(lines) and not re.match(r"^###?\s+", lines[i]) and lines[i] != "---":
+                        i += 1
+                    continue
+                seen_roles.add("tams")
+
             if any(k in (current_sec or "") for k in ["project", "academic", "selected"]):
                 projects_count += 1
                 if projects_count > max_proj_count:
@@ -213,8 +272,28 @@ def enforce_one_page_budget(markdown: str, profile_id: str = "madhav", strict_mo
                 if item_bullets >= max_octanner:
                     i += 1
                     continue
+            elif "drdo" in (current_item or "") or "radar" in (current_item or ""):
+                if item_bullets >= max_drdo:
+                    i += 1
+                    continue
+            elif "teaching assistant" in (current_item or ""):
+                if item_bullets >= 1:
+                    i += 1
+                    continue
+            elif "social media" in (current_item or ""):
+                if item_bullets >= 1:
+                    i += 1
+                    continue
             elif "publication" in (current_sec or ""):
                 if item_bullets >= max_pub:
+                    i += 1
+                    continue
+            elif "extracurricular" in (current_sec or ""):
+                if item_bullets >= 1:
+                    i += 1
+                    continue
+            elif any(k in (current_sec or "") for k in ["leadership"]):
+                if item_bullets >= max_leadership:
                     i += 1
                     continue
             elif any(k in (current_sec or "") for k in ["project", "academic", "selected"]):
@@ -232,6 +311,69 @@ def enforce_one_page_budget(markdown: str, profile_id: str = "madhav", strict_mo
 
     return "\n".join(output) + ("\n" if markdown.endswith("\n") else "")
 
+
+def ensure_education(markdown: str, profile=None) -> str:
+    """Ensure candidate's Education section is present in the tailored resume."""
+    if not markdown:
+        return markdown
+
+    for line in markdown.splitlines():
+        cleaned = re.sub(r"[*_`#]", "", line).strip().lower()
+        if cleaned == "education":
+            return markdown
+
+    if profile and getattr(profile, "id", "") in ("secondary", "mahika", "partner"):
+        edu_block = (
+            "## Education\n\n"
+            "**PES University, Bengaluru**\n"
+            "- Bachelor of Technology in Computer Science and Engineering\n"
+            "- Expected Graduation: **May 2027**\n"
+            "- **CGPA**: **8.06 (Sem 6)** | **Distinction Scholarship** (Semesters 1, 3, 4, 5, 6)\n"
+            "- **Relevant Coursework**: Data Structures and Applications, Design and Analysis of Algorithms, Operating Systems, Computer Networks, Database Management Systems, Machine Learning, Generative AI and Applications\n"
+        )
+    else:
+        edu_block = (
+            "## Education\n\n"
+            "**PES University, Bengaluru**\n"
+            "- Bachelor of Technology in Computer Science and Engineering\n"
+            "- Expected Graduation: **May 2027**\n"
+            "- **Relevant Coursework**: Data Structures & Algorithms, Operating Systems, Computer Networks, Database Management Systems, Machine Learning, Linear Algebra\n"
+        )
+
+    lines = markdown.splitlines()
+    output = []
+    inserted = False
+
+    for line in lines:
+        cleaned = re.sub(r"[*_`#]", "", line).strip().lower()
+        if not inserted and cleaned.startswith("professional experience"):
+            output.append(edu_block.strip())
+            output.append("")
+            output.append("---")
+            output.append("")
+            inserted = True
+        output.append(line)
+
+    if not inserted:
+        output = []
+        in_obj = False
+        for line in lines:
+            output.append(line)
+            cleaned = re.sub(r"[*_`#]", "", line).strip().lower()
+            if cleaned.startswith("career objective"):
+                in_obj = True
+            elif in_obj and line.strip() in ["---", "--", "___"]:
+                output.append("")
+                output.append(edu_block.strip())
+                output.append("")
+                output.append("---")
+                in_obj = False
+                inserted = True
+
+    if not inserted:
+        return edu_block + "\n\n---\n\n" + markdown
+
+    return "\n".join(output) + ("\n" if markdown.endswith("\n") else "")
 
 
 def ensure_gpa(markdown: str, profile=None) -> str:
@@ -436,8 +578,16 @@ def ensure_career_objective_target(markdown: str, company: str, title: str) -> s
     objective_index = None
     for index, line in enumerate(lines):
         heading_text = re.sub(r"[*_`]", "", line.strip())
-        if re.match(r"^#{1,3}\s+career objective\s*$", heading_text, re.IGNORECASE):
+        clean_title = re.sub(r"^#{1,3}\s+", "", heading_text).strip().lower()
+        if clean_title == "career objective":
             objective_index = index
+            break
+        elif clean_title.startswith("career objective"):
+            objective_index = index
+            lines[index] = "## Career Objective"
+            remainder = re.sub(r"^#{1,3}\s+[*_]*career objective[*_]*[\s:–—\-]*", "", line.strip(), flags=re.IGNORECASE).strip()
+            if remainder:
+                lines.insert(index + 1, remainder)
             break
 
     if objective_index is None:
@@ -452,7 +602,7 @@ def ensure_career_objective_target(markdown: str, company: str, title: str) -> s
             break
     objective_text = "\n".join(lines[objective_index + 1:next_heading]).lower()
     if company.lower() in objective_text and title.lower() in objective_text:
-        return markdown
+        return "\n".join(lines) + ("\n" if markdown.endswith("\n") else "")
 
     lines.insert(objective_index + 1, target_line)
     return "\n".join(lines) + ("\n" if markdown.endswith("\n") else "")
@@ -567,66 +717,61 @@ def tailor_materials(job_id: str, profile_name: str = "madhav"):
     print(f"Tailoring application materials for {profile.name}: '{title}' at '{company}'...")
 
     is_ambiguous, ambiguity_reason = is_job_description_ambiguous(title, description)
-    if profile.id == "mahika":
-        if is_ambiguous:
-            print(f"-> Ambiguous / multi-track role detected for {profile.name}: {ambiguity_reason}")
-            print("-> Applying Broad Versatility Strategy: Maximizing viable projects across diverse domains...")
-            project_strategy = f"""2. DYNAMIC PROJECT SELECTION & ALIGNMENT — AMBIGUOUS / MULTI-TRACK / GENERAL JD STRATEGY:
-   - DETECTED CONTEXT: The Job Posting is AMBIGUOUS, MULTI-TRACK, or a GENERAL HIRING POOL ({ambiguity_reason}).
-   - CORE DIRECTIVE: INCLUDE AS MANY HIGH-SIGNAL, VIABLE PROJECTS AS POSSIBLE (INCLUDE 4 TO 5 DIVERSE PROJECTS) from the candidate's verified pool (Base Resume + Project Portfolio).
-   - DO NOT limit the resume to a single narrow track or only 2-3 projects. Showcase broad engineering versatility across multiple technical domains:
-       * Pillar 1 (Bioinformatics / AI / Structural Biology): 'Capstone Project: AI for Neurodegenerative Protein Analysis & Pathogenicity Reasoning' (AlphaFold 3D PDB structures, BioPython ShrakeRupley SASA, DSSP secondary structure, AlphaMissense evolutionary AI, MyVariant.info, OpenTargets clinical evidence)
-       * Pillar 2 (NLP / Machine Learning / Semantic Matching / GenAI): 'Resume-JD Semantic Matcher' (ATS-style matcher, 5-agent pipeline, dual XGBoost models on 7,751 pairs, SBERT embeddings, FAISS vector DB with 2,831 skills, FLAN-T5-small explanations, SHAP)
-       * Pillar 3 (Robotics / Computer Vision / Edge AI): 'Autonomous Robotics: Dual-Pipeline Visual Servoing & Odometry' (ROS 2, Arduino, Lucas-Kanade optical flow, HSV fire tracking, RViz2) OR 'Interactive Deep Learning Drawing Classifier' (TensorFlow/Keras custom CNN, 86.55% on QuickDraw 50 categories)
-       * Pillar 4 (Enterprise Systems / OOP Architecture / Java): 'Enterprise Loan Management System' (Java SE, MVC, MySQL, 5 GoF design patterns: Chain of Responsibility, Decorator, Observer, Factory, Singleton; Data Export & System Reporting) OR 'Mini-UnionFS' (C, FUSE 3, layered filesystem, CoW, whiteouts)
-       * Pillar 5 (Web Platforms / Testing / CI/CD): 'Personal Wealth Management Application' (React, Flask, SQLite, Cypress, Jest, pytest, Bandit, GitHub Actions CI/CD)
-    - DEPTH, TECHNICAL SUBSTANCE & IMPACT RULES:
-       * There is NO artificial 1-page restriction — prioritize technical substance, architectural depth, and quantitative metrics over arbitrary length limits. For each project, write 3 to 4 comprehensive, punchy, high-density bullet points.
-       * Bullet 1: MUST state WHAT the project is and WHAT it does (core product capability and problem solved).
-       * Bullets 2-4: Detail deep technical architecture, libraries, concurrency/data flow, and performance optimizations. Include ONLY quantitative metrics that are explicitly documented in the candidate's base resume or portfolio. NEVER invent or hallucinate metrics, percentages, test counts, or benchmarks.
-    - EXPANDED SKILLS: Ensure the Technical Skills section covers the full breadth of languages, frameworks, and tools across all included projects (e.g. Python, Java, C, JavaScript, SQL, HTML/CSS, PyTorch, TensorFlow, Scikit-learn, XGBoost, SBERT, FAISS, FLAN-T5, SHAP, BioPython, ROS2, OpenCV, Arduino, FUSE, React, Flask, SQLite, MySQL, Cypress, Jest, pytest, Bandit, Docker, CI/CD)."""
-        else:
-            print(f"-> Targeted role detected for {profile.name}. Applying Deep Specialization Strategy...")
-            project_strategy = """2. DYNAMIC PROJECT SELECTION & ALIGNMENT — TARGETED / SPECIALIZED JD STRATEGY:
-   - Carefully review the Job Posting requirements (required languages, frameworks, domain, e.g. AI/ML, NLP, Computer Vision, Robotics, Backend, Full-Stack, Java, Systems, Databases, QA/Testing).
-   - Compare the candidate's Current Resume Projects with the candidate's Verified Project Portfolio.
-   - Select the 3 to 4 BEST-FITTING projects from the combined pool of projects (Current Resume + Portfolio).
-   - REPLACE less relevant projects on the base resume with stronger-matching portfolio projects where appropriate:
-      * For AI / RAG / Agent / NLP / Generative AI / Research / Machine Learning roles -> STRONGLY PRIORITIZE 'Capstone Project: AI for Neurodegenerative Protein Analysis & Pathogenicity Reasoning' (AlphaFold structures, BioPython SASA/DSSP, AlphaMissense, MyVariant.info, OpenTargets) and 'Resume-JD Semantic Matcher' (5-agent pipeline, XGBoost on 7,751 pairs, SBERT, FAISS with 2,831 skills, FLAN-T5, SHAP).
-      * For Robotics / Computer Vision / Embedded / IoT roles -> prioritize 'Autonomous Robotics: Dual-Pipeline Visual Servoing & Odometry' (ROS 2, Arduino, Lucas-Kanade optical flow, HSV fire tracking) and 'Interactive Deep Learning Drawing Classifier' (TensorFlow/Keras custom CNN, 86.55% on QuickDraw).
-      * For Backend / Java / Enterprise / OOP / Architecture / Database roles -> prioritize 'Enterprise Loan Management System' (Java SE, MVC, 5 GoF patterns, MySQL, Data Export & Reporting).
-      * For Full-Stack / QA / Testing / CI/CD roles -> prioritize 'Personal Wealth Management Application' (React, Flask, SQLite, Cypress, Jest, pytest, Bandit, GitHub Actions CI/CD).
-      * For Systems / OS / Kernel / C roles -> prioritize 'Mini-UnionFS' (C, FUSE 3, CoW, whiteouts).
-   - BANNED PROJECTS: NEVER consider or include 'PC Parts E-Commerce Platform' or 'University Database Management System' under any circumstances.
-   - FIRST BULLET EXPLAINS WHAT THE PROJECT DOES: For EVERY project on the resume, the FIRST bullet point MUST clearly state WHAT the project is and WHAT it does (its core product capability, user function, and problem solved). The remaining bullets should then detail the deep engineering architecture, database design, concurrency models, performance optimizations, and only authentic quantitative metrics from source materials.
-   - For each selected project, write 3 to 4 detailed, highly technical bullet points demonstrating real engineering architecture, libraries, and design patterns from its verified documentation."""
-    else:
+    if profile.id in ("secondary", "mahika", "partner"):
         if is_ambiguous:
             print(f"-> Ambiguous / multi-track role detected: {ambiguity_reason}")
-            print("-> Applying Broad Versatility Strategy: Selecting top 3 diverse projects across pillars...")
-            project_strategy = f"""2. DYNAMIC PROJECT SELECTION & ALIGNMENT — 1-PAGE CURATED STRATEGY (AMBIGUOUS / MULTI-TRACK):
-   - DETECTED CONTEXT: The Job Posting is AMBIGUOUS, MULTI-TRACK, or a GENERAL HIRING POOL ({ambiguity_reason}).
-   - CORE DIRECTIVE: Select EXACTLY the TOP 3 DIVERSE, HIGH-SIGNAL PROJECTS from the candidate's verified pool (Base Resume + GitHub Portfolio) to showcase versatile technical breadth while fitting strictly on 1 page:
-       * Project 1 (AI / Multi-Agent / Research): 'GLAS-Med: Evidence-Grounded Clinical Literature Synthesis' (GitHub: https://github.com/madhavofficial/evidence-grounded-clinical-literature-synthesis) OR 'Multi-Modal AI Protein Analysis & Pathogenicity Reasoning Platform' (GitHub: https://github.com/madhavofficial/neuro_capstone)
-       * Project 2 (Distributed Systems / Big Data / CV): 'Distributed High-Throughput Stream & Image Processing Pipeline with Apache Kafka' (GitHub: https://github.com/varunnhn/153_Project3_BD) OR 'Sketch Recognition System' (GitHub: https://github.com/madhavofficial/Drawing-A-New-Way-To-Search-ML-)
-       * Project 3 (Full-Stack / Automation / FinTech): 'Smart Market Watchlist & Real-Time Trading Terminal' (GitHub: https://github.com/madhavofficial/Ultimate-Trader-Dashboard-GitHub-Repository-Structure) OR 'Autonomous Job Discovery, Career Intelligence & Application Automation Engine' (GitHub: https://github.com/madhavofficial/job-hunter) OR 'CareerTime - AI Career Intelligence Platform' (GitHub: https://github.com/madhavofficial/CareerTime)
-   - For each selected project, write 2 to 3 concise, punchy, high-density bullet points (Bullet 1: WHAT it does; Bullets 2-3: architecture & metrics).
-   - EXPANDED SKILLS: Ensure the Technical Skills section covers the languages and tools from the selected projects."""
+            print("-> Applying Broad Versatility Strategy for Mahika: Selecting top 3 diverse projects across pillars...")
+            project_strategy = f"""2. DYNAMIC PROJECT SELECTION & ALIGNMENT -- 1-PAGE CURATED STRATEGY (AMBIGUOUS / MULTI-TRACK):
+    - DETECTED CONTEXT: The Job Posting is AMBIGUOUS, MULTI-TRACK, or a GENERAL HIRING POOL ({ambiguity_reason}).
+    - CORE DIRECTIVE: Select EXACTLY the TOP 3 DIVERSE, HIGH-SIGNAL PROJECTS from Mahika's verified pool to showcase versatile technical breadth while fitting strictly on 1 page:
+        * Project 1 (Full-Stack Flagship / AI / Database): 'Multi-Modal AI Protein Analysis & Pathogenicity Reasoning Platform' (GitHub: https://github.com/madhavofficial/neuro_capstone)
+        * Project 2 (Enterprise Systems / Java / MySQL / FinTech OR Systems / C / OS): 'Enterprise Loan Management System' (GitHub: https://github.com/surabhi1828/LoanManagementSystem) OR 'Mini-UnionFS: Layered Union File System in C with FUSE' (GitHub: https://github.com/Mahika6/mini-unionfs)
+        * Project 3 (ML / NLP / GenAI): 'Resume-JD Semantic Matcher & Explainable Screening Engine' (GitHub: https://github.com/Mahika6/genai-project) OR 'Interactive Deep Learning Drawing Classifier' (GitHub: https://github.com/madhavofficial/Drawing-A-New-Way-To-Search-ML-)
+    - ANTI-CLUSTERING RULE: NEVER select both 'Enterprise Loan Management System' and 'Personal Wealth Management Application' on the same resume; choose at most one to prevent redundant domain clustering in finance.
+    - For each selected project, write 2 concise, punchy, high-density bullet points (Bullet 1: WHAT it does; Bullet 2: architecture & verified metrics).
+    - EXPANDED SKILLS: Ensure Technical Skills covers the languages and tools from the selected projects."""
         else:
-            print("-> Targeted role detected. Applying Deep Specialization Strategy...")
-            project_strategy = """2. DYNAMIC PROJECT SELECTION & ALIGNMENT — 1-PAGE CURATED STRATEGY (TARGETED ROLE):
-   - Carefully review the Job Posting requirements (required languages, frameworks, domain, e.g. DevOps, TypeScript, Full-Stack Web, Backend, Distributed Systems, AI/ML, Data Science, Databases).
-   - Compare the candidate's Current Resume Projects with the candidate's Verified GitHub Project Portfolio.
-   - Select EXACTLY the TOP 3 BEST-FITTING projects from the combined pool of projects (Current Resume + GitHub Portfolio).
-   - Alignment recommendations:
-       * For AI / RAG / Agent / NLP / Generative AI / Research / Machine Learning roles -> STRONGLY PRIORITIZE 'GLAS-Med: Evidence-Grounded Clinical Literature Synthesis' (GitHub: https://github.com/madhavofficial/evidence-grounded-clinical-literature-synthesis) and 'Multi-Modal AI Protein Analysis & Pathogenicity Reasoning Platform' (GitHub: https://github.com/madhavofficial/neuro_capstone).
-       * For DevOps / Cloud / Automation / Tooling roles -> prioritize 'Autonomous Job Discovery, Career Intelligence & Application Automation Engine' (GitHub: https://github.com/madhavofficial/job-hunter).
-       * For Big Data / Data Engineering / Streaming / Kafka / Distributed Systems -> prioritize 'Distributed High-Throughput Stream & Image Processing Pipeline with Apache Kafka' (GitHub: https://github.com/varunnhn/153_Project3_BD) and 'Hourly Bike-Sharing Demand Forecasting & Time-Series Regression Pipeline' (GitHub: https://github.com/madhavofficial/Forecasting-Bike-Rental-Demand).
-       * For Full-Stack / TypeScript / FinTech / Database roles -> prioritize 'Smart Market Watchlist & Real-Time Trading Terminal' (GitHub: https://github.com/madhavofficial/Ultimate-Trader-Dashboard-GitHub-Repository-Structure).
-       * For Computer Vision / Deep Learning -> prioritize 'Sketch Recognition System' (GitHub: https://github.com/madhavofficial/Drawing-A-New-Way-To-Search-ML-).
-       * For Data Science / Regression / Analytics -> prioritize 'Hourly Bike-Sharing Demand Forecasting & Time-Series Regression Pipeline' (GitHub: https://github.com/madhavofficial/Forecasting-Bike-Rental-Demand).
-   - For each selected project, write 2 to 3 concise, punchy, high-density bullet points (Bullet 1: WHAT it does; Bullets 2-3: architecture & metrics).
-   - EXPANDED SKILLS: Highlight the exact languages, frameworks, and tools used across the 3 selected projects and experience."""
+            print("-> Targeted role detected for Mahika. Applying Deep Specialization Strategy...")
+            project_strategy = """2. DYNAMIC PROJECT SELECTION & ALIGNMENT -- 1-PAGE CURATED STRATEGY (TARGETED ROLE):
+    - Review the Job Posting requirements and select the BEST-FITTING projects from Mahika's verified pool:
+        * CORE FLAGSHIP PRINCIPLE: 'Multi-Modal AI Protein Analysis & Pathogenicity Reasoning Platform' (GitHub: https://github.com/madhavofficial/neuro_capstone) is Mahika's primary technical flagship demonstrating modern full-stack web engineering (React 18, TypeScript, Vite, Tailwind CSS), high-performance API design (FastAPI), relational cloud databases (Supabase PostgreSQL with RLS), and rigorous benchmarking. STRONGLY PRIORITIZE including it across all AI/ML, Full-Stack, Web, TypeScript, React, Database, and general Software Engineering / IT Developer roles.
+        * For Enterprise / Business Systems / FinTech / Banking / Java / Supply Chain roles -> PAIR 'Enterprise Loan Management System' (GitHub: https://github.com/surabhi1828/LoanManagementSystem; Java SE, MVC, MySQL, 5 GoF patterns, RBAC, financial compliance and auditing) with her full-stack flagship 'Multi-Modal AI Protein Analysis & Pathogenicity Reasoning Platform'.
+        * ANTI-CLUSTERING RULE: NEVER select both 'Enterprise Loan Management System' and 'Personal Wealth Management Application' together on the same resume! Doing so causes repetitive domain clustering in finance. Choose at most one finance-specific project and pair it with a system of different architectural breadth (specifically 'neuro_capstone').
+        * For AI / ML / GenAI / NLP / LLM roles -> STRONGLY PRIORITIZE:
+          1. 'Multi-Modal AI Protein Analysis & Pathogenicity Reasoning Platform' (GitHub: https://github.com/madhavofficial/neuro_capstone)
+          2. 'Resume-JD Semantic Matcher & Explainable Screening Engine' (GitHub: https://github.com/Mahika6/genai-project)
+          3. 'Interactive Deep Learning Drawing Classifier' (GitHub: https://github.com/madhavofficial/Drawing-A-New-Way-To-Search-ML-)
+        * For Systems / OS / C / Linux roles -> prioritize 'Mini-UnionFS: Layered Union File System in C with FUSE' (GitHub: https://github.com/Mahika6/mini-unionfs) paired with 'Enterprise Loan Management System' or 'neuro_capstone'.
+        * For Robotics / Computer Vision -> prioritize 'Autonomous Robotics: Dual-Pipeline Visual Servoing & Odometry' (GitHub: https://github.com/surabhi1828/autonomous-detection-4wd-robot) and 'Interactive Deep Learning Drawing Classifier'.
+    - For each selected project, write 2 concise, punchy, high-density bullet points (Bullet 1: WHAT it does; Bullet 2: architecture & verified metrics).
+    - EXPANDED SKILLS: Highlight the exact languages, frameworks, and tools used across the 3 selected projects and experience."""
+    elif is_ambiguous:
+        print(f"-> Ambiguous / multi-track role detected: {ambiguity_reason}")
+        print("-> Applying Broad Versatility Strategy: Selecting top 3 diverse projects across pillars...")
+        project_strategy = f"""2. DYNAMIC PROJECT SELECTION & ALIGNMENT -- 1-PAGE CURATED STRATEGY (AMBIGUOUS / MULTI-TRACK):
+    - DETECTED CONTEXT: The Job Posting is AMBIGUOUS, MULTI-TRACK, or a GENERAL HIRING POOL ({ambiguity_reason}).
+    - CORE DIRECTIVE: Select EXACTLY the TOP 3 DIVERSE, HIGH-SIGNAL PROJECTS from the candidate's verified pool (Base Resume + GitHub Portfolio) to showcase versatile technical breadth while fitting strictly on 1 page:
+        * Project 1 (AI / Multi-Agent / Research): 'GLAS-Med: Evidence-Grounded Clinical Literature Synthesis' (GitHub: https://github.com/madhavofficial/evidence-grounded-clinical-literature-synthesis) OR 'Multi-Modal AI Protein Analysis & Pathogenicity Reasoning Platform' (GitHub: https://github.com/madhavofficial/neuro_capstone)
+        * Project 2 (Distributed Systems / Big Data / CV): 'Distributed High-Throughput Stream & Image Processing Pipeline with Apache Kafka' (GitHub: https://github.com/varunnhn/153_Project3_BD) OR 'Sketch Recognition System' (GitHub: https://github.com/madhavofficial/Drawing-A-New-Way-To-Search-ML-)
+        * Project 3 (Full-Stack / Automation / FinTech): 'Smart Market Watchlist & Real-Time Trading Terminal' (GitHub: https://github.com/madhavofficial/Ultimate-Trader-Dashboard-GitHub-Repository-Structure) OR 'Autonomous Job Discovery, Career Intelligence & Application Automation Engine' (GitHub: https://github.com/madhavofficial/job-hunter) OR 'CareerTime - AI Career Intelligence Platform' (GitHub: https://github.com/madhavofficial/CareerTime)
+    - For each selected project, write 2 to 3 concise, punchy, high-density bullet points (Bullet 1: WHAT it does; Bullets 2-3: architecture & metrics).
+    - EXPANDED SKILLS: Ensure the Technical Skills section covers the languages and tools from the selected projects."""
+    else:
+        print("-> Targeted role detected. Applying Deep Specialization Strategy...")
+        project_strategy = """2. DYNAMIC PROJECT SELECTION & ALIGNMENT -- 1-PAGE CURATED STRATEGY (TARGETED ROLE):
+    - Carefully review the Job Posting requirements (required languages, frameworks, domain, e.g. DevOps, TypeScript, Full-Stack Web, Backend, Distributed Systems, AI/ML, Data Science, Databases).
+    - Compare the candidate's Current Resume Projects with the candidate's Verified GitHub Project Portfolio.
+    - Select EXACTLY the TOP 3 BEST-FITTING projects from the combined pool of projects (Current Resume + GitHub Portfolio).
+    - Alignment recommendations:
+        * For AI / RAG / Agent / NLP / Generative AI / Research / Machine Learning roles -> STRONGLY PRIORITIZE 'GLAS-Med: Evidence-Grounded Clinical Literature Synthesis' (GitHub: https://github.com/madhavofficial/evidence-grounded-clinical-literature-synthesis) and 'Multi-Modal AI Protein Analysis & Pathogenicity Reasoning Platform' (GitHub: https://github.com/madhavofficial/neuro_capstone).
+        * CRITICAL ANTI-DUPLICATION RULE: 'GLAS-Med: Evidence-Grounded Clinical Literature Synthesis' and 'Multi-Agent Generative AI System for Scientific Literature Analysis' (IEEE SPICES) are the SAME research project. The IEEE SPICES paper belongs STRICTLY under '## Publications'. NEVER list 'Multi-Agent Generative AI System for Scientific Literature Analysis' under '## Selected Projects'! NEVER select both 'GLAS-Med' and 'Multi-Agent Generative AI System' as separate projects on the same resume.
+        * For DevOps / Cloud / Automation / Tooling roles -> prioritize 'Autonomous Job Discovery, Career Intelligence & Application Automation Engine' (GitHub: https://github.com/madhavofficial/job-hunter).
+        * For Big Data / Data Engineering / Streaming / Kafka / Distributed Systems -> prioritize 'Distributed High-Throughput Stream & Image Processing Pipeline with Apache Kafka' (GitHub: https://github.com/varunnhn/153_Project3_BD) and 'Hourly Bike-Sharing Demand Forecasting & Time-Series Regression Pipeline' (GitHub: https://github.com/madhavofficial/Forecasting-Bike-Rental-Demand).
+        * For Full-Stack / TypeScript / FinTech / Database roles -> prioritize 'Smart Market Watchlist & Real-Time Trading Terminal' (GitHub: https://github.com/madhavofficial/Ultimate-Trader-Dashboard-GitHub-Repository-Structure).
+        * For Computer Vision / Deep Learning -> prioritize 'Sketch Recognition System' (GitHub: https://github.com/madhavofficial/Drawing-A-New-Way-To-Search-ML-).
+        * For Data Science / Regression / Analytics -> prioritize 'Hourly Bike-Sharing Demand Forecasting & Time-Series Regression Pipeline' (GitHub: https://github.com/madhavofficial/Forecasting-Bike-Rental-Demand).
+    - For each selected project, write 2 to 3 concise, punchy, high-density bullet points (Bullet 1: WHAT it does; Bullets 2-3: architecture & metrics).
+    - EXPANDED SKILLS: Highlight the exact languages, frameworks, and tools used across the 3 selected projects and experience."""
     
     # Init Groq
     from dotenv import load_dotenv
@@ -647,6 +792,7 @@ def tailor_materials(job_id: str, profile_name: str = "madhav"):
     if profile.id == "madhav":
         length_curation_instruction = """4. STRICT 1-PAGE TARGET & SPECIALLY CURATED SELECTION:
    - TARGET EXACTLY 1 PAGE: The tailored resume MUST fit cleanly onto EXACTLY ONE PAGE when compiled with LaTeX.
+   - EDUCATION: MUST always include '## Education' with PES University, B.Tech in Computer Science and Engineering (Expected May 2027) and relevant coursework.
    - CURATED PROJECT SELECTION: Select EXACTLY the TOP 3 BEST-FITTING projects for this role from the candidate's verified pool (2 to 3 concise, punchy bullets per project). DO NOT include more than 3 projects under any circumstances.
    - CONDENSED PROFESSIONAL EXPERIENCE:
      * Condense Qualcomm into 3 to 4 high-impact bullets focusing on autonomous agents, Claude Code Skills, MCP integrations, Jira/Splunk automation, and Pydantic guardrails.
@@ -654,13 +800,30 @@ def tailor_materials(job_id: str, profile_name: str = "madhav"):
    - CONDENSED PUBLICATIONS:
      * In '## Publications', include the IEEE SPICES paper condensed into 2 to 3 high-impact bullets (multi-agent retrieval architecture ingesting 300-800 papers, graph clustering with 5-agent ensemble, 92.7% accuracy / 89.8% F1 score).
    - CAREER OBJECTIVE: Keep the Career Objective intact, tailored specifically to the target company and role.
+   - ZERO HARDWARE / NON-CS FABRICATION: Candidate is strictly a Computer Science and Engineering (CSE) student. NEVER claim grounding in analog circuits, circuit design, high-speed board design, PCB, or FPGA development. For telecom or embedded postings, frame interest and experience strictly around Embedded Software, C/C++, Linux systems programming, device interfacing, and OS internals.
+   - CERTIFICATIONS: Do NOT include any Certifications section under any circumstances.
+   - ZERO FACT FABRICATION: Rely strictly on facts and verified metrics in the source material."""
+        ambiguity_eval_instruction = """   - 1-PAGE CONSTRAINT PRIORITY: Even if the role is broad, general development centre (IDC), or rotational, maintain the 1-PAGE limit by selecting exactly the top 3 projects across different domains."""
+    elif profile.id in ("secondary", "mahika", "partner"):
+        length_curation_instruction = """4. STRICT 1-PAGE TARGET & SPECIALLY CURATED SELECTION:
+   - TARGET EXACTLY 1 PAGE: The tailored resume MUST fit cleanly onto EXACTLY ONE PAGE when compiled with LaTeX.
+   - EDUCATION: MUST always include '## Education' with PES University, B.Tech in Computer Science and Engineering (Expected May 2027) and relevant coursework.
+   - CURATED PROJECT SELECTION: Select EXACTLY the TOP 3 BEST-FITTING projects for this role from the candidate's verified pool (2 concise, punchy bullets per project). DO NOT include more than 3 projects under any circumstances.
+   - CONDENSED PROFESSIONAL EXPERIENCE:
+     * DRDO (Research Intern - AI-Based Radar Emitter Identification): Condense into 3 high-impact bullets focusing on the geometry-based PDW simulator modeling 150 concurrent emitters, PRI/RF clustering de-interleaving, LSTM sequence classifier (94.2% accuracy, 95.1% precision, 94.2% recall, 94.2% F1 score), and rule-based ECM recommendation layer.
+   - LEADERSHIP & EXTRACURRICULAR:
+     * In '## Leadership and Experience', include ONLY 1 concise bullet for Teaching Assistant (Python Programming Lab, PES University) and 1 concise bullet for Head of Social Media (TAMS).
+     * DO NOT duplicate Teaching Assistant or TAMS under '## Professional Experience'. Under '## Professional Experience', include ONLY DRDO.
+     * In '## Extracurricular Activities', include ONLY 1 line: 15+ years Classical Dance (Bharatanatyam).
+   - CAREER OBJECTIVE: Keep the Career Objective intact, tailored specifically to the target company and role.
+   - ZERO HARDWARE / NON-CS FABRICATION: Candidate is strictly a Computer Science and Engineering (CSE) student. NEVER claim grounding in analog circuits, circuit design, high-speed board design, PCB, or FPGA development. For telecom or embedded postings, frame interest and experience strictly around Embedded Software, C/C++, Linux systems programming, device interfacing, and OS internals.
    - CERTIFICATIONS: Do NOT include any Certifications section under any circumstances.
    - ZERO FACT FABRICATION: Rely strictly on facts and verified metrics in the source material."""
         ambiguity_eval_instruction = """   - 1-PAGE CONSTRAINT PRIORITY: Even if the role is broad, general development centre (IDC), or rotational, maintain the 1-PAGE limit by selecting exactly the top 3 projects across different domains."""
     else:
         length_curation_instruction = f"""4. ZERO METRIC OR FACT FABRICATION & NO LENGTH RESTRICTIONS:
    - Do NOT invent non-existent projects, companies, durations, graduation date (May 2027), or credentials. Rely strictly on facts in the candidate's resume and project portfolio.
-   - ABSOLUTE BAN ON FABRICATED NUMBERS & METRICS: ONLY cite quantitative metrics (percentages, accuracy, latency, scale, test coverage, counts) that appear verbatim in the candidate's base resume or portfolio. If a project or role does not have a metric in the source material, explain the engineering architecture and algorithms — NEVER invent numbers.
+   - ABSOLUTE BAN ON FABRICATED NUMBERS & METRICS: ONLY cite quantitative metrics (percentages, accuracy, latency, scale, test coverage, counts) that appear verbatim in the candidate's base resume or portfolio. If a project or role does not have a metric in the source material, explain the engineering architecture and algorithms -- NEVER invent numbers.
    - DO NOT invent unverified frameworks or integrations (e.g. do not invent SAP/ERP integrations or FastAPI if not present in the base resume or portfolio).
    - {profile.gpa_instruction} {profile.certifications_instruction}
    - There is NO artificial 1-page restriction - prioritize thorough understanding, architectural depth, and complete explanations over resume length. It is much more important that the reader understands the project than the size of the resume."""
@@ -698,7 +861,7 @@ Job Posting:
 Company: {company}
 Title: {title}
 Description:
-{description[:3500]}
+{description[:2200]}
 
 Please output the COMPLETE tailored resume in Markdown.
 """
@@ -710,18 +873,22 @@ Please output the COMPLETE tailored resume in Markdown.
         # 1. Primary: Groq Multi-Key & Model Cluster
         candidate_models = [model_name] + [m for m in config.get_fallback_models() if m != model_name]
         print("-> Generating tailored resume via Groq cluster...")
+        max_tokens_val = 1100 if profile.id in ("madhav", "secondary", "partner", "mahika") else 2048
         for active_model in candidate_models:
             retries = 0
             max_retries = max(1, config.key_manager.get_num_keys())
             while retries < max_retries:
                 try:
-                    res_response = client.chat.completions.create(
-                        model=active_model,
-                        messages=[{"role": "user", "content": resume_prompt}],
-                        temperature=0.2,
-                        max_tokens=4096,
-                        timeout=60,
-                    )
+                    kwargs = {
+                        "model": active_model,
+                        "messages": [{"role": "user", "content": resume_prompt}],
+                        "temperature": 0.2,
+                        "max_tokens": max_tokens_val,
+                        "timeout": 60,
+                    }
+                    if "gpt-oss" in active_model:
+                        kwargs["reasoning_effort"] = "low"
+                    res_response = client.chat.completions.create(**kwargs)
                     content = res_response.choices[0].message.content or ""
                     finish_reason = getattr(res_response.choices[0], "finish_reason", "")
                     if finish_reason == "length" or "technical skills" not in content.lower():
@@ -737,21 +904,36 @@ Please output the COMPLETE tailored resume in Markdown.
                         retries += 1
                         continue
 
-                    # Rate limits (TPM, RPM, TPD, 429) -> Key-specific quota, cycle to the next Groq key!
-                    if any(term in err_str for term in ["rate_limit", "rate limit", "429", "limit_exceeded", "tokens per minute", "tpm", "tokens per day"]):
+                    # If model is not available on this specific key, cycle to another key that has it
+                    if any(term in err_str for term in ["model_not_found", "does not exist", "do not have access", "not found"]):
                         retries += 1
                         if retries < max_retries:
-                            print(f"Rate/TPM limit hit on {active_model}. Cycling to next Groq key ({retries}/{max_retries})...")
+                            print(f"Model {active_model} not available on current key. Cycling to next key ({retries}/{max_retries})...")
                             client = config.cycle_groq_client()
                             continue
                         else:
-                            print(f"-> All {max_retries} keys exhausted for {active_model}. Falling back to next model...")
+                            print(f"-> Model {active_model} not found on any available keys. Trying next model...")
                             break
 
                     # True single-request prompt size violation for this model architecture
                     if any(term in err_str for term in ["request too large", "413", "context_length_exceeded", "request_too_large"]):
                         print(f"Prompt exceeded context limit for {active_model}. Falling back to next model...")
                         break
+
+                    # Rate limits (TPM, RPM, TPD, 429) -> Key-specific quota, cycle to the next Groq key!
+                    if any(term in err_str for term in ["rate_limit", "rate limit", "429", "limit_exceeded", "tokens per minute", "tpm", "tokens per day"]):
+                        retries += 1
+                        if retries < max_retries:
+                            import time
+                            retry_match = re.search(r"try again in (\d+(?:\.\d+)?)s", err_str)
+                            wait_s = min(float(retry_match.group(1)), 5.0) if retry_match else 2.0
+                            print(f"Rate/TPM limit hit on {active_model}. Waiting {wait_s:.1f}s and cycling to next Groq key ({retries}/{max_retries})...")
+                            time.sleep(wait_s)
+                            client = config.cycle_groq_client()
+                            continue
+                        else:
+                            print(f"-> All {max_retries} keys exhausted for {active_model}. Falling back to next model...")
+                            break
 
                     print(f"Error on {active_model}: {e}. Falling back to next model...")
                     break
@@ -764,7 +946,7 @@ Please output the COMPLETE tailored resume in Markdown.
             openrouter_key = os.getenv("OPENROUTER_API_KEY")
             if openrouter_key:
                 from openai import OpenAI
-                or_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=openrouter_key, timeout=25)
+                or_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=openrouter_key, timeout=60)
                 configured_openrouter_model = os.getenv("OPENROUTER_MODEL")
                 openrouter_models = ([configured_openrouter_model] if configured_openrouter_model else list(PREFERRED_OPENROUTER_MODELS))
                 for openrouter_model in openrouter_models:
@@ -790,10 +972,11 @@ Please output the COMPLETE tailored resume in Markdown.
             tailored_resume = strip_certifications(tailored_resume)
         tailored_resume = ensure_selected_project_github_links(tailored_resume, portfolio, profile=profile)
         tailored_resume = ensure_career_objective_target(tailored_resume, company, title)
+        tailored_resume = ensure_education(tailored_resume, profile=profile)
         tailored_resume = ensure_gpa(tailored_resume, profile=profile)
         tailored_resume = scrub_unverified_metrics(tailored_resume, profile_id=getattr(profile, "id", ""))
-        if getattr(profile, "id", "") == "madhav":
-            tailored_resume = enforce_one_page_budget(tailored_resume, profile_id="madhav")
+        if getattr(profile, "id", "") in ["madhav", "secondary", "partner", "mahika"]:
+            tailored_resume = enforce_one_page_budget(tailored_resume, profile_id=getattr(profile, "id", "madhav"))
         
         # Save files in dedicated company directory with <profile.file_prefix>_ naming scheme
         clean_company = "".join([c for c in company if c.isalnum() or c in (' ', '_')]).replace(' ', '_')
@@ -822,14 +1005,14 @@ Please output the COMPLETE tailored resume in Markdown.
             f.write(tex_content)
 
         compiled_with_tectonic = latex_utils.compile_latex_to_pdf(tex_content, resume_pdf_filepath, resume_tex_filepath)
-        if compiled_with_tectonic and getattr(profile, "id", "") == "madhav":
+        if compiled_with_tectonic and getattr(profile, "id", "") in ["madhav", "secondary", "partner", "mahika"]:
             import subprocess
             try:
                 p_info = subprocess.run(["pdfinfo", resume_pdf_filepath], capture_output=True, text=True)
                 m_pages = re.search(r"Pages:\s+(\d+)", p_info.stdout)
                 if m_pages and int(m_pages.group(1)) > 1:
                     print(f"Warning: Compiled PDF has {m_pages.group(1)} pages. Applying strict 1-page compression...")
-                    tailored_resume = enforce_one_page_budget(tailored_resume, profile_id="madhav", strict_mode=True)
+                    tailored_resume = enforce_one_page_budget(tailored_resume, profile_id=getattr(profile, "id", "madhav"), strict_mode=True)
                     with open(resume_filepath, "w", encoding="utf-8") as f:
                         f.write(tailored_resume)
                     tex_content = latex_utils.markdown_to_latex(tailored_resume)
