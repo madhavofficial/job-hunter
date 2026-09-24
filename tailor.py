@@ -14,6 +14,14 @@ PREFERRED_OPENROUTER_MODELS = (
     "openrouter/free",
 )
 
+PREFERRED_NVIDIA_MODELS = (
+    "moonshotai/kimi-k3",
+    "z-ai/glm-5.3",
+    "z-ai/glm-5.3-flash",
+    "meta/llama-3.2-11b-vision-instruct",
+)
+
+
 
 def strip_certifications(markdown: str) -> str:
     """Strip Certifications section and unshared course credentials from resume markdown."""
@@ -940,9 +948,39 @@ Please output the COMPLETE tailored resume in Markdown.
             if tailored_resume:
                 break
 
-        # 2. Fallback: OpenRouter (used only if Groq cluster failed or was exhausted)
+        # 2. High-Capacity Tier: NVIDIA Build NIM Catalog (Kimi-K3, GLM-5.3, Llama-3.2)
         if not tailored_resume:
-            print("Warning: Groq cluster exhausted. Falling back to OpenRouter...", file=sys.stderr)
+            nvidia_key = os.getenv("NVIDIA_API_KEY")
+            if nvidia_key:
+                print("-> Groq cluster exhausted/busy. Trying NVIDIA Build NIM cluster...", flush=True)
+                from openai import OpenAI
+                nv_client = OpenAI(base_url="https://integrate.api.nvidia.com/v1", api_key=nvidia_key, timeout=30.0)
+                configured_nv_model = os.getenv("NVIDIA_MODEL")
+                nv_models = [configured_nv_model] if configured_nv_model else list(PREFERRED_NVIDIA_MODELS)
+                for nv_model in nv_models:
+                    try:
+                        print(f"-> Trying NVIDIA Build model: {nv_model}...")
+                        nv_resp = nv_client.chat.completions.create(
+                            model=nv_model,
+                            messages=[{"role": "user", "content": resume_prompt}],
+                            temperature=0.2,
+                            max_tokens=max_tokens_val,
+                            timeout=25,
+                        )
+                        if nv_resp and nv_resp.choices and nv_resp.choices[0].message and nv_resp.choices[0].message.content:
+                            content = nv_resp.choices[0].message.content.strip()
+                            if "technical skills" in content.lower():
+                                tailored_resume = content
+                                print(f"-> Successfully tailored resume using NVIDIA Build ({nv_model}).")
+                                break
+                            else:
+                                print(f"Warning: NVIDIA model {nv_model} produced incomplete response. Trying next...")
+                    except Exception as e:
+                        print(f"Warning: NVIDIA Build model {nv_model} failed: {e}", file=sys.stderr)
+
+        # 3. Fallback: OpenRouter (used only if Groq and NVIDIA were exhausted)
+        if not tailored_resume:
+            print("Warning: Groq and NVIDIA clusters exhausted. Falling back to OpenRouter...", file=sys.stderr)
             openrouter_key = os.getenv("OPENROUTER_API_KEY")
             if openrouter_key:
                 from openai import OpenAI
