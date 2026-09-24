@@ -1004,7 +1004,7 @@ Please output the COMPLETE tailored resume in Markdown.
                         print(f"Warning: OpenRouter fallback model {openrouter_model} failed: {e}", file=sys.stderr)
 
         if not tailored_resume:
-            raise ValueError("Failed to generate tailored resume after trying Groq cluster and OpenRouter fallbacks.")
+            raise ValueError("Failed to generate tailored resume after trying Groq cluster, NVIDIA Build, and OpenRouter fallbacks.")
 
         if not getattr(profile, "include_certifications", False):
             tailored_resume = strip_certifications(tailored_resume)
