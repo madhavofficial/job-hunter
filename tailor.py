@@ -481,41 +481,66 @@ def ensure_gpa(markdown: str, profile=None) -> str:
 
 
 def ensure_publication_links(markdown: str) -> str:
-    """Ensure the IEEE SPICES publication has both the verified Paper URL (Zenodo DOI) and GitHub repository."""
+    """Ensure the IEEE SPICES publication has both the verified Paper URL (Zenodo DOI) and GitHub repository directly on the header line."""
     if not markdown:
         return markdown
     paper_url = "https://doi.org/10.5281/zenodo.22676649"
     github_url = "https://github.com/GenAI-Scientific-Literature-System/GenAI-Scientific-Literature-System-multi-agent-system"
     if "scientific literature" in markdown.lower() or "ieee spices" in markdown.lower():
-        # Clean any mangled title
-        markdown = re.sub(
-            r"###\s*.*?(?:scientific\s+literature|ieee\s+spices).*?\n",
-            "### A Multi-Agent Generative AI System for Scientific Literature Analysis | IEEE SPICES\n",
-            markdown,
-            count=1,
-            flags=re.IGNORECASE
-        )
-        # Ensure the metadata line beneath has exactly one clean Paper and GitHub URL line
-        markdown = re.sub(
-            r"(###\s*[^\n]*(?:scientific\s+literature|ieee\s+spices)[^\n]*\n)(?:[ \t]*(?:\*[^\n]*\*|_[^\n]*_|[^\n]*(?:doi|github|paper)[^\n]*)\n)+",
-            rf"\1*Paper: {paper_url} | GitHub: {github_url}*\n",
-            markdown,
-            count=1,
-            flags=re.IGNORECASE
-        )
-        # Strip redundant raw DOI / GitHub URLs from bullet points underneath publication since Paper | GitHub are in header
+        # Strip any stray Paper / GitHub metadata lines anywhere in the publication section
         lines = []
         in_pub = False
         for l in markdown.split("\n"):
-            if "### " in l and ("scientific literature" in l.lower() or "ieee spices" in l.lower()):
+            clean_l = l.strip().lower()
+            if clean_l.startswith("## ") and "publication" in clean_l:
                 in_pub = True
-            elif in_pub and l.startswith("## "):
+            elif in_pub and clean_l.startswith("## "):
                 in_pub = False
             
-            if in_pub and l.strip().startswith(("-", "* ")) and any(k in l.lower() for k in ["doi:", "github:", "zenodo.org", "doi.org"]):
+            # If inside publications and line is just a metadata link line, remove it
+            if in_pub and (
+                any(clean_l.startswith(p) for p in ["*paper:", "*github:", "_paper:", "_github:", "paper:", "github:"])
+                or ("doi.org" in clean_l and "github.com" in clean_l)
+            ):
+                continue
+            
+            # Strip redundant raw DOI / GitHub URLs from bullet points
+            if in_pub and l.strip().startswith(("-", "* ")) and any(k in clean_l for k in ["doi:", "github:", "zenodo.org", "doi.org"]):
                 l = re.sub(r";?\s*(?:DOI|Paper|Repository):\s*\[?[^\s|\]]+\]?(?:\([^\)]+\))?\s*\|\s*GitHub:\s*\[?[^\s\n\]]+\]?(?:\([^\)]+\))?", "", l, flags=re.I).rstrip("; ")
+            
             lines.append(l)
-        markdown = "\n".join(lines)
+        
+        cleaned_md = "\n".join(lines)
+        
+        # Standardize the publication heading to canonical ### format with metadata immediately below
+        canonical_heading = "### A Multi-Agent Generative AI System for Scientific Literature Analysis | IEEE SPICES"
+        canonical_meta = f"*Paper: {paper_url} | GitHub: {github_url}*"
+        replacement_block = f"{canonical_heading}\n{canonical_meta}\n"
+        
+        # Replace existing heading line (matching ###, **, or plain line)
+        replaced = False
+        def _rep_heading(m):
+            nonlocal replaced
+            replaced = True
+            return replacement_block
+        
+        cleaned_md = re.sub(
+            r"^(?:###|\*\*)[^\n]*(?:scientific\s+literature|ieee\s+spices)[^\n]*$",
+            _rep_heading,
+            cleaned_md,
+            count=1,
+            flags=re.IGNORECASE | re.MULTILINE
+        )
+        if not replaced:
+            cleaned_md = re.sub(
+                r"^[^\n#*]*(?:scientific\s+literature|ieee\s+spices)[^\n]*$",
+                _rep_heading,
+                cleaned_md,
+                count=1,
+                flags=re.IGNORECASE | re.MULTILINE
+            )
+        
+        return cleaned_md
     return markdown
 
 
@@ -933,7 +958,10 @@ def tailor_materials(job_id: str, profile_name: str = "madhav"):
      * Condense Qualcomm into EXACTLY 3 high-impact bullets focusing on autonomous agents, Claude Code Skills, MCP integrations, Jira/Splunk automation, and Pydantic guardrails.
      * Condense O.C. Tanner into EXACTLY 2 bullets (Kotlin accessibility Jira tickets, 10% to 70% automated test coverage across Scala/Android).
    - CONDENSED PUBLICATIONS:
-     * In '## Publications', include the IEEE SPICES paper condensed into EXACTLY 2 high-impact bullets (multi-agent retrieval architecture ingesting 300-800 papers, graph clustering with 5-agent ensemble, 92.7% accuracy / 89.8% F1 score).
+     * In '## Publications', include the IEEE SPICES paper condensed into EXACTLY 2 high-impact bullets focusing on technical functionality and system architecture:
+       - Bullet 1 (Retrieval & Ingestion): Built an evidence-grounded multi-agent system querying scholarly APIs (arXiv, PubMed, Semantic Scholar) and ingesting 300-800 papers per query with automated hallucination guardrails to eliminate false citations.
+       - Bullet 2 (Graph Clustering & Ensemble): Applied semantic Louvain graph clustering to partition literature into thematic sub-corpora and coordinated a 5-agent ensemble to extract empirical claims, evaluate methodology, and cross-examine evidence to resolve contradictions across papers.
+       - DO NOT output abstract or context-free percentage metrics (e.g. '92.7% accuracy / 89.8% F1')—focus strictly on what the system does, the multi-agent coordination, and the contradiction resolution mechanism.
    - CAREER OBJECTIVE: Keep the Career Objective intact, tailored specifically to the target company and role.
    - ZERO HARDWARE / NON-CS FABRICATION: Candidate is strictly a Computer Science and Engineering (CSE) student. NEVER claim grounding in analog circuits, circuit design, high-speed board design, PCB, or FPGA development. For telecom or embedded postings, frame interest and experience strictly around Embedded Software, C/C++, Linux systems programming, device interfacing, and OS internals.
    - CERTIFICATIONS: Do NOT include any Certifications section under any circumstances.

@@ -1779,6 +1779,9 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
         if path == "/" or path == "/index.html":
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
             self.end_headers()
             self.wfile.write(HTML_TEMPLATE.encode("utf-8"))
             return
@@ -1788,6 +1791,9 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
             self.end_headers()
             self.wfile.write(json.dumps(data).encode("utf-8"))
             return
@@ -2067,6 +2073,9 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "application/pdf")
             self.send_header("Content-Disposition", f'inline; filename="{os.path.basename(abs_path)}"')
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
             self.end_headers()
             with open(abs_path, "rb") as f:
                 self.wfile.write(f.read())

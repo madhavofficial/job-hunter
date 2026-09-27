@@ -220,6 +220,8 @@ def markdown_to_latex(markdown_text: str) -> str:
         for tok in tokens:
             tok_clean = re.sub(r"^\*\*[^*]+(?:\*\*:\s*|:\s*\*\*|\*\*)\s*", "", tok).strip()
             tok_clean = re.sub(r"^:\s*", "", tok_clean).strip()
+            # Strip plain "Label: " prefixes (Email:, Phone:, LinkedIn:, GitHub:, etc.)
+            tok_clean = re.sub(r"^(?:Email|Phone|LinkedIn|GitHub|Twitter|Portfolio|Website|Tel|Mobile)[:\s]+", "", tok_clean, flags=re.IGNORECASE).strip()
             if tok_clean.startswith("<") and tok_clean.endswith(">"):
                 tok_clean = tok_clean[1:-1].strip()
             # If it's an email
@@ -414,7 +416,7 @@ def markdown_to_latex(markdown_text: str) -> str:
                 links = []
                 if doi_url:
                     clean_doi = doi_url.replace("%", "\\%")
-                    label = "Paper" if is_publication else "DOI"
+                    label = "Paper" if (is_publication or is_spices_paper) else "DOI"
                     links.append(f"\\href{{{clean_doi}}}{{\\underline{{{label}}}}}")
                 if github_url:
                     clean_gh = github_url.replace("%", "\\%")
@@ -496,11 +498,71 @@ def markdown_to_latex(markdown_text: str) -> str:
             latex_parts.append(f"    \\resumeItem{{{format_inline_latex(bullet_text)}}}")
             continue
 
-        # Subheading or metadata without ### (e.g. *Sem 5* or *GitHub: ...*)
+        # Subheading or metadata without ### (e.g. *Sem 5* or *GitHub: ...* or *Paper: ... | GitHub: ...*)
         if re.match(r"^\*[^*].*[^*]\*$", line):
-            if not in_item_list:
-                latex_parts.append(f"\\small{{\\textit{{{format_inline_latex(line[1:-1].strip())}}}}} \\\\[2pt]")
+            inner = line[1:-1].strip()
+            # Check if this is a link metadata line (Paper/GitHub URLs)
+            _has_links = any(kw in inner.lower() for kw in ["paper:", "github:", "github.com/", "doi.org/", "zenodo.org/"])
+            if _has_links:
+                # Link metadata lines are consumed by project/publication headings; do NOT emit as body text at bottom
+                continue
+            elif not in_item_list:
+                latex_parts.append(f"\\small{{\\textit{{{format_inline_latex(inner)}}}}} \\\\[2pt]")
             continue
+
+        # Bold-line implicit subheading — LLM sometimes uses **Title – Org** (Date) instead of ###
+        # This handles: experience entries, publication headings that weren't caught by ### lookahead
+        _bold_m = re.match(r"^\*\*(.+?)\*\*(.*)$", line)
+        if _bold_m:
+            _bold_content = _bold_m.group(1).strip()
+            _after_bold = _bold_m.group(2).strip()
+
+            if any(k in (current_section or "") for k in ["experience", "professional", "work history", "internship"]):
+                # Close open bullet list first
+                if in_item_list:
+                    latex_parts.append(r"\resumeItemListEnd")
+                    in_item_list = False
+                if not in_subheading_list:
+                    latex_parts.append(r"\resumeSubHeadingListStart")
+                    in_subheading_list = True
+                # Extract date: "(May 2026 – Jul 2026)" after the bold
+                _date_m2 = re.search(r"\(([^)]+)\)", _after_bold)
+                _date2 = _date_m2.group(1).strip() if _date_m2 else _after_bold.strip("()\u2013\u2014- ").strip()
+                # Split title from company on em-dash, en-dash, or pipe
+                _title2, _org2 = _bold_content, ""
+                for _sep2 in [" \u2013 ", " \u2014 ", " \u2012 ", " - ", " | "]:
+                    if _sep2 in _bold_content:
+                        _p2 = _bold_content.split(_sep2, 1)
+                        _title2, _org2 = _p2[0].strip(), _p2[1].strip()
+                        break
+                latex_parts.append(
+                    f"    \\resumeSubheading\n"
+                    f"      {{{format_inline_latex(_title2)}}}{{{escape_latex(_date2)}}}\n"
+                    f"      {{{format_inline_latex(_org2)}}}{{}}"
+                )
+                continue
+
+            if "publication" in (current_section or ""):
+                # Close open bullet list first
+                if in_item_list:
+                    latex_parts.append(r"\resumeItemListEnd")
+                    in_item_list = False
+                if not in_subheading_list:
+                    latex_parts.append(r"\resumeSubHeadingListStart")
+                    in_subheading_list = True
+                # Venue is in _after_bold: "– IEEE SPICES" or "| IEEE SPICES"
+                _venue2 = re.sub(r"^[\u2013\u2014\-–—|\s]+", "", _after_bold).strip()
+                _pub_heading = f"\\textbf{{{format_inline_latex(_bold_content)}}}"
+                if _venue2:
+                    _pub_heading += f" $|$ \\textit{{{format_inline_latex(_venue2)}}}"
+                _side_links = ""
+                if "scientific literature" in _bold_content.lower() or "ieee spices" in line.lower():
+                    _side_links = r"\href{https://doi.org/10.5281/zenodo.22676649}{\underline{Paper}} $|$ \href{https://github.com/GenAI-Scientific-Literature-System/GenAI-Scientific-Literature-System-multi-agent-system}{\underline{GitHub}}"
+                latex_parts.append(
+                    f"    \\resumeProjectHeading\n"
+                    f"      {{{_pub_heading}}}{{{_side_links}}}"
+                )
+                continue
 
         # General body text (e.g. Career Objective, Education Institution header)
         if "career objective" in (current_section or ""):
