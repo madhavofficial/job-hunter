@@ -484,6 +484,19 @@ def ensure_publication_links(markdown: str) -> str:
             count=1,
             flags=re.IGNORECASE
         )
+        # Strip redundant raw DOI / GitHub URLs from bullet points underneath publication since Paper | GitHub are in header
+        lines = []
+        in_pub = False
+        for l in markdown.split("\n"):
+            if "### " in l and ("scientific literature" in l.lower() or "ieee spices" in l.lower()):
+                in_pub = True
+            elif in_pub and l.startswith("## "):
+                in_pub = False
+            
+            if in_pub and l.strip().startswith(("-", "* ")) and any(k in l.lower() for k in ["doi:", "github:", "zenodo.org", "doi.org"]):
+                l = re.sub(r";?\s*(?:DOI|Paper|Repository):\s*\[?[^\s|\]]+\]?(?:\([^\)]+\))?\s*\|\s*GitHub:\s*\[?[^\s\n\]]+\]?(?:\([^\)]+\))?", "", l, flags=re.I).rstrip("; ")
+            lines.append(l)
+        markdown = "\n".join(lines)
     return markdown
 
 

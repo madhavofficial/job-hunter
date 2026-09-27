@@ -155,10 +155,12 @@ MADHAV_PROFILE = Profile(
    - DO NOT remove Career Objective — keep it targeted to the company and role.
    - ZERO HARDWARE / NON-CS FABRICATION: Candidate is strictly a Computer Science and Engineering (CSE) student. NEVER claim expertise, grounding, or career interest in hardware board design, electronic circuits, analogue/digital circuits, PCB layout, or FPGA development. For telecom or hardware companies, frame contributions strictly around low-level C/C++, Linux systems programming, embedded firmware, networking stacks, and data processing.""",
     flagship_instruction="""2.5. PUBLICATIONS & PROJECTS DEDUPLICATION (STRICT 1-PAGE BUDGET):
-   - Under '## Publications', include the IEEE SPICES paper with EXACTLY 2 bullets:
-     * **Conference Acceptance**: Selected for **IEEE SPICES**; DOI: [10.5281/zenodo.22676649](https://doi.org/10.5281/zenodo.22676649) | GitHub: [GenAI-Scientific-Literature-System](https://github.com/GenAI-Scientific-Literature-System/GenAI-Scientific-Literature-System-multi-agent-system).
-     * Built an evidence-grounded multi-agent system querying arXiv, PubMed, and Semantic Scholar (300-800 papers) with Louvain graph clustering and 5-agent ensemble, demonstrating 92.7% accuracy and 89.8% F1 score across benchmarks.
-   - DO NOT write more than 2 bullets for Publications.
+   - Under '## Publications', include the IEEE SPICES paper:
+     * Place Paper and GitHub links strictly in the metadata line under the heading: `*Paper: https://doi.org/10.5281/zenodo.22676649 | GitHub: https://github.com/GenAI-Scientific-Literature-System/GenAI-Scientific-Literature-System-multi-agent-system*`.
+     * In the bullet points, DO NOT repeat raw URLs (DOI/GitHub). Instead, use the space for rich, verbose technical details:
+       - **Conference Acceptance & Retrieval**: Selected for **IEEE SPICES**; engineered an evidence-grounded multi-agent literature synthesis engine querying live scholarly APIs (arXiv, PubMed, Semantic Scholar) and ingesting **300–800 papers** per query.
+       - **Graph Clustering & 5-Agent Ensemble**: Segmented dense document embeddings via semantic Louvain graph clustering to filter cross-domain noise; coordinated 5 concurrent specialized agents with automated hallucination guardrails to detect cross-paper consensus and contradictions.
+       - **Empirical Validation**: Demonstrated **92.7% accuracy** and **89.8% F1 score** across multi-domain scientific benchmarks, outperforming standalone LLMs by **+14.2% F1** and standard RAG baselines by **+6.8% F1**.
    - CRITICAL ANTI-DUPLICATION RULE:
      * 'GLAS-Med: Evidence-Grounded Clinical Literature Synthesis' and 'Multi-Agent Generative AI System for Scientific Literature Analysis' (the IEEE SPICES paper) are the SAME underlying scientific literature synthesis system.
      * The IEEE SPICES paper belongs STRICTLY under '## Publications'.
