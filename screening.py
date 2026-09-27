@@ -92,10 +92,15 @@ def deterministic_hard_filter(job: dict) -> tuple[bool, str | None]:
 
     NON_CSE_TITLE_MARKERS = (
         "video editor", "graphic designer", "content writer", "content creator", "telecaller",
-        "customer support", "customer success", "sales", "marketing", "account executive",
+        "tele caller", "receptionist", "legal counsel", "corporate counsel", "counsel",
+        "financial analyst", "operations associate", "operations specialist", "contracting operations",
+        "voice support", "customer support", "customer success", "sales", "marketing", "account executive",
         "business development", "recruiter", "recruitment", "human resources", "talent acquisition",
-        "mechanical", "civil", "structural", "chemical", "copywriter", "social media",
-        "event manager", "store manager", "office administrator", "executive assistant",
+        "hr associate", "hr partner", "manufacturing design", "civil", "structural", "chemical",
+        "copywriter", "social media", "event manager", "store manager", "office administrator",
+        "executive assistant", "delivery executive", "delivery boy", "delivery girl", "delivery partner",
+        "loading and unloading", "relationship executive", "relationship manager", "field officer",
+        "driver", "security guard", "housekeeping", "warehouse associate", "branch manager",
     )
     title_lower = title.lower()
     if any(marker in title_lower for marker in NON_CSE_TITLE_MARKERS):

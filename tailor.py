@@ -16,10 +16,10 @@ PREFERRED_OPENROUTER_MODELS = (
 )
 
 PREFERRED_NVIDIA_MODELS = (
-    "moonshotai/kimi-k3",
-    "z-ai/glm-5.3",
-    "z-ai/glm-5.3-flash",
     "nvidia/llama-3.1-nemotron-70b-instruct",
+    "z-ai/glm-5.3-flash",
+    "z-ai/glm-5.3",
+    "moonshotai/kimi-k3",
 )
 
 
@@ -231,7 +231,7 @@ def enforce_one_page_budget(markdown: str, profile_id: str = "madhav", strict_mo
 
     max_qualcomm = 3
     max_octanner = 1 if strict_mode else 2
-    max_pub = 2
+    max_pub = 2 if strict_mode else 3
     max_drdo = 2 if strict_mode else 3
     max_leadership = 2
     max_proj_count = 2 if strict_mode else 3
@@ -362,6 +362,25 @@ def strip_meta_commentary(markdown: str) -> str:
     return "\n".join(output) + ("\n" if markdown.endswith("\n") else "")
 
 
+def strip_robotic_bullet_labels(markdown: str) -> str:
+    """Strip repetitive meta-labels like '**What it does**:' or '**Architecture & Impact**:' from bullet items."""
+    if not markdown:
+        return markdown
+    output = []
+    robotic_pattern = re.compile(
+        r"^(\s*[-*+]\s+)\*\*(?:What it does|Architecture & Impact|Architecture|Overview|Impact|Core Functionality|Technical Architecture|Role & Impact)\*\*:\s*",
+        re.IGNORECASE,
+    )
+    for line in markdown.splitlines():
+        if robotic_pattern.match(line):
+            line = robotic_pattern.sub(r"\1", line)
+            m = re.match(r"^(\s*[-*+]\s+)([a-z])(.*)", line)
+            if m:
+                line = f"{m.group(1)}{m.group(2).upper()}{m.group(3)}"
+        output.append(line)
+    return "\n".join(output) + ("\n" if markdown.endswith("\n") else "")
+
+
 def ensure_education(markdown: str, profile=None) -> str:
     """Ensure candidate's Education section is present in the tailored resume."""
     if not markdown:
@@ -476,9 +495,9 @@ def ensure_publication_links(markdown: str) -> str:
             count=1,
             flags=re.IGNORECASE
         )
-        # Ensure the metadata line beneath has both Paper and GitHub URLs
+        # Ensure the metadata line beneath has exactly one clean Paper and GitHub URL line
         markdown = re.sub(
-            r"(###\s*[^\n]*(?:scientific\s+literature|ieee\s+spices)[^\n]*\n)(?:\*[^\n]*\*\n)?",
+            r"(###\s*[^\n]*(?:scientific\s+literature|ieee\s+spices)[^\n]*\n)(?:[ \t]*(?:\*[^\n]*\*|_[^\n]*_|[^\n]*(?:doi|github|paper)[^\n]*)\n)+",
             rf"\1*Paper: {paper_url} | GitHub: {github_url}*\n",
             markdown,
             count=1,
@@ -868,16 +887,25 @@ def tailor_materials(job_id: str, profile_name: str = "madhav"):
     - Compare the candidate's Current Resume Projects with the candidate's Verified GitHub Project Portfolio.
     - Select EXACTLY the TOP 3 BEST-FITTING projects from the combined pool of projects (Current Resume + GitHub Portfolio).
     - Alignment recommendations:
+        * For AI / RAG / Agent / NLP / Generative AI / Research / Machine Learning / Applied AI roles -> STRONGLY PRIORITIZE:
+          1. 'Multi-Modal AI Protein Analysis & Pathogenicity Reasoning Platform' (GitHub: https://github.com/madhavofficial/neuro_capstone)
+          2. 'CareerTime - AI Career Intelligence Platform' (GitHub: https://github.com/madhavofficial/CareerTime)
+          3. 'Autonomous Job Discovery, Career Intelligence & Application Automation Engine' (GitHub: https://github.com/madhavofficial/job-hunter) OR 'Sketch Recognition System' (GitHub: https://github.com/madhavofficial/Drawing-A-New-Way-To-Search-ML-)
+          CRITICAL: NEVER include 'Mini-UnionFS' on an AI, ML, Data, or Web/Application engineering resume! 'Mini-UnionFS' is a C/FUSE filesystem project that is completely irrelevant to AI/ML and is strictly reserved for Systems / OS / Kernel / C / C++ / Embedded systems roles.
         * For Systems / OS / C / C++ / Embedded / Linux / Filesystems / Networking / Wireless / Cellular roles -> STRONGLY PRIORITIZE 'Mini-UnionFS: Layered Union File System in C with FUSE' (GitHub: https://github.com/madhavofficial/mini-unionfs) paired with 'GLAS-Med: Evidence-Grounded Clinical Literature Synthesis' and 'Autonomous Job Discovery, Career Intelligence & Application Automation Engine' or 'Multi-Modal AI Protein Analysis & Pathogenicity Reasoning Platform'.
         * For Quality Engineering / SDET / Test Automation / QE / GenAI Testing roles -> STRONGLY PRIORITIZE 'Autonomous Job Discovery, Career Intelligence & Application Automation Engine' (GitHub: https://github.com/madhavofficial/job-hunter), 'Mini-UnionFS: Layered Union File System in C with FUSE' (GitHub: https://github.com/madhavofficial/mini-unionfs), and 'GLAS-Med: Evidence-Grounded Clinical Literature Synthesis' (GitHub: https://github.com/madhavofficial/evidence-grounded-clinical-literature-synthesis).
-        * For AI / RAG / Agent / NLP / Generative AI / Research / Machine Learning roles -> STRONGLY PRIORITIZE 'GLAS-Med: Evidence-Grounded Clinical Literature Synthesis' (GitHub: https://github.com/madhavofficial/evidence-grounded-clinical-literature-synthesis) and 'Multi-Modal AI Protein Analysis & Pathogenicity Reasoning Platform' (GitHub: https://github.com/madhavofficial/neuro_capstone).
         * CRITICAL ANTI-DUPLICATION RULE: 'GLAS-Med: Evidence-Grounded Clinical Literature Synthesis' and 'Multi-Agent Generative AI System for Scientific Literature Analysis' (IEEE SPICES) are the SAME research project. The IEEE SPICES paper belongs STRICTLY under '## Publications'. NEVER list 'Multi-Agent Generative AI System for Scientific Literature Analysis' under '## Selected Projects'! NEVER select both 'GLAS-Med' and 'Multi-Agent Generative AI System' as separate projects on the same resume.
         * For DevOps / Cloud / Automation / Tooling roles -> prioritize 'Autonomous Job Discovery, Career Intelligence & Application Automation Engine' (GitHub: https://github.com/madhavofficial/job-hunter).
         * For Big Data / Data Engineering / Streaming / Kafka / Distributed Systems -> prioritize 'Distributed High-Throughput Stream & Image Processing Pipeline with Apache Kafka' (GitHub: https://github.com/varunnhn/153_Project3_BD) and 'Hourly Bike-Sharing Demand Forecasting & Time-Series Regression Pipeline' (GitHub: https://github.com/madhavofficial/Forecasting-Bike-Rental-Demand).
         * For Full-Stack / TypeScript / FinTech / Database roles -> prioritize 'Smart Market Watchlist & Real-Time Trading Terminal' (GitHub: https://github.com/madhavofficial/Ultimate-Trader-Dashboard-GitHub-Repository-Structure).
         * For Computer Vision / Deep Learning -> prioritize 'Sketch Recognition System' (GitHub: https://github.com/madhavofficial/Drawing-A-New-Way-To-Search-ML-).
         * For Data Science / Regression / Analytics -> prioritize 'Hourly Bike-Sharing Demand Forecasting & Time-Series Regression Pipeline' (GitHub: https://github.com/madhavofficial/Forecasting-Bike-Rental-Demand).
-    - For each selected project, write EXACTLY 2 concise, punchy, high-density bullet points (Bullet 1: WHAT it does; Bullet 2: architecture & verified metrics).
+    - BULLET WRITING DIRECTIVE (NO ROBOTIC META-LABELS):
+      * For each selected project, write EXACTLY 2 concise, punchy, high-density bullet points.
+      * NEVER prefix bullets with meta-labels like '**What it does**:', '**Architecture & Impact**:', '**Overview**:', '**Impact**:', or '**Architecture**:'.
+      * Start each bullet directly with an active past-tense engineering verb (e.g. 'Architected...', 'Engineered...', 'Developed...', 'Trained...', 'Implemented...').
+      * Bullet 1: Core capabilities, algorithmic/product functionality, and what the system accomplishes.
+      * Bullet 2: Architecture, frameworks/libraries used, pipeline design, and verified performance/accuracy metrics.
     - EXPANDED SKILLS: Highlight the exact languages, frameworks, and tools used across the 3 selected projects and experience."""
     
     # Init Groq
@@ -979,107 +1007,89 @@ Please output the COMPLETE tailored resume in Markdown.
         # Generate Resume
         tailored_resume = None
 
-        # 1. Primary: NVIDIA Build NIM Frontier Cluster (Kimi-K3, GLM-5.3, Nemotron-70B)
-        nvidia_key = os.getenv("NVIDIA_API_KEY")
-        if nvidia_key:
-            print("-> Primary Tier: Generating tailored resume via NVIDIA Build NIM cluster...", flush=True)
-            from openai import OpenAI
-            nv_client = OpenAI(base_url="https://integrate.api.nvidia.com/v1", api_key=nvidia_key, timeout=60.0)
-            configured_nv_model = os.getenv("NVIDIA_MODEL")
-            nv_models = [configured_nv_model] if configured_nv_model else list(PREFERRED_NVIDIA_MODELS)
-            for nv_model in nv_models:
+        # 1. Primary: Groq Multi-Key & Frontier Model Cluster (sub-second inference)
+        print("-> Generating tailored resume via Groq multi-key cluster...", flush=True)
+        candidate_models = [model_name] + [m for m in config.get_fallback_models() if m != model_name]
+        max_tokens_val = 2048
+        for active_model in candidate_models:
+            retries = 0
+            max_retries = max(1, config.key_manager.get_num_keys())
+            while retries < max_retries:
                 try:
-                    print(f"-> Trying NVIDIA Build model: {nv_model}...")
-                    nv_resp = nv_client.chat.completions.create(
-                        model=nv_model,
-                        messages=[{"role": "user", "content": resume_prompt}],
-                        temperature=0.2,
-                        max_tokens=4096,
-                        timeout=50,
-                    )
-                    if nv_resp and nv_resp.choices and nv_resp.choices[0].message and nv_resp.choices[0].message.content:
-                        content = nv_resp.choices[0].message.content.strip()
-                        if "technical skills" in content.lower():
-                            tailored_resume = content
-                            print(f"-> Successfully tailored resume using NVIDIA Build ({nv_model}).")
-                            break
-                        else:
-                            print(f"Warning: NVIDIA model {nv_model} produced incomplete response. Trying next...")
-                except Exception as e:
-                    print(f"Warning: NVIDIA Build model {nv_model} failed: {e}", file=sys.stderr)
-
-        # 2. Secondary Fallback: Groq Multi-Key & Model Cluster
-        if not tailored_resume:
-            print("-> Falling back to Groq multi-key cluster...", flush=True)
-            candidate_models = [model_name] + [m for m in config.get_fallback_models() if m != model_name]
-            max_tokens_val = 2048
-            for active_model in candidate_models:
-                retries = 0
-                max_retries = max(1, config.key_manager.get_num_keys())
-                while retries < max_retries:
-                    try:
-                        kwargs = {
-                            "model": active_model,
-                            "messages": [{"role": "user", "content": resume_prompt}],
-                            "temperature": 0.2,
-                            "max_tokens": max_tokens_val,
-                            "timeout": 60,
-                        }
-                        if "gpt-oss" in active_model:
-                            kwargs["reasoning_effort"] = "low"
-                        res_response = client.chat.completions.create(**kwargs)
-                        content = res_response.choices[0].message.content or ""
-                        finish_reason = getattr(res_response.choices[0], "finish_reason", "")
-                        if finish_reason == "length" or "technical skills" not in content.lower():
-                            print(f"Warning: Model {active_model} generated incomplete/truncated response (finish_reason={finish_reason}). Trying next model...")
-                            break
-                        tailored_resume = content
+                    kwargs = {
+                        "model": active_model,
+                        "messages": [{"role": "user", "content": resume_prompt}],
+                        "temperature": 0.2,
+                        "max_tokens": max_tokens_val,
+                        "timeout": 45,
+                    }
+                    if "gpt-oss" in active_model:
+                        kwargs["reasoning_effort"] = "low"
+                    res_response = client.chat.completions.create(**kwargs)
+                    content = res_response.choices[0].message.content or ""
+                    finish_reason = getattr(res_response.choices[0], "finish_reason", "")
+                    if finish_reason == "length" or "technical skills" not in content.lower():
+                        print(f"Warning: Model {active_model} generated incomplete/truncated response (finish_reason={finish_reason}). Trying next model...")
                         break
-                    except Exception as e:
-                        err_str = str(e).lower()
-                        if "expired_api_key" in err_str or ("401" in err_str and "invalid api key" in err_str):
-                            print(f"Invalid API key encountered. Dropping key and cycling...")
-                            client = config.cycle_groq_client(remove_current=True)
-                            retries += 1
-                            continue
-
-                        # If model is not available on this specific key, cycle to another key that has it
-                        if any(term in err_str for term in ["model_not_found", "does not exist", "do not have access", "not found"]):
-                            retries += 1
-                            if retries < max_retries:
-                                print(f"Model {active_model} not available on current key. Cycling to next key ({retries}/{max_retries})...")
-                                client = config.cycle_groq_client()
-                                continue
-                            else:
-                                print(f"-> Model {active_model} not found on any available keys. Trying next model...")
-                                break
-
-                        # True single-request prompt size violation for this model architecture
-                        if any(term in err_str for term in ["request too large", "413", "context_length_exceeded", "request_too_large"]):
-                            print(f"Prompt exceeded context limit for {active_model}. Falling back to next model...")
-                            break
-
-                        # Rate limits (TPM, RPM, TPD, 429) -> Key-specific quota, cycle to the next Groq key!
-                        if any(term in err_str for term in ["rate_limit", "rate limit", "429", "limit_exceeded", "tokens per minute", "tpm", "tokens per day"]):
-                            retries += 1
-                            if retries < max_retries:
-                                import time
-                                retry_match = re.search(r"try again in (\d+(?:\.\d+)?)s", err_str)
-                                wait_s = min(float(retry_match.group(1)), 5.0) if retry_match else 2.0
-                                print(f"Rate/TPM limit hit on {active_model}. Waiting {wait_s:.1f}s and cycling to next Groq key ({retries}/{max_retries})...")
-                                time.sleep(wait_s)
-                                client = config.cycle_groq_client()
-                                continue
-                            else:
-                                print(f"-> All {max_retries} keys exhausted for {active_model}. Falling back to next model...")
-                                break
-
-                        print(f"Error on {active_model}: {e}. Falling back to next model...")
-                        break
-                if tailored_resume:
+                    tailored_resume = content
                     break
+                except Exception as e:
+                    err_str = str(e).lower()
+                    if "expired_api_key" in err_str or ("401" in err_str and "invalid api key" in err_str):
+                        print(f"Invalid API key encountered. Dropping key and cycling...")
+                        client = config.cycle_groq_client(remove_current=True)
+                        retries += 1
+                        continue
 
-        # 3. Tertiary Fallback: OpenRouter (used only if NVIDIA Build and Groq were exhausted)
+                    # If model is not available on this specific key, cycle to another key that has it
+                    if any(term in err_str for term in ["model_not_found", "does not exist", "do not have access", "not found"]):
+                        retries += 1
+                        if retries < max_retries:
+                            print(f"Model {active_model} not available on current key. Cycling to next key ({retries}/{max_retries})...")
+                            client = config.cycle_groq_client()
+                            continue
+                    elif "rate_limit_exceeded" in err_str or "429" in err_str:
+                        retries += 1
+                        if retries < max_retries:
+                            print(f"Rate limit hit on model {active_model}. Cycling key ({retries}/{max_retries})...")
+                            client = config.cycle_groq_client()
+                            continue
+                    else:
+                        print(f"Warning: Groq model {active_model} failed: {e}", file=sys.stderr)
+                        break
+            if tailored_resume:
+                print(f"-> Successfully tailored resume using Groq ({active_model}).")
+                break
+
+        # 2. Secondary Fallback: NVIDIA Build NIM Frontier Cluster
+        if not tailored_resume:
+            nvidia_key = os.getenv("NVIDIA_API_KEY")
+            if nvidia_key:
+                print("-> Secondary Tier: Generating tailored resume via NVIDIA Build NIM cluster...", flush=True)
+                from openai import OpenAI
+                nv_client = OpenAI(base_url="https://integrate.api.nvidia.com/v1", api_key=nvidia_key, timeout=20.0)
+                configured_nv_model = os.getenv("NVIDIA_MODEL")
+                nv_models = [configured_nv_model] if configured_nv_model else list(PREFERRED_NVIDIA_MODELS)
+                for nv_model in nv_models:
+                    try:
+                        print(f"-> Trying NVIDIA Build model: {nv_model}...")
+                        nv_resp = nv_client.chat.completions.create(
+                            model=nv_model,
+                            messages=[{"role": "user", "content": resume_prompt}],
+                            temperature=0.2,
+                            max_tokens=4096,
+                            timeout=20,
+                        )
+                        if nv_resp and nv_resp.choices and nv_resp.choices[0].message and nv_resp.choices[0].message.content:
+                            content = nv_resp.choices[0].message.content.strip()
+                            if "technical skills" in content.lower():
+                                tailored_resume = content
+                                print(f"-> Successfully tailored resume using NVIDIA Build ({nv_model}).")
+                                break
+                    except Exception as e:
+                        print(f"Warning: NVIDIA Build model {nv_model} failed: {e}", file=sys.stderr)
+
+        # 3. Tertiary Fallback: OpenRouter (used only if Groq and NVIDIA were exhausted)
         if not tailored_resume:
             print("Warning: Groq and NVIDIA clusters exhausted. Falling back to OpenRouter...", file=sys.stderr)
             openrouter_key = os.getenv("OPENROUTER_API_KEY")
@@ -1116,6 +1126,7 @@ Please output the COMPLETE tailored resume in Markdown.
         tailored_resume = ensure_gpa(tailored_resume, profile=profile)
         tailored_resume = scrub_unverified_metrics(tailored_resume, profile_id=getattr(profile, "id", ""))
         tailored_resume = strip_meta_commentary(tailored_resume)
+        tailored_resume = strip_robotic_bullet_labels(tailored_resume)
         if getattr(profile, "id", "") in ["madhav", "secondary", "partner", "mahika"]:
             tailored_resume = enforce_one_page_budget(tailored_resume, profile_id=getattr(profile, "id", "madhav"))
         

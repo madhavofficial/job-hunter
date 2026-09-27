@@ -368,10 +368,14 @@ def markdown_to_latex(markdown_text: str) -> str:
                 if not next_l:
                     i += 1
                     continue
-                # If next_l is a bullet point, STOP! It's not metadata.
-                if re.match(r"^(?:[-+]|\d+[.)]|\*\s+)", next_l):
+                is_bullet = bool(re.match(r"^(?:[-+]|\d+[.)]|\*(?:\s+|$))", next_l))
+                if is_bullet or next_l.startswith("#"):
                     break
-                if (next_l.startswith("*") and next_l.endswith("*")) or (next_l.startswith("_") and next_l.endswith("_")) or (not next_l.startswith(("#", "-", "*", "+")) and any(kw in next_l.lower() for kw in ["github:", "github.com/", "doi:", "doi.org/", "zenodo.org/", "core technologies:", "tech stack:", "technologies:"])):
+                if (
+                    (next_l.startswith("*") and next_l.endswith("*"))
+                    or (next_l.startswith("_") and next_l.endswith("_"))
+                    or any(kw in next_l.lower() for kw in ["github:", "github.com/", "doi:", "doi.org/", "zenodo.org/", "paper:", "core technologies:", "tech stack:", "technologies:"])
+                ):
                     meta_lines.append(next_l)
                     i += 1
                 else:
