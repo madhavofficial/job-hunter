@@ -87,7 +87,7 @@ def add_jobs(df: pd.DataFrame):
     inserted_count = 0
     
     for _, row in df.iterrows():
-        job_id = str(row.get('id', ''))
+        job_id = str(row.get('job_id') or row.get('id') or '')
         if not job_id:
             continue
             

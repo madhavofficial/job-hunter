@@ -24,6 +24,9 @@ export JOB_HUNTER_RUN_STARTED_UTC="$(date -u '+%Y-%m-%d %H:%M:%S')"
 echo "Step 1: Discovering direct ATS listings..."
 python ats_collector.py
 
+echo "Step 1b: Ingesting personalized job alerts from Gmail..."
+node scripts/fetch_gmail_jobs.mjs && python ingest_email_jobs.py
+
 echo "Step 2: Running Job Collector..."
 python collector.py 20 168
 

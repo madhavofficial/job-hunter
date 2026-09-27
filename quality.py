@@ -112,11 +112,9 @@ def assess_listing_quality(job: dict, company_tier: str, now: datetime | None = 
     elif company_tier.startswith("Tier 2"):
         company_score = 80
     elif direct:
-        # A direct ATS/employer domain is meaningful evidence, but it is not
-        # enough to promote an unknown employer to Tier 1.
-        company_score = 65
+        company_score = 70
     else:
-        company_score = 20
+        company_score = 65
 
     date_value = str(job.get("date_posted") or job.get("created_at") or "")[:19]
     freshness_score = 35
@@ -147,15 +145,14 @@ def assess_listing_quality(job: dict, company_tier: str, now: datetime | None = 
     generic_title = title in GENERIC_TITLES
     irrelevant = any(marker in title for marker in IRRELEVANT_TITLE_MARKERS)
     unknown_company = not company or company in {"none", "confidential", "company name", "custom opportunity"}
-    directness_score = 100 if direct else 55
+    # Do not penalize missing direct ATS link; candidate can easily find direct portal
+    directness_score = 100
 
     reasons = [description_reason]
     if generic_title:
         reasons.append("The title is generic and needs strong description evidence.")
     if irrelevant:
         reasons.append("The title is outside the target software/AI role scope.")
-    if not direct:
-        reasons.append("No direct employer or ATS signal was found.")
     if unknown_company:
         reasons.append("The employer identity is unclear.")
 
@@ -177,9 +174,7 @@ def assess_listing_quality(job: dict, company_tier: str, now: datetime | None = 
 
 def quality_gate(job: dict, company_tier: str, quality: dict | None = None) -> tuple[bool, str | None]:
     quality = quality or assess_listing_quality(job, company_tier)
-    # Keep plausible roles in the review pool even when evidence is weak. The
-    # weighted score caps them below Top Matches; only obvious junk should be
-    # rejected before the model call.
+    # Keep plausible roles in the review pool even when evidence is weak.
     if quality["unknown_company"]:
         return False, "Employer identity is missing or anonymous."
     if quality["irrelevant_title"]:
@@ -190,17 +185,20 @@ def quality_gate(job: dict, company_tier: str, quality: dict | None = None) -> t
 
 
 def weighted_match_score(role_fit: int, quality: dict) -> tuple[int, dict]:
-    """Combine model role fit with auditable non-model quality components."""
+    """Combine model role fit with auditable non-model quality components.
+    
+    Role fit has primary weight (65%), company quality (20%), description evidence (10%), and freshness (5%).
+    Never caps score based on lacking direct employer signal.
+    """
     role_fit = max(0, min(100, int(role_fit)))
     evidence = quality["description_score"]
     company = quality["company_score"]
     freshness = quality["freshness_score"]
-    directness = quality["directness_score"]
-    final = round(role_fit * 0.55 + company * 0.20 + evidence * 0.15 + freshness * 0.05 + directness * 0.05)
+    directness = 100
+
+    final = round(role_fit * 0.65 + company * 0.20 + evidence * 0.10 + freshness * 0.05)
     if evidence < 80:
         final = min(final, 79)
-    if not quality["direct_employer_signal"]:
-        final = min(final, 84)
     components = {
         "role_fit": role_fit,
         "company_quality": company,

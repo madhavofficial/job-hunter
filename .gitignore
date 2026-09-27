@@ -34,3 +34,5 @@ __pycache__/
 github_portfolio_cache_*.json
 .DS_Store
 *.pdf
+dashboard.tex
+data/

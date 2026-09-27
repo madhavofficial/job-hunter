@@ -77,6 +77,10 @@ SEED_UNICORNS = {
     "uber", "airbnb", "canva", "figma", "notion", "retool", "vercel", "supabase",
     "cloudflare", "linear", "raycast", "inmobi", "freshworks", "darwinbox",
     "browserbase", "perplexity", "scale ai", "hugging face", "mistral",
+    "posthog", "clickup", "datadog", "applied intuition", "together ai", "groq",
+    "modal", "langchain", "cohere", "replit", "cursor", "anysphere", "cognition",
+    "warp", "wandb", "weights & biases", "stability ai", "runway", "elevenlabs",
+    "thumbtack", "torc robotics", "weave", "zepto", "elastic", "mongodb",
 }
 
 SEED_IT_SERVICES = {

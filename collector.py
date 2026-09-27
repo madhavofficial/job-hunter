@@ -107,11 +107,10 @@ def get_dynamic_search_terms():
     if "Machine Learning" in content or "PyTorch" in content: core_techs.append("Machine Learning Engineer")
     if "Software Engineering" in content: core_techs.append("Software Engineer")
 
-    # Generate targeted combinations (direct title, intern, associate, junior)
+    # Generate targeted combinations (direct title, intern, associate)
     for tech in core_techs:
         terms.add(tech)
         terms.add(f"{tech} Intern")
-        terms.add(f"Junior {tech}")
         terms.add(f"Associate {tech}")
 
     # Always ensure fundamental high-signal software engineering and AI queries are included
@@ -133,8 +132,6 @@ def get_dynamic_search_terms():
         "Machine Learning Intern",
         "AI Intern",
         "Associate Software Engineer",
-        "Graduate Engineer Trainee",
-        "6 month internship software",
     ])
 
     return sorted(list(terms))
