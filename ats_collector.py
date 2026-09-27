@@ -96,11 +96,43 @@ def _date_value(value):
     return str(value)
 
 
+CURATED_ATS_BOARDS = (
+    ("greenhouse", "anthropic"),
+    ("greenhouse", "scaleai"),
+    ("greenhouse", "figma"),
+    ("greenhouse", "vercel"),
+    ("greenhouse", "datadog"),
+    ("ashby", "perplexity"),
+    ("ashby", "supabase"),
+    ("ashby", "linear"),
+    ("ashby", "posthog"),
+    ("ashby", "modal"),
+    ("ashby", "browserbase"),
+)
+
+
 def _is_india_or_remote(location: str, is_remote: bool = False) -> bool:
-    if is_remote:
+    loc = (location or "").lower()
+    # Check if explicitly in India or Indian cities/states/regions
+    india_pattern = (
+        r"\bindia\b|bengaluru|bangalore|hyderabad|pune|mumbai|delhi|noida|gurugram|gurgaon|"
+        r"chennai|kolkata|ahmedabad|kochi|kerala|karnataka|tamil nadu|maharashtra|telangana|"
+        r"gujarat|chandigarh|jaipur|indore|bhopal|coimbatore|trivandrum|thiruvananthapuram"
+    )
+    if re.search(india_pattern, loc):
         return True
-    location = (location or "").lower()
-    return bool(re.search(r"\bindia\b|bengaluru|bangalore|hyderabad|pune|mumbai|delhi|noida|gurugram|chennai|kolkata", location))
+
+    if is_remote or "remote" in loc:
+        # Check if explicitly non-India remote (e.g. US, EMEA, AMER, etc.)
+        non_india_regions = (
+            r"\b(?:united states|u\.s\.a?\.?|usa|san francisco|new york|nyc|seattle|austin|"
+            r"california|los angeles|chicago|london|berlin|paris|tokyo|toronto|canada|uk|"
+            r"united kingdom|australia|sydney|singapore|germany|france|amer|emea|latam|belgrade)\b"
+        )
+        if re.search(non_india_regions, loc) and not re.search(r"\b(?:global|worldwide|anywhere|india)\b", loc):
+            return False
+        return True
+    return False
 
 
 def _greenhouse_jobs(board: str) -> list[dict]:
@@ -108,14 +140,15 @@ def _greenhouse_jobs(board: str) -> list[dict]:
     jobs = []
     for item in payload.get("jobs", []):
         location = (item.get("location") or {}).get("name", "")
-        if not _is_india_or_remote(location):
+        is_remote = "remote" in location.lower()
+        if not _is_india_or_remote(location, is_remote):
             continue
         jobs.append({
             "id": f"gh-{item['id']}", "site": "ats:greenhouse", "title": item.get("title", ""),
             "company": board.replace("-", " ").title(), "location": location,
             "job_url": item.get("absolute_url", ""), "job_url_direct": item.get("absolute_url", ""),
             "date_posted": _date_value(item.get("updated_at")),
-            "description": html_to_text(item.get("content")), "is_remote": "remote" in location.lower(),
+            "description": html_to_text(item.get("content")), "is_remote": is_remote,
             "skills": "", "experience_range": "",
         })
     return jobs
@@ -265,8 +298,8 @@ def _career_listing_from_url(url: str, domain: str) -> dict | None:
 
 
 def discover_ats_urls() -> list[str]:
-    terms = get_dynamic_search_terms()
-    keyword_query = " OR ".join(f'"{term}"' for term in terms[:6])
+    # Use modern high-signal role terms rather than arbitrary slices
+    keyword_query = '"Software Engineer" OR "AI Engineer" OR "Machine Learning" OR "Backend Developer" OR "Applied AI" OR "SDE"'
     urls = []
     try:
         provider = os.getenv("ATS_SEARCH_PROVIDER", "auto")
@@ -293,8 +326,7 @@ def discover_career_board_jobs(limit_per_domain: int = 50) -> pd.DataFrame:
     public index keeps discovery dynamic and avoids maintaining company slugs.
     A failure for one provider is isolated from the remaining domains.
     """
-    terms = get_dynamic_search_terms()
-    keyword_query = " OR ".join(f'"{term}"' for term in terms[:6])
+    keyword_query = '"Software Engineer" OR "AI Engineer" OR "Machine Learning" OR "Backend Developer" OR "Applied AI" OR "SDE"'
     rows = []
     try:
         provider = os.getenv("ATS_SEARCH_PROVIDER", "auto")
@@ -329,6 +361,17 @@ def run_ats_collector() -> int:
     db.init_db()
     total = 0
 
+    print("Priority 0: Ingesting curated top-tier ATS boards directly...")
+    for ats, board in CURATED_ATS_BOARDS:
+        try:
+            jobs = fetch_board_jobs(ats, board)
+            added = db.add_jobs(pd.DataFrame(jobs)) if jobs else 0
+            total += added
+            if jobs:
+                print(f"Curated ATS {ats}/{board}: {len(jobs)} India/remote jobs, {added} new.")
+        except Exception as exc:
+            print(f"Warning: Curated ATS board {ats}/{board} failed: {exc}", file=sys.stderr)
+
     # Prioritize the career systems most commonly used by large employers.
     # This also lets direct Workday/Oracle records win canonical deduplication
     # before broader ATS sources are ingested.
@@ -339,7 +382,7 @@ def run_ats_collector() -> int:
         total += added
         print(f"Dynamic career boards: {len(career_jobs)} indexed jobs, {added} new.")
 
-    print("Priority 2: Discovering Ashby, Greenhouse, and Lever boards...")
+    print("Priority 2: Discovering Ashby, Greenhouse, and Lever boards via search index...")
     refs = discover_board_refs(discover_ats_urls())
     print(f"Discovered {len(refs)} ATS boards dynamically.")
     for ats, board in sorted(refs):

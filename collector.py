@@ -9,16 +9,73 @@ import random
 import time
 
 DEFAULT_SEARCH_TERMS = [
+    # Modern High-Signal AI & ML Roles
+    "Applied AI Engineer",
+    "AI Engineer",
+    "Generative AI Engineer",
+    "LLM Engineer",
+    "Machine Learning Engineer",
+    "AI Intern",
+    "Applied AI Intern",
+    "Machine Learning Intern",
+    # Core Software Engineering, SDE & Backend Roles
+    "Software Development Engineer",
+    "Software Engineer",
+    "SDE 1",
+    "Backend Engineer",
+    "Backend Developer",
+    "Python Backend Developer",
+    "Python Developer",
+    "FastAPI Developer",
+    "Full Stack Developer",
+    "Member of Technical Staff",
+    "Associate Software Engineer",
+    # Internships & Graduate Programs (Any city in India)
     "Software Engineer Intern",
     "Software Developer Intern",
     "Backend Developer Intern",
-    "Python Developer",
-    "Junior Software Engineer",
-    "Junior Backend Engineer",
-    "Junior AI Engineer",
-    "Machine Learning Intern",
-    "FastAPI Developer",
-    "Associate Software Engineer"
+    "SDE Intern",
+    "Graduate Engineer Trainee",
+    "6 month internship software",
+]
+
+# Curated list of elite tech companies in India for targeted discovery
+TARGET_TECH_COMPANIES = [
+    "OpenAI",
+    "Anthropic",
+    "Google",
+    "Microsoft",
+    "Meta",
+    "Apple",
+    "Amazon",
+    "NVIDIA",
+    "Uber",
+    "Stripe",
+    "Razorpay",
+    "Swiggy",
+    "Zomato",
+    "CRED",
+    "Zepto",
+    "Flipkart",
+    "Postman",
+    "Atlassian",
+    "Databricks",
+    "Snowflake",
+    "Perplexity",
+    "Scale AI",
+    "Vercel",
+    "Supabase",
+    "Linear",
+    "Salesforce",
+    "Oracle",
+    "Cisco",
+    "Adobe",
+    "Intuit",
+    "PayPal",
+    "Goldman Sachs",
+    "Morgan Stanley",
+    "JPMorganChase",
+    "BNP Paribas",
 ]
 
 # JobSpy's Glassdoor adapter cannot resolve the country-wide "India" location
@@ -42,64 +99,119 @@ def get_dynamic_search_terms():
     # Extract target domains and stack from resume
     terms = set()
     
-    # Standard role prefixes
-    levels = ["Intern", "Junior", "Associate", "Developer"]
-    
-    # Key technologies mentioned in the candidate's skills / experience
+    # Key technologies and domains from candidate's profile
     core_techs = []
-    if "Python" in content: core_techs.append("Python")
-    if "FastAPI" in content or "Backend" in content: core_techs.append("Backend Developer")
-    if "AI" in content or "LLM" in content or "LangChain" in content: core_techs.append("AI Engineer")
-    if "Machine Learning" in content or "PyTorch" in content: core_techs.append("Machine Learning")
+    if "Python" in content: core_techs.append("Python Developer")
+    if "FastAPI" in content or "Backend" in content: core_techs.append("Backend Engineer")
+    if "AI" in content or "LLM" in content or "LangChain" in content: core_techs.append("Applied AI Engineer")
+    if "Machine Learning" in content or "PyTorch" in content: core_techs.append("Machine Learning Engineer")
     if "Software Engineering" in content: core_techs.append("Software Engineer")
 
-    # Generate combinatorial targeted queries
+    # Generate targeted combinations (direct title, intern, associate, junior)
     for tech in core_techs:
-        if "Engineer" in tech or "Developer" in tech:
-            terms.add(f"Junior {tech}")
-            terms.add(f"{tech} Intern")
-        else:
-            terms.add(f"{tech} Intern")
-            terms.add(f"Junior {tech} Engineer")
+        terms.add(tech)
+        terms.add(f"{tech} Intern")
+        terms.add(f"Junior {tech}")
+        terms.add(f"Associate {tech}")
 
-    # Always ensure fundamental software engineering queries are included
+    # Always ensure fundamental high-signal software engineering and AI queries are included
     terms.update([
+        "Applied AI Engineer",
+        "AI Engineer",
+        "Generative AI Engineer",
+        "Machine Learning Engineer",
+        "Software Development Engineer",
+        "SDE 1",
+        "Software Engineer",
+        "Backend Engineer",
+        "Python Backend Developer",
+        "Full Stack Developer",
+        "Member of Technical Staff",
         "Software Engineer Intern",
         "Software Developer Intern",
-        "Junior Software Engineer",
-        "Python Backend Developer",
-        "Junior AI Engineer",
         "Backend Developer Intern",
+        "Machine Learning Intern",
+        "AI Intern",
         "Associate Software Engineer",
-        "6 month internship software"
+        "Graduate Engineer Trainee",
+        "6 month internship software",
     ])
 
     return sorted(list(terms))
 
-def run_collector(limit_per_query=15, hours_old=72):
+def run_company_collector(companies=None, limit_per_company=15, hours_old=None, location="India"):
+    """Targeted collector for tier-1 tech giants, decacorns, and unicorns.
+    
+    Directly scrapes target company openings on LinkedIn and Indeed in India,
+    guaranteeing that top-tier postings (e.g. OpenAI, Anthropic, Google, Uber, Razorpay)
+    are discovered immediately rather than hoping generic queries rank them.
+    """
+    db.init_db()
+    total_new = 0
+    target_list = companies or TARGET_TECH_COMPANIES
+    sites = ["linkedin", "indeed"]
+    
+    print(f"\n====================================================")
+    print(f"🎯 INITIATING TARGETED TIER-1 COMPANY SCRAPER")
+    print(f"Targeting {len(target_list)} elite tech companies in {location}")
+    print(f"====================================================")
+    
+    for idx, company in enumerate(target_list):
+        print(f"\n[{idx+1}/{len(target_list)}] Searching company: '{company}' in {location}...")
+        try:
+            kwargs = {"hours_old": hours_old} if hours_old else {}
+            jobs = scrape_jobs(
+                site_name=sites,
+                search_term=company,
+                location=location,
+                results_wanted=limit_per_company,
+                country_indeed='india',
+                **kwargs
+            )
+            if not jobs.empty:
+                # Filter down to jobs matching the company name to avoid keyword pollution
+                comp_lower = company.lower()
+                company_jobs = jobs[jobs['company'].astype(str).str.lower().str.contains(comp_lower, na=False)]
+                jobs_to_insert = company_jobs if not company_jobs.empty else jobs
+
+                new_cnt = db.add_jobs(jobs_to_insert)
+                total_new += new_cnt
+                print(f"-> Found {len(jobs_to_insert)} jobs for {company}. Inserted {new_cnt} new unique listings.")
+            else:
+                print("-> No active listings found.")
+        except Exception as e:
+            print(f"-> Warning for '{company}': {e}", file=sys.stderr)
+            
+        if idx < len(target_list) - 1:
+            time.sleep(random.uniform(1.5, 3.5))
+            
+    print(f"\nTargeted company collection complete. Total new jobs stored: {total_new}")
+    return total_new
+
+def run_collector(limit_per_query=20, hours_old=168, include_companies=True):
     db.init_db()
     total_new_jobs = 0
     
     print(f"Starting job collection for the last {hours_old} hours...")
     
-    sites = list(SUPPORTED_INDIA_SITES)
+    # Use reliable India-compatible sources (linkedin & indeed; JobSpy naukri adapter returns 406 recaptcha)
+    sites = ["linkedin", "indeed"]
     print(f"Using India-compatible sources: {', '.join(sites)}")
     
     search_terms = get_dynamic_search_terms()
     print(f"Loaded {len(search_terms)} dynamic search queries derived from your resume profile.")
     
     for index, term in enumerate(search_terms):
-        print(f"\nSearching for: '{term}' in India...")
+        print(f"\n[{index+1}/{len(search_terms)}] Searching for: '{term}' in India...")
         try:
-            # We call scrape_jobs. If LinkedIn or another site blocks, jobspy might throw an exception 
-            # or return partial results. We catch exceptions per query to ensure the collector continues.
+            kwargs = {"hours_old": hours_old} if hours_old else {}
             jobs = scrape_jobs(
                 site_name=sites,
                 search_term=term,
                 location="India",
                 results_wanted=limit_per_query,
-                hours_old=hours_old,
-                country_indeed='india'
+                country_indeed='india',
+                **kwargs
             )
             
             if not jobs.empty:
@@ -119,8 +231,8 @@ def run_collector(limit_per_query=15, hours_old=72):
                     search_term=term,
                     location="India",
                     results_wanted=limit_per_query,
-                    hours_old=hours_old,
-                    country_indeed='india'
+                    country_indeed='india',
+                    **kwargs
                 )
                 if not jobs.empty:
                     new_count = db.add_jobs(jobs)
@@ -130,7 +242,12 @@ def run_collector(limit_per_query=15, hours_old=72):
                 print(f"-> [Fallback Error] Failed: {fallback_err}", file=sys.stderr)
 
         if index < len(search_terms) - 1:
-            time.sleep(random.uniform(2.5, 5.5))
+            time.sleep(random.uniform(2.0, 4.0))
+
+    # Run dedicated targeted company collection for elite tech employers in India
+    if include_companies:
+        company_jobs_count = run_company_collector(limit_per_company=10, hours_old=None)
+        total_new_jobs += company_jobs_count
 
     # Run dedicated remote job collection
     remote_jobs_count = run_remote_collector(limit_per_query=limit_per_query, hours_old=hours_old)
@@ -147,12 +264,17 @@ def run_remote_collector(limit_per_query=15, hours_old=72):
     sites = ["indeed", "linkedin"]
 
     remote_queries = [
-        "Software Engineer Intern",
-        "Python Developer",
+        "Applied AI Engineer",
+        "AI Engineer",
+        "Generative AI Engineer",
+        "Machine Learning Engineer",
+        "Software Development Engineer",
+        "Software Engineer",
         "Backend Developer",
-        "Junior AI Engineer",
-        "Machine Learning Intern",
-        "Full Stack Developer"
+        "Python Developer",
+        "Full Stack Developer",
+        "Software Engineer Intern",
+        "AI Intern",
     ]
 
     print(f"\n====================================================")
@@ -188,13 +310,18 @@ def run_remote_collector(limit_per_query=15, hours_old=72):
 
 
 if __name__ == "__main__":
-    limit = 15
+    limit = 20
     hours = 72
     if "--remote" in sys.argv:
         run_remote_collector(limit, hours)
+    elif "--companies" in sys.argv:
+        run_company_collector(limit_per_company=15, hours_old=hours)
+    elif "--roles" in sys.argv:
+        run_collector(limit, hours, include_companies=False)
     else:
         if len(sys.argv) > 1 and sys.argv[1].isdigit():
             limit = int(sys.argv[1])
         if len(sys.argv) > 2 and sys.argv[2].isdigit():
             hours = int(sys.argv[2])
-        run_collector(limit, hours)
+        run_collector(limit, hours, include_companies=True)
+

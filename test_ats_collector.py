@@ -60,6 +60,25 @@ class ATSCollectorTests(unittest.TestCase):
         self.assertEqual(listing["company"], "Acme Corp")
         self.assertEqual(listing["location"], "Bengaluru, Karnataka, India")
 
+    def test_curated_ats_boards_present(self):
+        from ats_collector import CURATED_ATS_BOARDS
+        self.assertIn(("greenhouse", "anthropic"), CURATED_ATS_BOARDS)
+        self.assertIn(("ashby", "perplexity"), CURATED_ATS_BOARDS)
+
+    def test_is_india_or_remote(self):
+        from ats_collector import _is_india_or_remote
+        self.assertTrue(_is_india_or_remote("Bengaluru, India", False))
+        self.assertTrue(_is_india_or_remote("Ahmedabad, Gujarat", False))
+        self.assertTrue(_is_india_or_remote("Kochi, Kerala", False))
+        self.assertTrue(_is_india_or_remote("Remote, Global", True))
+        self.assertTrue(_is_india_or_remote("Remote, Worldwide", True))
+        self.assertTrue(_is_india_or_remote("Remote (India)", True))
+        self.assertFalse(_is_india_or_remote("San Francisco; New York City", True))
+        self.assertFalse(_is_india_or_remote("Belgrade; London; Berlin", True))
+        self.assertFalse(_is_india_or_remote("Customer Solution Architect (AMER)", True))
+        self.assertFalse(_is_india_or_remote("Support Engineer (EMEA)", True))
+
 
 if __name__ == "__main__":
     unittest.main()
+
