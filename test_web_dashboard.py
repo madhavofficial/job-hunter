@@ -14,6 +14,8 @@ class TestWebDashboard(unittest.TestCase):
     def test_dashboard_data_structure(self):
         data = web_dashboard.get_dashboard_data()
         self.assertIn("stats", data)
+        self.assertIn("today_jobs", data)
+        self.assertIsInstance(data["today_jobs"], list)
         self.assertIn("fresh_jobs", data)
         self.assertIn("recommended_jobs", data)
         self.assertIn("discovery_jobs", data)
@@ -21,7 +23,7 @@ class TestWebDashboard(unittest.TestCase):
         self.assertIn("all_shortlisted", data)
 
         stats = data["stats"]
-        for k in ["total_shortlisted", "recommended_count", "fresh_48h", "tier1_count", "total_applied"]:
+        for k in ["total_shortlisted", "recommended_count", "discovered_today", "total_discovered_today", "fresh_48h", "tier1_count", "total_applied"]:
             self.assertIn(k, stats)
 
         # Check fields in shortlisted jobs
@@ -291,6 +293,94 @@ class TestWebDashboard(unittest.TestCase):
             self.assertIsNotNone(task)
             self.assertEqual(task["status"], "done")
             self.assertEqual(task["result"]["resume_pdf_path"], resume_pdf_path)
+
+    def test_upload_jd_pdf_endpoint_validation(self):
+        import base64
+        import json
+
+        # 1. Missing pdf_base64
+        handler = web_dashboard.DashboardRequestHandler.__new__(web_dashboard.DashboardRequestHandler)
+        handler.path = "/api/upload-jd-pdf"
+        handler.headers = {"Content-Length": "2"}
+        handler.rfile = io.BytesIO(b'{}')
+        handler.send_response = MagicMock()
+        handler.send_header = MagicMock()
+        handler.end_headers = MagicMock()
+        handler.wfile = io.BytesIO()
+
+        handler.do_POST()
+        handler.send_response.assert_called_with(400)
+        res = json.loads(handler.wfile.getvalue().decode("utf-8"))
+        self.assertIn("error", res)
+
+        # 2. Valid PDF upload with sync=True
+        fake_pdf_b64 = base64.b64encode(b"%PDF-1.4 test pdf content").decode("ascii")
+        payload = json.dumps({
+            "filename": "Anthropic_AI_Engineer.pdf",
+            "pdf_base64": fake_pdf_b64,
+            "profile": "madhav",
+            "sync": True
+        }).encode("utf-8")
+
+        handler = web_dashboard.DashboardRequestHandler.__new__(web_dashboard.DashboardRequestHandler)
+        handler.path = "/api/upload-jd-pdf"
+        handler.headers = {"Content-Length": str(len(payload))}
+        handler.rfile = io.BytesIO(payload)
+        handler.send_response = MagicMock()
+        handler.send_header = MagicMock()
+        handler.end_headers = MagicMock()
+        handler.wfile = io.BytesIO()
+
+        mock_job_row = {
+            "job_id": "pdf-test12345",
+            "title": "Staff AI Engineer",
+            "company": "Anthropic",
+            "score": 95
+        }
+
+        with patch("custom_job.ingest_pdf_job", return_value=("pdf-test12345", mock_job_row)), \
+             patch.object(web_dashboard.tailor, "tailor_materials", return_value=("/tmp/resume.md", "/tmp/resume.pdf")):
+            handler.do_POST()
+            handler.send_response.assert_called_with(200)
+            res = json.loads(handler.wfile.getvalue().decode("utf-8"))
+            self.assertTrue(res["success"])
+            self.assertEqual(res["job_id"], "pdf-test12345")
+            self.assertEqual(res["title"], "Staff AI Engineer")
+            self.assertEqual(res["company"], "Anthropic")
+
+    def test_discovered_today_bucket(self):
+        from datetime import datetime, timedelta
+        conn = db.get_db_connection()
+        c = conn.cursor()
+        today_id = "test_today_job_9999"
+        old_id = "test_old_job_9999"
+        today_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        old_str = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d %H:%M:%S")
+
+        c.execute("DELETE FROM jobs WHERE job_id IN (?, ?)", (today_id, old_id))
+        c.execute("""
+        INSERT INTO jobs (job_id, site, job_url, title, company, status, score, created_at)
+        VALUES (?, 'greenhouse', 'https://job.today', 'AI Research Scientist', 'OpenAI', 'shortlisted', 98, ?)
+        """, (today_id, today_str))
+        c.execute("""
+        INSERT INTO jobs (job_id, site, job_url, title, company, status, score, created_at)
+        VALUES (?, 'lever', 'https://job.old', 'Platform Engineer', 'OldCo', 'shortlisted', 85, ?)
+        """, (old_id, old_str))
+        conn.commit()
+        conn.close()
+
+        try:
+            data = web_dashboard.get_dashboard_data()
+            today_job_ids = [j["job_id"] for j in data["today_jobs"]]
+            self.assertIn(today_id, today_job_ids)
+            self.assertNotIn(old_id, today_job_ids)
+            self.assertGreaterEqual(data["stats"]["discovered_today"], 1)
+        finally:
+            conn = db.get_db_connection()
+            c = conn.cursor()
+            c.execute("DELETE FROM jobs WHERE job_id IN (?, ?)", (today_id, old_id))
+            conn.commit()
+            conn.close()
 
 
 if __name__ == "__main__":

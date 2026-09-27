@@ -1,5 +1,5 @@
 import unittest
-from tailor import ensure_career_objective_target, ensure_selected_project_github_links, is_job_description_ambiguous
+from tailor import ensure_career_objective_target, ensure_selected_project_github_links, is_job_description_ambiguous, strip_meta_commentary
 
 
 class AmbiguousJDTests(unittest.TestCase):
@@ -138,5 +138,106 @@ PES University
         self.assertEqual(result.count("## **CAREER OBJECTIVE**"), 1)
 
 
+    def test_enforce_one_page_budget_returns_valid_string(self):
+        from tailor import enforce_one_page_budget
+        sample_md = """# Candidate Name\n## Education\nPES University\n## Professional Experience\n### Qualcomm\n- Bullet 1\n- Bullet 2\n- Bullet 3\n- Bullet 4\n"""
+        result = enforce_one_page_budget(sample_md, profile_id="madhav", strict_mode=False)
+        self.assertIsNotNone(result)
+        self.assertIsInstance(result, str)
+        self.assertIn("Qualcomm", result)
+
+    def test_ensure_education_retains_markdown(self):
+        from tailor import ensure_education
+        sample_md = """# Candidate Name\n## Professional Experience\n### Test Corp\n- Work bullet\n"""
+        result = ensure_education(sample_md)
+        self.assertIsNotNone(result)
+        self.assertIn("Education", result)
+        self.assertIn("PES University", result)
+
+    def test_scrub_unverified_metrics_removes_hardware_and_fpga_fabrication(self):
+        from tailor import scrub_unverified_metrics
+        sample_md = """# Candidate Name
+## Career Objective
+Computer Science undergraduate at PES University with a solid grounding in electronic circuits, digital/analogue design and embedded systems. Seeking a hardware engineering internship at Tejas Networks to contribute to high-speed board and FPGA development while expanding hands-on experience in telecom-grade hardware R&D.
+
+## Technical Skills
+- **Embedded / Hardware:** ROS 2, Arduino, FUSE, Linux, OpenCV, VHDL/Verilog (academic exposure), digital/analogue circuit fundamentals
+- **Languages:** Python, Java, C
+"""
+        cleaned = scrub_unverified_metrics(sample_md, profile_id="mahika")
+        self.assertNotIn("electronic circuits", cleaned.lower())
+        self.assertNotIn("digital/analogue", cleaned.lower())
+        self.assertNotIn("fpga development", cleaned.lower())
+        self.assertNotIn("hardware engineering internship", cleaned.lower())
+        self.assertNotIn("telecom-grade hardware r&d", cleaned.lower())
+        self.assertNotIn("vhdl/verilog", cleaned.lower())
+        self.assertIn("low-level c programming", cleaned.lower())
+        self.assertIn("operating-system internals", cleaned.lower())
+        self.assertIn("embedded software engineering internship", cleaned.lower())
+        self.assertIn("embedded & systems software", cleaned.lower())
+
+    def test_anti_clustering_and_flagship_rule_for_mahika(self):
+        from profiles import MAHIKA_PROFILE
+        # Verify topics on neuro_capstone include full-stack and database
+        topics = MAHIKA_PROFILE.curated_projects["neuro_capstone"]["topics"]
+        self.assertIn("full-stack", topics)
+        self.assertIn("database", topics)
+        self.assertIn("postgresql", topics)
+
+        # Verify flagship instruction contains anti-clustering and flagship principles
+        flagship_inst = MAHIKA_PROFILE.flagship_instruction
+        self.assertIn("ANTI-CLUSTERING RULE", flagship_inst)
+        self.assertIn("CORE FLAGSHIP PRINCIPLE", flagship_inst)
+        self.assertIn("NEVER select both 'Enterprise Loan Management System' and 'Personal Wealth Management Application'", flagship_inst)
+
+    def test_madhav_literature_synthesis_anti_duplication(self):
+        from profiles import MADHAV_PROFILE
+        flagship_inst = MADHAV_PROFILE.flagship_instruction
+        self.assertIn("CRITICAL ANTI-DUPLICATION RULE", flagship_inst)
+        self.assertIn("NEVER list 'Multi-Agent Generative AI System for Scientific Literature Analysis' under '## Selected Projects'", flagship_inst)
+
+        from tailor import scrub_unverified_metrics
+        sample_md = """# Madhav Jayam
+## Selected Projects
+### GLAS-Med: Evidence-Grounded Clinical Literature Synthesis
+- Multi-agent micro-service ingesting 300-800 papers.
+
+### Multi-Modal AI Protein Analysis & Pathogenicity Reasoning Platform
+- Clinical AI platform.
+
+### Multi-Agent Generative AI System for Scientific Literature Analysis
+- Autonomous system retrieving biomedical literature.
+
+## Publications
+- **Conference Acceptance**: Selected for **IEEE SPICES**
+"""
+        cleaned = scrub_unverified_metrics(sample_md, profile_id="madhav")
+        # Check that scientific literature was scrubbed from Selected Projects
+        selected_proj_part = cleaned.split("## Publications")[0]
+        self.assertNotIn("Scientific Literature Analysis", selected_proj_part)
+        self.assertIn("GLAS-Med", selected_proj_part)
+        self.assertIn("Multi-Modal AI Protein Analysis", selected_proj_part)
+        # Check that Publications is preserved
+        self.assertIn("IEEE SPICES", cleaned)
+
+    def test_strip_meta_commentary(self):
+        sample_md = """# Madhav Jayam
+## Technical Skills
+- **Languages**: Python, C++
+
+--
+
+*This resume is formatted to fit a single page when compiled with LaTeX.*
+Note: Target exactly 1 page budget.
+"""
+        cleaned = strip_meta_commentary(sample_md)
+        self.assertNotIn("formatted to fit a single page", cleaned)
+        self.assertNotIn("compiled with LaTeX", cleaned)
+        self.assertNotIn("1 page budget", cleaned)
+        self.assertIn("Languages", cleaned)
+
+
 if __name__ == "__main__":
     unittest.main()
+
+

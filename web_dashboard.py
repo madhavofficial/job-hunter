@@ -89,7 +89,7 @@ def _run_tailor_worker(tid: str, jid: str, job_row: dict, profile_name: str = "m
             return
         resume_path, resume_pdf_path = materials[0], materials[1]
         target_url = job_row.get("job_url_direct") or job_row.get("job_url")
-        if target_url:
+        if target_url and target_url.startswith("http"):
             try:
                 webbrowser.open(target_url)
             except Exception:
@@ -184,6 +184,8 @@ def get_dashboard_data():
     total_rejected = cursor.fetchone()[0]
     cursor.execute("SELECT COUNT(*) FROM jobs WHERE status = 'scraped'")
     total_scraped = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM jobs WHERE created_at LIKE ?", (f"{datetime.now().strftime('%Y-%m-%d')}%",))
+    total_discovered_today = cursor.fetchone()[0]
     conn.close()
 
     # Enrich all shortlisted roles. Unverified roles remain searchable in the
@@ -214,10 +216,12 @@ def get_dashboard_data():
         j["platform"] = plat
         j["status_portal_url"] = derive_status_portal_url(j["apply_url"], plat, j.get("company", ""), j.get("job_id", ""))
 
-    # Calculate 48h Freshness cutoff
+    # Calculate 48h Freshness cutoff & today's date
     cutoff_48h = (datetime.now() - timedelta(hours=48)).strftime("%Y-%m-%d %H:%M:%S")
     cutoff_7d = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+    today_str = datetime.now().strftime("%Y-%m-%d")
 
+    today_jobs = [j for j in valid_shortlisted if (j.get("created_at") or "").startswith(today_str)]
     fresh_jobs = [j for j in valid_shortlisted if (j.get("created_at") or "") >= cutoff_48h]
     remote_jobs = [j for j in valid_shortlisted if j["is_remote_verified"]]
     
@@ -237,6 +241,8 @@ def get_dashboard_data():
         "stats": {
             "total_shortlisted": len(valid_shortlisted),
             "recommended_count": len(recommended_jobs),
+            "discovered_today": len(today_jobs),
+            "total_discovered_today": total_discovered_today,
             "fresh_48h": len(fresh_jobs),
             "remote_count": len(remote_jobs),
             "big_tech_count": len(big_tech_jobs),
@@ -250,6 +256,7 @@ def get_dashboard_data():
             "pending_matching": total_scraped,
             "older_count": len(older_jobs),
         },
+        "today_jobs": today_jobs,
         "fresh_jobs": fresh_jobs[:40],
         "recommended_jobs": recommended_jobs[:40],
         "discovery_jobs": discovery_jobs,
@@ -334,7 +341,16 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     <!-- Main Container -->
     <main class="max-w-7xl mx-auto px-4 py-6 sm:px-6 space-y-6">
         <!-- Metrics Ribbon -->
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3" id="stats-ribbon">
+        <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3" id="stats-ribbon">
+            <div onclick="switchTab('today')" class="cursor-pointer bg-[#12141d] border border-emerald-500/20 hover:border-emerald-500/50 transition rounded-2xl p-4 flex items-center gap-3.5 shadow-sm group">
+                <div class="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-lg group-hover:scale-105 transition">
+                    <i class="fa-solid fa-calendar-day"></i>
+                </div>
+                <div>
+                    <div class="text-2xl font-extrabold text-white tracking-tight" id="stat-discovered-today">0</div>
+                    <div class="text-[11px] font-medium text-emerald-400 flex items-center gap-1">Discovered Today <i class="fa-solid fa-arrow-right text-[9px] opacity-0 group-hover:opacity-100 transition"></i></div>
+                </div>
+            </div>
             <div class="bg-[#12141d] border border-[#1e2233] hover:border-[#2b3047] transition rounded-2xl p-4 flex items-center gap-3.5 shadow-sm group">
                 <div class="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 text-lg group-hover:scale-105 transition">
                     <i class="fa-solid fa-fire-flame-curved"></i>
@@ -391,8 +407,57 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             </div>
         </div>
 
+        <!-- Section: Upload PDF JD & Instant ATS Resume Generator -->
+        <section class="bg-[#12141d] border border-[#1e2233] hover:border-[#282d42] transition rounded-2xl p-5 shadow-lg space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1c1f2e] pb-3">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-rose-500/20 via-pink-500/20 to-amber-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center text-base shadow-sm">
+                        <i class="fa-solid fa-file-pdf"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                            Direct PDF Job Description Tailor
+                            <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/20">Auto 1-Page ATS</span>
+                        </h2>
+                        <p class="text-xs text-slate-400">Upload any role JD in PDF format — AI extracts requirements, computes match score, and compiles a publication-grade ATS resume PDF</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <span class="text-[11px] text-slate-400 font-medium">Candidate:</span>
+                    <span id="pdfUploadActiveCandidate" class="px-2.5 py-1 text-xs font-bold rounded-xl bg-[#181b28] text-sky-400 border border-[#24283b] flex items-center gap-1.5">
+                        <i class="fa-solid fa-user-check text-[10px]"></i> Madhav Jayam
+                    </span>
+                </div>
+            </div>
+
+            <!-- Drag & Drop Zone -->
+            <div id="pdf-drop-zone"
+                 ondragover="handlePdfDragOver(event)"
+                 ondragleave="handlePdfDragLeave(event)"
+                 ondrop="handlePdfDrop(event)"
+                 onclick="document.getElementById('jd-pdf-file-input').click()"
+                 class="border-2 border-dashed border-[#24283b] hover:border-sky-500/60 bg-[#0a0c14]/60 hover:bg-[#101424]/60 rounded-xl p-6 text-center cursor-pointer transition flex flex-col items-center justify-center gap-2 group">
+                <input type="file" id="jd-pdf-file-input" accept=".pdf,application/pdf" multiple class="hidden" onchange="handlePdfFiles(this.files)" />
+                <div class="w-12 h-12 rounded-2xl bg-sky-500/10 text-sky-400 group-hover:scale-110 border border-sky-500/20 flex items-center justify-center text-xl transition shadow-sm">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                </div>
+                <div>
+                    <p class="text-xs font-semibold text-slate-200">
+                        <span class="text-sky-400 hover:underline">Click to browse</span> or drag & drop Job Description PDF(s) here
+                    </p>
+                    <p class="text-[11px] text-slate-500 mt-0.5">Supports single or batch upload (.pdf up to 25MB). Auto-parses role requirements & outputs 1-page PDF.</p>
+                </div>
+            </div>
+
+            <!-- Upload / Processing Queue Container -->
+            <div id="pdf-processing-queue" class="hidden space-y-2.5 pt-1"></div>
+        </section>
+
         <!-- Navigation Tabs -->
         <div class="flex items-center gap-5 border-b border-[#1c1f2e] text-xs font-medium overflow-x-auto pb-px">
+            <button onclick="switchTab('today')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5" id="tab-btn-today">
+                <i class="fa-solid fa-calendar-day text-emerald-400 text-[11px]"></i> Discovered Today <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" id="badge-today">0</span>
+            </button>
             <button onclick="switchTab('recommended')" class="tab-btn pb-3 px-1 text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5" id="tab-btn-recommended">
                 <i class="fa-solid fa-star text-amber-400 text-[11px]"></i> Top Matches <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-[#181b28] text-slate-300 border border-[#24283b]" id="badge-recommended">0</span>
             </button>
@@ -574,8 +639,13 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 </div>
 
                 <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">OR Upload JD PDF</label>
+                    <input type="file" id="custom-pdf-input" accept=".pdf,application/pdf" class="w-full text-xs text-slate-400 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-[#181b28] file:text-sky-400 hover:file:bg-[#222638] cursor-pointer" />
+                </div>
+
+                <div>
                     <label class="block text-xs font-semibold text-slate-300 mb-1">Raw Job Description (Optional fallback)</label>
-                    <textarea id="custom-text-input" rows="4" placeholder="If the role is behind a login or private portal, paste the JD text here..." class="w-full px-3 py-2 text-xs bg-[#0a0c14] border border-[#1e2233] rounded-xl focus:outline-none focus:border-sky-500 text-slate-100 resize-none font-mono text-[11px]"></textarea>
+                    <textarea id="custom-text-input" rows="3" placeholder="If the role is behind a login or private portal, paste the JD text here..." class="w-full px-3 py-2 text-xs bg-[#0a0c14] border border-[#1e2233] rounded-xl focus:outline-none focus:border-sky-500 text-slate-100 resize-none font-mono text-[11px]"></textarea>
                 </div>
             </div>
 
@@ -613,10 +683,18 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         let currentModalPdfPath = '';
         let currentProfile = localStorage.getItem('active_profile') || 'madhav';
 
+        function updateCandidateBadges() {
+            const candEl = document.getElementById('pdfUploadActiveCandidate');
+            if (candEl) {
+                candEl.innerHTML = `<i class="fa-solid fa-user-check text-[10px]"></i> ${currentProfile === 'mahika' ? 'Mahika Neranjen' : 'Madhav Jayam'}`;
+            }
+        }
+
         function onProfileChange(val) {
             currentProfile = val;
             localStorage.setItem('active_profile', val);
             showToast(`Active Profile: ${val === 'mahika' ? 'Mahika Neranjen' : 'Madhav Jayam'}`);
+            updateCandidateBadges();
         }
 
         async function revealInFinder(pdfPath) {
@@ -695,6 +773,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         function renderMetrics() {
             if (!rawData || !rawData.stats) return;
             const s = rawData.stats;
+            if (document.getElementById('stat-discovered-today')) document.getElementById('stat-discovered-today').innerText = s.discovered_today || 0;
             if (document.getElementById('stat-fresh')) document.getElementById('stat-fresh').innerText = s.fresh_48h || 0;
             if (document.getElementById('stat-big-tech')) document.getElementById('stat-big-tech').innerText = s.big_tech_count || 0;
             if (document.getElementById('stat-startups')) document.getElementById('stat-startups').innerText = (s.startup_count || 0) + (s.unicorn_count || 0);
@@ -702,6 +781,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             if (document.getElementById('stat-applied')) document.getElementById('stat-applied').innerText = s.total_applied || 0;
             if (document.getElementById('stat-total')) document.getElementById('stat-total').innerText = s.total_shortlisted || 0;
 
+            if (document.getElementById('badge-today')) document.getElementById('badge-today').innerText = s.discovered_today || 0;
             if (document.getElementById('badge-fresh')) document.getElementById('badge-fresh').innerText = s.fresh_48h || 0;
             if (document.getElementById('badge-recommended')) document.getElementById('badge-recommended').innerText = s.recommended_count || 0;
             if (document.getElementById('badge-remote')) document.getElementById('badge-remote').innerText = s.remote_count || 0;
@@ -800,7 +880,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             if (!rawData) return;
 
             let list = [];
-            if (currentTab === 'recommended') list = rawData.recommended_jobs;
+            if (currentTab === 'today') list = rawData.today_jobs;
+            else if (currentTab === 'recommended') list = rawData.recommended_jobs;
             else if (currentTab === 'fresh') list = rawData.fresh_jobs;
             else if (currentTab === 'remote') list = rawData.remote_jobs;
             else if (currentTab === 'big_tech') list = rawData.big_tech_jobs;
@@ -816,21 +897,55 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             updateResultCounter(filtered.length, (list || []).length);
 
             if (!filtered || filtered.length === 0) {
+                const emptyMsg = (currentTab === 'today')
+                    ? 'No new roles discovered yet today. Discovery runs automatically on schedule.'
+                    : 'No postings match your current filter.';
                 container.innerHTML = `
                     <div class="col-span-1 md:col-span-2 py-16 text-center text-slate-500">
                         <i class="fa-regular fa-folder-open text-4xl mb-3 block text-slate-600"></i>
-                        <p class="text-sm font-medium">No postings match your current filter.</p>
+                        <p class="text-sm font-medium text-slate-400">${emptyMsg}</p>
                         ${searchTerm ? `<button onclick="clearSearch()" class="mt-2 text-xs text-sky-400 hover:underline">Clear search filter</button>` : ''}
                     </div>
                 `;
                 return;
             }
 
+            if (currentTab === 'today' && (!searchTerm || searchTerm.length === 0)) {
+                const todayBanner = document.createElement('div');
+                todayBanner.className = "col-span-1 md:col-span-2 bg-gradient-to-r from-emerald-950/40 via-[#12141d] to-[#12141d] border border-emerald-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md";
+                const totalScrapedToday = (rawData.stats && rawData.stats.total_discovered_today) ? rawData.stats.total_discovered_today : ((list || []).length);
+                const todayDateFormatted = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' });
+                todayBanner.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 text-lg shrink-0">
+                            <i class="fa-solid fa-calendar-day"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                                Newly Discovered Today
+                                <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono">${(list || []).length} Shortlisted Roles</span>
+                            </h3>
+                            <p class="text-xs text-slate-400 mt-0.5">Discovered ${todayDateFormatted} &bull; ${totalScrapedToday} total listings screened across ATS pipelines.</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0 text-xs text-slate-400">
+                        <span class="px-2.5 py-1 rounded-xl bg-[#0a0c14] border border-[#1e2233] text-emerald-400 font-medium flex items-center gap-1.5">
+                            <i class="fa-solid fa-circle-check text-[10px]"></i> Live ATS Discovery Active
+                        </span>
+                    </div>
+                `;
+                container.appendChild(todayBanner);
+            }
+
+            const todayStr = new Date().toISOString().slice(0, 10);
             filtered.forEach(j => {
                 const scoreColor = (j.score >= 90) ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
                                  : (j.score >= 80) ? 'text-sky-400 bg-sky-500/10 border-sky-500/20'
                                  : 'text-amber-400 bg-amber-500/10 border-amber-500/20';
                 
+                const isToday = (j.created_at || '').startsWith(todayStr);
+                const todayBadge = isToday ? `<span class="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold flex items-center gap-1"><i class="fa-solid fa-sparkles text-[9px]"></i> Today</span>` : '';
+
                 let tierBadge = '';
                 const cat = (j.tier || '').toLowerCase();
                 if (cat.includes('big tech') || cat.includes('mnc')) {
@@ -892,6 +1007,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                             <div class="flex items-start justify-between gap-2">
                                 <div class="space-y-1">
                                     <div class="flex items-center gap-2 flex-wrap">
+                                        ${todayBadge}
                                         ${tierBadge}
                                         ${remoteBadge}
                                         <span class="text-[10px] text-slate-400"><i class="fa-regular fa-clock"></i> ${datePosted}</span>
@@ -944,7 +1060,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             if (!rawData) return;
             let job = null;
             const allLists = [
-                rawData.recommended_jobs, rawData.fresh_jobs, rawData.remote_jobs,
+                rawData.today_jobs, rawData.recommended_jobs, rawData.fresh_jobs, rawData.remote_jobs,
                 rawData.big_tech_jobs, rawData.unicorn_jobs, rawData.startup_jobs, rawData.it_services_jobs,
                 rawData.tier1_jobs, rawData.tier2_jobs, rawData.all_shortlisted, rawData.applied_jobs
             ];
@@ -959,6 +1075,10 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             // Badges
             const badgesEl = document.getElementById('modal-badges');
             badgesEl.innerHTML = '';
+            const todayStr = new Date().toISOString().slice(0, 10);
+            if ((job.created_at || '').startsWith(todayStr)) {
+                badgesEl.innerHTML += `<span class="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold flex items-center gap-1"><i class="fa-solid fa-sparkles text-[9px]"></i> Discovered Today</span>`;
+            }
             if (job.tier) {
                 const cat = (job.tier || '').toLowerCase();
                 if (cat.includes('big tech') || cat.includes('mnc')) {
@@ -1089,6 +1209,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             const modal = document.getElementById('custom-job-modal');
             document.getElementById('custom-url-input').value = '';
             document.getElementById('custom-text-input').value = '';
+            const pdfInput = document.getElementById('custom-pdf-input');
+            if (pdfInput) pdfInput.value = '';
             document.getElementById('custom-job-progress').classList.add('hidden');
             document.getElementById('custom-submit-btn').disabled = false;
             modal.showModal();
@@ -1114,9 +1236,11 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             if (e) e.preventDefault();
             const url = document.getElementById('custom-url-input').value.trim();
             const text = document.getElementById('custom-text-input').value.trim();
+            const pdfInput = document.getElementById('custom-pdf-input');
+            const pdfFile = (pdfInput && pdfInput.files) ? pdfInput.files[0] : null;
 
-            if (!url && !text) {
-                showToast('Please enter a job URL or raw job description.', true);
+            if (!url && !text && !pdfFile) {
+                showToast('Please enter a job URL, select a PDF, or enter raw description.', true);
                 return;
             }
 
@@ -1126,6 +1250,44 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
             progress.classList.remove('hidden');
             submitBtn.disabled = true;
+
+            if (pdfFile) {
+                statusText.innerText = `Ingesting ${pdfFile.name} & screening with AI...`;
+                const reader = new FileReader();
+                reader.onload = async () => {
+                    const base64Data = reader.result.split(',')[1];
+                    try {
+                        const res = await fetch('/api/upload-jd-pdf', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                filename: pdfFile.name,
+                                pdf_base64: base64Data,
+                                profile: currentProfile,
+                            })
+                        });
+                        const data = await res.json();
+                        if (data.success && data.job_id) {
+                            statusText.innerText = 'Success! Opening application workflow...';
+                            setTimeout(() => {
+                                closeCustomJobModal();
+                                window.location.href = '/apply?id=' + encodeURIComponent(data.job_id) + (currentProfile ? '&profile=' + encodeURIComponent(currentProfile) : '');
+                            }, 600);
+                        } else {
+                            progress.classList.add('hidden');
+                            submitBtn.disabled = false;
+                            showToast('Failed to add job: ' + (data.error || 'Unknown error'), true);
+                        }
+                    } catch (err) {
+                        progress.classList.add('hidden');
+                        submitBtn.disabled = false;
+                        showToast('Failed to process PDF: ' + err, true);
+                    }
+                };
+                reader.readAsDataURL(pdfFile);
+                return;
+            }
+
             statusText.innerText = 'Extracting job posting & screening with AI...';
 
             try {
@@ -1151,6 +1313,195 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 submitBtn.disabled = false;
                 showToast('Failed to process custom link: ' + err, true);
             }
+        }
+
+        function handlePdfDragOver(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const dropZone = document.getElementById('pdf-drop-zone');
+            if (dropZone) dropZone.classList.add('border-sky-500', 'bg-[#121626]');
+        }
+
+        function handlePdfDragLeave(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const dropZone = document.getElementById('pdf-drop-zone');
+            if (dropZone) dropZone.classList.remove('border-sky-500', 'bg-[#121626]');
+        }
+
+        function handlePdfDrop(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const dropZone = document.getElementById('pdf-drop-zone');
+            if (dropZone) dropZone.classList.remove('border-sky-500', 'bg-[#121626]');
+            if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                handlePdfFiles(e.dataTransfer.files);
+            }
+        }
+
+        function formatBytes(bytes) {
+            if (!bytes || bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        async function handlePdfFiles(fileList) {
+            if (!fileList || fileList.length === 0) return;
+            const files = Array.from(fileList);
+            const queue = document.getElementById('pdf-processing-queue');
+            if (queue) queue.classList.remove('hidden');
+
+            for (const file of files) {
+                if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
+                    showToast(`${file.name} is not a PDF file`, true);
+                    continue;
+                }
+                uploadSinglePdf(file);
+            }
+        }
+
+        function uploadSinglePdf(file) {
+            const queue = document.getElementById('pdf-processing-queue');
+            const itemId = 'pdf-item-' + Math.random().toString(36).substring(2, 9);
+
+            const card = document.createElement('div');
+            card.id = itemId;
+            card.className = 'p-3.5 bg-[#0a0c14] border border-[#1e2233] rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm transition hover:border-[#282d42]';
+            card.innerHTML = `
+                <div class="flex items-center gap-3 min-w-0">
+                    <div class="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center shrink-0">
+                        <i class="fa-solid fa-file-pdf"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <div class="text-xs font-bold text-white truncate">${escapeHtml(file.name)}</div>
+                        <div class="text-[11px] text-slate-400 flex items-center gap-2">
+                            <span>${formatBytes(file.size)}</span>
+                            <span>•</span>
+                            <span id="${itemId}-status" class="text-sky-400 font-medium flex items-center gap-1.5">
+                                <i class="fa-solid fa-circle-notch fa-spin text-[10px]"></i> Reading PDF & screening with AI...
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div id="${itemId}-actions" class="flex items-center gap-2 shrink-0"></div>
+            `;
+            queue.prepend(card);
+
+            const reader = new FileReader();
+            reader.onload = async () => {
+                const base64Data = reader.result.split(',')[1];
+                try {
+                    const res = await fetch('/api/upload-jd-pdf', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            filename: file.name,
+                            pdf_base64: base64Data,
+                            profile: currentProfile,
+                        })
+                    });
+                    const data = await res.json();
+                    if (!res.ok || !data.success) {
+                        throw new Error(data.error || 'Server error ingesting PDF');
+                    }
+
+                    const statusEl = document.getElementById(`${itemId}-status`);
+                    if (data.status === 'pending' && data.task_id) {
+                        if (statusEl) {
+                            statusEl.className = 'text-amber-400 font-medium flex items-center gap-1.5';
+                            statusEl.innerHTML = `<i class="fa-solid fa-gear fa-spin text-[10px]"></i> Generating 1-page ATS resume for <b>${escapeHtml(data.company || 'Company')}</b>...`;
+                        }
+                        pollPdfTailorStatus(data.task_id, itemId, data);
+                    } else if (data.resume_pdf_path) {
+                        onPdfTailorSuccess(itemId, data);
+                    }
+                } catch (err) {
+                    const statusEl = document.getElementById(`${itemId}-status`);
+                    if (statusEl) {
+                        statusEl.className = 'text-rose-400 font-medium flex items-center gap-1.5';
+                        statusEl.innerHTML = `<i class="fa-solid fa-circle-exclamation text-[10px]"></i> Failed: ${escapeHtml(err.message || String(err))}`;
+                    }
+                    showToast(`Error processing ${file.name}: ${err.message}`, true);
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+
+        async function pollPdfTailorStatus(taskId, itemId, jobMeta) {
+            const start = Date.now();
+            const pollInterval = setInterval(async () => {
+                try {
+                    const elapsed = Math.round((Date.now() - start) / 1000);
+                    if (elapsed > 180) {
+                        clearInterval(pollInterval);
+                        const statusEl = document.getElementById(`${itemId}-status`);
+                        if (statusEl) {
+                            statusEl.className = 'text-rose-400 font-medium';
+                            statusEl.innerHTML = 'Tailoring timed out after 3 minutes';
+                        }
+                        return;
+                    }
+
+                    const r = await fetch('/api/apply-status?task_id=' + encodeURIComponent(taskId));
+                    if (!r.ok) return;
+                    const d = await r.json();
+                    if (d.status === 'done' && d.success) {
+                        clearInterval(pollInterval);
+                        onPdfTailorSuccess(itemId, {
+                            ...jobMeta,
+                            resume_path: d.resume_path,
+                            resume_pdf_path: d.resume_pdf_path,
+                            title: d.title || jobMeta.title,
+                            company: d.company || jobMeta.company,
+                            job_id: d.job_id || jobMeta.job_id,
+                        });
+                    } else if (d.status === 'error' || d.error) {
+                        clearInterval(pollInterval);
+                        const statusEl = document.getElementById(`${itemId}-status`);
+                        if (statusEl) {
+                            statusEl.className = 'text-rose-400 font-medium';
+                            statusEl.innerHTML = `Tailoring failed: ${escapeHtml(d.error || 'Unknown error')}`;
+                        }
+                    }
+                } catch (_) {}
+            }, 1500);
+        }
+
+        function onPdfTailorSuccess(itemId, result) {
+            const statusEl = document.getElementById(`${itemId}-status`);
+            const actionsEl = document.getElementById(`${itemId}-actions`);
+            const title = result.title || 'Role';
+            const company = result.company || 'Company';
+            const pdfPath = result.resume_pdf_path || '';
+            const jobId = result.job_id || '';
+
+            if (statusEl) {
+                statusEl.className = 'text-emerald-400 font-semibold flex items-center gap-1.5';
+                statusEl.innerHTML = `<i class="fa-solid fa-circle-check text-[10px]"></i> 1-Page Resume Ready • <b>${escapeHtml(title)}</b> @ <b>${escapeHtml(company)}</b>`;
+            }
+
+            if (actionsEl) {
+                actionsEl.innerHTML = `
+                    ${pdfPath ? `
+                        <a href="/pdf?path=${encodeURIComponent(pdfPath)}" target="_blank" class="px-3 py-1.5 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 transition shadow-sm">
+                            <i class="fa-solid fa-file-arrow-down text-[10px]"></i> Open Resume PDF
+                        </a>
+                        <button onclick="revealInFinder('${escapeHtml(pdfPath)}')" class="px-2.5 py-1.5 bg-[#181b28] hover:bg-[#222638] text-slate-300 rounded-xl border border-[#24283b] text-xs flex items-center gap-1 transition" title="Reveal in Finder">
+                            <i class="fa-regular fa-folder-open text-[11px]"></i>
+                        </button>
+                    ` : ''}
+                    ${jobId ? `
+                        <button onclick="openDetailsModal('${escapeHtml(jobId)}')" class="px-2.5 py-1.5 bg-[#181b28] hover:bg-[#222638] text-slate-300 rounded-xl border border-[#24283b] text-xs flex items-center gap-1 transition" title="View Job Details">
+                            <i class="fa-solid fa-eye text-[11px]"></i> Details
+                        </button>
+                    ` : ''}
+                `;
+            }
+
+            showToast(`Resume generated for ${company}!`);
+            fetchJobs();
         }
 
         function askApplicationOutcome(taskId, jobId, jobTitle, company) {
@@ -1314,7 +1665,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         async function dismissJob(jobId) {
             let job = null;
             if (rawData) {
-                const allLists = [rawData.recommended_jobs, rawData.fresh_jobs, rawData.remote_jobs, rawData.tier1_jobs, rawData.tier2_jobs, rawData.all_shortlisted];
+                const allLists = [rawData.today_jobs, rawData.recommended_jobs, rawData.fresh_jobs, rawData.remote_jobs, rawData.tier1_jobs, rawData.tier2_jobs, rawData.all_shortlisted];
                 for (const list of allLists) {
                     if (list) {
                         const found = list.find(x => x.job_id === jobId);
@@ -1336,7 +1687,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                     if (card) card.remove();
 
                     if (rawData) {
-                        const allLists = [rawData.recommended_jobs, rawData.fresh_jobs, rawData.remote_jobs, rawData.tier1_jobs, rawData.tier2_jobs, rawData.all_shortlisted];
+                        const allLists = [rawData.today_jobs, rawData.recommended_jobs, rawData.fresh_jobs, rawData.remote_jobs, rawData.tier1_jobs, rawData.tier2_jobs, rawData.all_shortlisted];
                         for (const list of allLists) {
                             if (list) {
                                 const idx = list.findIndex(x => x.job_id === jobId);
@@ -1345,6 +1696,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                         }
                         if (rawData.stats) {
                             rawData.stats.total_shortlisted = Math.max(0, rawData.stats.total_shortlisted - 1);
+                            if (rawData.today_jobs) rawData.stats.discovered_today = rawData.today_jobs.length;
                             renderMetrics();
                         }
                     }
@@ -1411,6 +1763,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         // Initialize
         const pSel = document.getElementById('activeProfileSelect');
         if (pSel) pSel.value = currentProfile;
+        updateCandidateBadges();
         fetchJobs();
     </script>
 </body>
@@ -1980,6 +2333,94 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
                 return
             except Exception as e:
                 self.send_response(500)
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
+                return
+
+        elif path == "/api/upload-jd-pdf":
+            filename = params.get("filename", "job_description.pdf")
+            pdf_base64 = params.get("pdf_base64")
+            profile_name = params.get("profile", "madhav")
+            sync_mode = params.get("sync", False)
+
+            if not pdf_base64:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "Missing pdf_base64 parameter"}).encode("utf-8"))
+                return
+
+            import base64
+            try:
+                pdf_bytes = base64.b64decode(pdf_base64)
+            except Exception as e:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": f"Invalid base64 payload: {e}"}).encode("utf-8"))
+                return
+
+            if len(pdf_bytes) > 25 * 1024 * 1024:
+                self.send_response(413)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "File size exceeds 25MB limit"}).encode("utf-8"))
+                return
+
+            try:
+                import custom_job
+                job_id, job_row = custom_job.ingest_pdf_job(pdf_bytes, filename=filename)
+                if not job_id:
+                    self.send_response(500)
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"error": "Failed to parse and ingest PDF JD."}).encode("utf-8"))
+                    return
+
+                if sync_mode:
+                    materials = tailor.tailor_materials(job_id, profile_name=profile_name)
+                    if not materials:
+                        raise ValueError("Failed to generate tailored materials")
+                    resume_path, resume_pdf_path = materials[0], materials[1]
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({
+                        "success": True,
+                        "job_id": job_id,
+                        "title": job_row.get("title", ""),
+                        "company": job_row.get("company", ""),
+                        "score": job_row.get("score", 0),
+                        "resume_path": resume_path,
+                        "resume_pdf_path": resume_pdf_path,
+                        "pdf_url": f"/pdf?path={urllib.parse.quote(resume_pdf_path)}",
+                    }).encode("utf-8"))
+                    return
+
+                # Async mode: dispatch to _run_tailor_worker and return task_id
+                task_id = str(uuid.uuid4())
+                with _apply_tasks_lock:
+                    _apply_tasks[task_id] = {"status": "pending", "result": None, "error": None}
+
+                threading.Thread(target=_run_tailor_worker, args=(task_id, job_id, job_row, profile_name), daemon=True).start()
+
+                self.send_response(202)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "success": True,
+                    "task_id": task_id,
+                    "job_id": job_id,
+                    "title": job_row.get("title", ""),
+                    "company": job_row.get("company", ""),
+                    "score": job_row.get("score", 0),
+                    "status": "pending",
+                }).encode("utf-8"))
+                return
+
+            except Exception as e:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
                 return

@@ -21,6 +21,45 @@ class ATSCollectorTests(unittest.TestCase):
         self.assertIn("oraclecloud.com", CAREER_BOARD_DOMAINS)
         self.assertIn("monster.com", CAREER_BOARD_DOMAINS)
 
+    def test_career_listing_handles_dict_address_country(self):
+        from unittest.mock import patch, MagicMock
+        from ats_collector import _career_listing_from_url
+        import json
+
+        html_sample = """
+        <html>
+        <head><title>Test Job</title></head>
+        <body>
+        <script type="application/ld+json">
+        {
+            "@type": "JobPosting",
+            "title": "Software Engineer Intern",
+            "hiringOrganization": {"name": "Acme Corp"},
+            "jobLocation": {
+                "address": {
+                    "addressLocality": "Bengaluru",
+                    "addressRegion": "Karnataka",
+                    "addressCountry": {"@type": "Country", "name": "India"}
+                }
+            },
+            "description": "<p>Great opportunity</p>"
+        }
+        </script>
+        </body>
+        </html>
+        """
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = html_sample.encode("utf-8")
+        mock_resp.__enter__.return_value = mock_resp
+
+        with patch("ats_collector.urlopen", return_value=mock_resp):
+            listing = _career_listing_from_url("https://careers.acme.com/jobs/123", "acme.com")
+
+        self.assertIsNotNone(listing)
+        self.assertEqual(listing["title"], "Software Engineer Intern")
+        self.assertEqual(listing["company"], "Acme Corp")
+        self.assertEqual(listing["location"], "Bengaluru, Karnataka, India")
+
 
 if __name__ == "__main__":
     unittest.main()

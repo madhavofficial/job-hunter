@@ -9,16 +9,83 @@ Produces clean, high-signal, single-page resumes with:
 - Automatic single-page budget enforcement
 """
 
+import io
 import html
 import os
 import re
+import subprocess
+import tempfile
 import unicodedata
+from typing import Union, BinaryIO
 from reportlab.lib.colors import HexColor
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import HRFlowable, KeepInFrame, Paragraph, SimpleDocTemplate
+
+
+def extract_text_from_pdf(pdf_source: Union[str, bytes, bytearray, BinaryIO]) -> str:
+    """Extract full clean text from a PDF file path, raw bytes, or stream.
+    
+    Tries pypdf first, then pymupdf (fitz), and falls back to system pdftotext.
+    """
+    pdf_bytes = b""
+    if isinstance(pdf_source, (str, os.PathLike)):
+        with open(pdf_source, "rb") as f:
+            pdf_bytes = f.read()
+    elif isinstance(pdf_source, (bytes, bytearray)):
+        pdf_bytes = bytes(pdf_source)
+    elif hasattr(pdf_source, "read"):
+        pdf_bytes = pdf_source.read()
+    else:
+        raise TypeError(f"Unsupported pdf_source type: {type(pdf_source)}")
+
+    if not pdf_bytes:
+        return ""
+
+    text = ""
+    # 1. Try pypdf
+    try:
+        import pypdf
+        reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
+        pages_text = []
+        for page in reader.pages:
+            t = page.extract_text()
+            if t:
+                pages_text.append(t)
+        text = "\n\n".join(pages_text).strip()
+    except Exception:
+        pass
+
+    # 2. Try pymupdf / fitz fallback
+    if not text:
+        try:
+            import pymupdf
+            doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+            pages_text = []
+            for page in doc:
+                t = page.get_text()
+                if t:
+                    pages_text.append(t)
+            text = "\n\n".join(pages_text).strip()
+        except Exception:
+            pass
+
+    # 3. Try pdftotext CLI fallback
+    if not text:
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=True) as tmp:
+                tmp.write(pdf_bytes)
+                tmp.flush()
+                res = subprocess.run(["pdftotext", tmp.name, "-"], capture_output=True, text=True, timeout=15)
+                if res.returncode == 0:
+                    text = res.stdout.strip()
+        except Exception:
+            pass
+
+    return _clean_glyphs(text).strip()
+
 
 
 def _clean_glyphs(text: str) -> str:

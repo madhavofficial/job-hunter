@@ -47,6 +47,35 @@ class TestCustomJob(unittest.TestCase):
         self.assertEqual(row["score"], 0)
         self.assertEqual(custom_job.ingest_custom_job(custom_url), job_id)
 
+    def test_ingest_pdf_job(self):
+        import io
+        from reportlab.pdfgen import canvas
+
+        buf = io.BytesIO()
+        c = canvas.Canvas(buf)
+        c.drawString(100, 750, "Company: Acme Robotics")
+        c.drawString(100, 730, "Title: Senior Machine Learning Engineer")
+        c.drawString(100, 710, "Location: Bengaluru, India")
+        c.drawString(100, 690, "Requirements: Python, PyTorch, ROS, Docker, Kubernetes")
+        c.save()
+        pdf_bytes = buf.getvalue()
+
+        with patch.object(custom_job.matcher, "run_matcher") as run_matcher:
+            job_id, job_row = custom_job.ingest_pdf_job(pdf_bytes, filename="Acme_Robotics_MLE.pdf")
+            run_matcher.assert_called_once_with(job_ids=[job_id])
+
+        self.assertTrue(job_id.startswith("pdf-"))
+        conn = db.get_db_connection()
+        row = conn.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+        conn.close()
+        self.assertIsNotNone(row)
+        self.assertEqual(row["site"], "pdf_upload")
+        self.assertTrue(row["job_url"].startswith("file://"))
+
+        # Re-ingesting same PDF returns existing row
+        jid2, row2 = custom_job.ingest_pdf_job(pdf_bytes, filename="Acme_Robotics_MLE.pdf")
+        self.assertEqual(jid2, job_id)
+
 
 if __name__ == "__main__":
     unittest.main()

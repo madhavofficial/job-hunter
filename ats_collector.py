@@ -225,8 +225,20 @@ def _career_listing_from_url(url: str, domain: str) -> dict | None:
     if isinstance(location_data, list):
         location_data = location_data[0] if location_data else {}
     address = location_data.get("address") if isinstance(location_data, dict) else {}
-    location = address.get("addressLocality", "") if isinstance(address, dict) else ""
-    location = ", ".join(filter(None, [location, address.get("addressRegion", "") if isinstance(address, dict) else "", address.get("addressCountry", "") if isinstance(address, dict) else ""]))
+    if not isinstance(address, dict):
+        address = {}
+
+    def _extract_addr_str(val):
+        if isinstance(val, dict):
+            return str(val.get("name") or val.get("@value") or "")
+        if isinstance(val, list):
+            return ", ".join(filter(None, [_extract_addr_str(x) for x in val]))
+        return str(val).strip() if val is not None else ""
+
+    locality = _extract_addr_str(address.get("addressLocality", ""))
+    region = _extract_addr_str(address.get("addressRegion", ""))
+    country = _extract_addr_str(address.get("addressCountry", ""))
+    location = ", ".join(filter(None, [locality, region, country]))
     description = html_to_text(posting.get("description", ""))
     if not title:
         title_match = re.search(r"<title[^>]*>(.*?)</title>", html, flags=re.IGNORECASE | re.DOTALL)
@@ -291,7 +303,14 @@ def discover_career_board_jobs(limit_per_domain: int = 50) -> pd.DataFrame:
             query = f"site:{domain} ({keyword_query}) India OR remote"
             try:
                 urls = search_urls(query, count=min(limit_per_domain, 10))
-                listings = [listing for url in urls if (listing := _career_listing_from_url(url, domain))]
+                listings = []
+                for url in urls:
+                    try:
+                        listing = _career_listing_from_url(url, domain)
+                        if listing:
+                            listings.append(listing)
+                    except Exception as exc:
+                        print(f"Warning: error parsing career listing from {url}: {exc}", file=sys.stderr)
                 if listings:
                     rows.extend(listings)
                     print(f"Career discovery {domain}: {len(listings)} parsed listings.")

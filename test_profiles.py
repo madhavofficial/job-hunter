@@ -122,7 +122,7 @@ Worked here.
 
     def test_madhav_curated_projects_and_master_resume(self):
         p_madhav = profiles.get_profile("madhav")
-        self.assertEqual(len(p_madhav.curated_projects), 8)
+        self.assertEqual(len(p_madhav.curated_projects), 10)
         self.assertIn("neuro_capstone", p_madhav.curated_projects)
         self.assertIn("evidence-grounded-clinical-literature-synthesis", p_madhav.curated_projects)
         self.assertIn("153_Project3_BD", p_madhav.curated_projects)
@@ -131,12 +131,15 @@ Worked here.
         self.assertIn("job-hunter", p_madhav.curated_projects)
         self.assertIn("Ultimate-Trader-Dashboard-GitHub-Repository-Structure", p_madhav.curated_projects)
         self.assertIn("Forecasting-Bike-Rental-Demand", p_madhav.curated_projects)
+        self.assertIn("mini-unionfs", p_madhav.curated_projects)
+        self.assertIn("pesuacademy-mcp", p_madhav.curated_projects)
 
         with open(p_madhav.resume_path, "r", encoding="utf-8") as f:
             content = f.read()
         self.assertNotIn("Certifications", content)
         self.assertNotIn("HackerRank", content)
         self.assertIn("Multi-Modal AI Protein Analysis", content)
+        self.assertIn("PESU Academy MCP Server", content)
         self.assertIn("GLAS-Med", content)
         self.assertIn("153_Project3_BD", content)
         self.assertIn("Sketch Recognition System", content)

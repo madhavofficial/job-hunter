@@ -10,10 +10,11 @@ Workday, Indeed, or any arbitrary company careers page) to automatically:
 
 import hashlib
 import json
+import os
 import re
 import sys
 import urllib.parse
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import bs4
 import requests
@@ -134,9 +135,20 @@ Respond ONLY with a valid JSON object matching this exact schema:
                 break
 
     # Fallback heuristic if LLM unavailable
+    guessed_title = page_title.replace("PDF Job: ", "").replace(".pdf", "").replace("_", " ").strip()[:60]
+    guessed_company = "Custom Opportunity"
+    if " at " in guessed_title:
+        parts = guessed_title.split(" at ")
+        guessed_title = parts[0].strip()
+        guessed_company = parts[1].strip()
+    elif " - " in guessed_title:
+        parts = guessed_title.split(" - ")
+        guessed_company = parts[0].strip()
+        guessed_title = parts[1].strip()
+
     return {
-        "title": page_title[:60],
-        "company": "Custom Opportunity",
+        "title": guessed_title or page_title[:60],
+        "company": guessed_company,
         "location": "India / Remote",
         "job_type": "Full-time",
         "skills": "Software Engineering, Python, Backend",
@@ -144,9 +156,106 @@ Respond ONLY with a valid JSON object matching this exact schema:
     }
 
 
+def ingest_pdf_job(
+    pdf_bytes: bytes,
+    filename: str = "job_description.pdf",
+    custom_text: Optional[str] = None,
+) -> Tuple[str, Dict[str, Any]]:
+    """Ingests a Job Description from raw PDF bytes into jobs.db.
+
+    1. Extracts text from the PDF using pdf_utils.extract_text_from_pdf.
+    2. Saves the uploaded PDF to tailored/uploaded_jds/ for reference.
+    3. Parses job fields (title, company, skills, description) with LLM.
+    4. Inserts into jobs.db and runs matcher scoring.
+    5. Returns (job_id, job_row_dict).
+    """
+    db.init_db()
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    upload_dir = os.path.join(base_dir, "tailored", "uploaded_jds")
+    os.makedirs(upload_dir, exist_ok=True)
+
+    content_hash = hashlib.md5(pdf_bytes).hexdigest()[:10]
+    job_id = f"pdf-{content_hash}"
+
+    clean_filename = re.sub(r"[^a-zA-Z0-9._-]", "_", filename) or "jd.pdf"
+    if not clean_filename.lower().endswith(".pdf"):
+        clean_filename += ".pdf"
+    saved_pdf_path = os.path.join(upload_dir, f"{content_hash}_{clean_filename}")
+    with open(saved_pdf_path, "wb") as f:
+        f.write(pdf_bytes)
+
+    file_url = f"file://{saved_pdf_path}"
+
+    # Check if already in DB
+    conn = db.get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,))
+    existing = cursor.fetchone()
+    conn.close()
+
+    if existing:
+        print(f"✓ Found existing PDF job in database: `{job_id}` ({existing['title']} at {existing['company']})")
+        return job_id, dict(existing)
+
+    import pdf_utils
+    extracted_text = pdf_utils.extract_text_from_pdf(pdf_bytes)
+    raw_text = (extracted_text or "").strip()
+    if custom_text and custom_text.strip():
+        raw_text = f"{custom_text.strip()}\n\n{raw_text}".strip()
+
+    if not raw_text or len(raw_text) < 20:
+        raise ValueError("Could not extract readable text from the uploaded PDF. It may be an image scan or empty document.")
+
+    # Parse with LLM
+    page_title = f"PDF Job: {clean_filename}"
+    parsed = parse_job_with_llm(file_url, raw_text, page_title)
+
+    title = parsed.get("title", "Software Engineer").strip()
+    company = parsed.get("company", "Custom Company").strip()
+    location = parsed.get("location", "India / Remote").strip()
+    description = parsed.get("description", raw_text).strip()
+    skills = parsed.get("skills", "").strip()
+    job_type = parsed.get("job_type", "Full-time").strip()
+
+    # Insert into jobs.db
+    conn = db.get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+    INSERT OR REPLACE INTO jobs (
+        job_id, site, job_url, job_url_direct, title, company, location,
+        date_posted, job_type, description, is_remote, skills, experience_range,
+        score, status, matching_notes, evidence, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, 0, ?, '', ?, ?, ?, '', datetime('now'))
+    """, (
+        job_id, "pdf_upload", file_url, file_url, title, company, location,
+        job_type, description, skills, 0, "scraped", f"Uploaded PDF JD: {clean_filename}"
+    ))
+    conn.commit()
+    conn.close()
+
+    # Run deterministic filters and compatibility matcher
+    matcher.run_matcher(job_ids=[job_id])
+
+    conn = db.get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,))
+    row = cursor.fetchone()
+    conn.close()
+
+    return job_id, dict(row) if row else parsed
+
+
 def ingest_custom_job(url: str, custom_text: Optional[str] = None) -> Optional[str]:
     """Ingests a custom job URL into jobs.db and returns its job_id."""
     db.init_db()
+
+    if url and ((url.startswith("file://") and url.lower().endswith(".pdf")) or (os.path.isfile(url) and url.lower().endswith(".pdf"))):
+        local_path = url.replace("file://", "")
+        with open(local_path, "rb") as f:
+            pdf_data = f.read()
+        jid, _ = ingest_pdf_job(pdf_data, filename=os.path.basename(local_path), custom_text=custom_text)
+        return jid
 
     print(f"\n====================================================")
     print(f"📥 INGESTING CUSTOM JOB OPPORTUNITY")

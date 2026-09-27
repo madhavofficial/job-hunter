@@ -72,6 +72,42 @@ Seeking software engineering role.
         self.assertTrue(os.path.exists(pdf_path))
         self.assertTrue(os.path.exists(tex_path))
 
+    def test_is_meta_commentary(self):
+        sample_md = """# Test Candidate
+**Email**: test@example.com
+
+## Technical Skills
+- **Languages**: Python
+
+--
+
+*This resume is formatted to fit a single page when compiled with LaTeX.*
+Note: Target exactly 1 page budget.
+"""
+        tex = latex_utils.markdown_to_latex(sample_md)
+        self.assertNotIn("formatted to fit a single page", tex)
+        self.assertNotIn("compiled with LaTeX", tex)
+        self.assertNotIn("1 page budget", tex)
+
+    def test_publication_heading_and_paper_links(self):
+        sample_md = """# Madhav Jayam
+**Email**: madhav@example.com
+
+## Publications
+### A Multi-Agent Generative AI System for Scientific Literature Analysis
+*Paper: https://doi.org/10.5281/zenodo.22676649 | GitHub: https://github.com/GenAI-Scientific-Literature-System/GenAI-Scientific-Literature-System-multi-agent-system*
+- Built an evidence-grounded multi-agent pipeline achieving 92.7 % accuracy and 89.8 % F1.
+"""
+        tex = latex_utils.markdown_to_latex(sample_md)
+        self.assertIn(r"\section{Publications}", tex)
+        self.assertIn(r"A Multi-Agent Generative AI System for Scientific Literature Analysis", tex)
+        self.assertNotIn("and applications System", tex)
+        self.assertIn(r"\href{https://doi.org/10.5281/zenodo.22676649}{\underline{Paper}}", tex)
+        self.assertIn(r"\href{https://github.com/GenAI-Scientific-Literature-System/GenAI-Scientific-Literature-System-multi-agent-system}{\underline{GitHub}}", tex)
+        self.assertIn(r"92.7\% accuracy", tex)
+        self.assertIn(r"89.8\% F1", tex)
+
 
 if __name__ == "__main__":
     unittest.main()
+

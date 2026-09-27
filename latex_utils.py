@@ -41,11 +41,35 @@ def _clean_glyphs(text: str) -> str:
     return text
 
 
+def is_meta_commentary(text: str) -> bool:
+    """Detect and ignore LLM meta-commentary, footers, disclaimers, or compilation notes."""
+    if not text:
+        return False
+    t = _clean_glyphs(text).strip().lower()
+    t = re.sub(r"^[*_`#\s]+|[*_`#\s]+$", "", t)
+    meta_patterns = [
+        r"this resume is formatted to fit",
+        r"formatted to fit a single page",
+        r"fit onto exactly one page",
+        r"fit cleanly onto",
+        r"compiled with latex",
+        r"compiled with tectonic",
+        r"^note:\s+",
+        r"^disclaimer:",
+        r"^prepared for\b",
+        r"target exactly 1 page",
+        r"1-page budget",
+    ]
+    return any(re.search(pat, t) for pat in meta_patterns)
+
+
 def escape_latex(text: str) -> str:
     """Safely escape LaTeX special characters in plain text while keeping ASCII clean."""
     if not text:
         return ""
     text = _clean_glyphs(text)
+    # Normalize percent spacing: "92.7 %" -> "92.7%"
+    text = re.sub(r"(\d+(?:\.\d+)?)\s+%", r"\1%", text)
     # Escape backslashes first if any
     text = text.replace("\\", "\\textbackslash{}")
     # Escape standard LaTeX reserved characters
@@ -71,6 +95,8 @@ def format_inline_latex(text: str) -> str:
         return ""
 
     text = _clean_glyphs(text)
+    # Normalize percent spacing: "92.7 %" -> "92.7%"
+    text = re.sub(r"(\d+(?:\.\d+)?)\s+%", r"\1%", text)
 
     # 1. Protect markdown links [label](url)
     md_links = []
@@ -172,10 +198,16 @@ def markdown_to_latex(markdown_text: str) -> str:
     while i < total and not lines[i]:
         i += 1
 
-    if i < total and lines[i].startswith("#"):
-        candidate_name = re.sub(r"^#+\s*", "", lines[i]).strip()
-        candidate_name = re.sub(r"^\*\*([^*]+)\*\*$", r"\1", candidate_name)
-        i += 1
+    if i < total:
+        line_candidate = lines[i]
+        if line_candidate.startswith("#"):
+            candidate_name = re.sub(r"^#+\s*", "", line_candidate).strip()
+            candidate_name = re.sub(r"^\*\*([^*]+)\*\*$", r"\1", candidate_name).strip()
+            i += 1
+        elif not any(k in line_candidate.lower() for k in ["email", "phone", "linkedin", "github", "http", "@"]) and line_candidate != "---":
+            candidate_name = re.sub(r"^\*\*([^*]+)\*\*$", r"\1", line_candidate).strip()
+            candidate_name = candidate_name.strip("#* ")
+            i += 1
 
     # 2. Parse Contact Block
     while i < total:
@@ -188,6 +220,8 @@ def markdown_to_latex(markdown_text: str) -> str:
         for tok in tokens:
             tok_clean = re.sub(r"^\*\*[^*]+(?:\*\*:\s*|:\s*\*\*|\*\*)\s*", "", tok).strip()
             tok_clean = re.sub(r"^:\s*", "", tok_clean).strip()
+            if tok_clean.startswith("<") and tok_clean.endswith(">"):
+                tok_clean = tok_clean[1:-1].strip()
             # If it's an email
             if "@" in tok_clean and not tok_clean.startswith("[") and not tok_clean.startswith("http"):
                 contact_entries.append(f"\\href{{mailto:{tok_clean}}}{{\\underline{{{tok_clean}}}}}")
@@ -235,8 +269,8 @@ def markdown_to_latex(markdown_text: str) -> str:
         r"\addtolength{\oddsidemargin}{-0.55in}",
         r"\addtolength{\evensidemargin}{-0.55in}",
         r"\addtolength{\textwidth}{1.1in}",
-        r"\addtolength{\topmargin}{-.65in}",
-        r"\addtolength{\textheight}{1.3in}",
+        r"\addtolength{\topmargin}{-.75in}",
+        r"\addtolength{\textheight}{1.5in}",
         r"",
         r"\urlstyle{same}",
         r"\raggedbottom",
@@ -245,14 +279,12 @@ def markdown_to_latex(markdown_text: str) -> str:
         r"",
         r"% Sections formatting",
         r"\titleformat{\section}{",
-        r"  \vspace{-3pt}\scshape\raggedright\large",
-        r"}{}{0em}{}[\color{black}\titlerule \vspace{-4pt}]",
+        r"  \vspace{-6pt}\scshape\raggedright\large",
+        r"}{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]",
         r"",
         r"% Custom commands",
         r"\newcommand{\resumeItem}[1]{",
-        r"  \item\small{",
-        r"    {#1 \vspace{-2pt}}",
-        r"  }",
+        r"  \item\small{#1}\vspace{-3pt}",
         r"}",
         r"",
         r"\newcommand{\resumeSubheading}[4]{",
@@ -265,8 +297,8 @@ def markdown_to_latex(markdown_text: str) -> str:
         r"",
         r"\newcommand{\resumeProjectHeading}[2]{",
         r"    \needspace{4\baselineskip}\vspace{-2pt}\item",
-        r"    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}",
-        r"      \small#1 & #2 \\",
+        r"    \begin{tabular*}{0.97\textwidth}[t]{p{0.86\textwidth}@{\extracolsep{\fill}}r}",
+        r"      \raggedright\small#1 & #2 \\",
         r"    \end{tabular*}\vspace{-5pt}",
         r"}",
         r"",
@@ -303,8 +335,11 @@ def markdown_to_latex(markdown_text: str) -> str:
         line = lines[i]
         i += 1
 
-        if not line or line == "---" or line.startswith("*Prepared for"):
+        clean_l = _clean_glyphs(line).strip()
+        if not line or clean_l in ["---", "--", "___", "- - -", "-"] or line.startswith("*Prepared for") or is_meta_commentary(clean_l):
             continue
+
+        line = re.sub(r"\s+[-–—]{1,3}$", "", line).strip()
 
         # Section Header: ## Section Name
         if line.startswith("## "):
@@ -326,18 +361,99 @@ def markdown_to_latex(markdown_text: str) -> str:
                 in_subheading_list = True
 
             clean_item = line[4:].strip()
-            # Check next line for metadata (e.g. *Summer 2026* or *GitHub: ...*)
-            meta_line = ""
-            if i < total and (lines[i].startswith("*") and lines[i].endswith("*") or "github:" in lines[i].lower()):
-                meta_line = lines[i].strip()
-                i += 1
+            # Check next lines for metadata (e.g. *Summer 2026*, *GitHub: ...*, *Core Technologies: ...*)
+            meta_lines = []
+            while i < total:
+                next_l = lines[i].strip()
+                if not next_l:
+                    i += 1
+                    continue
+                # If next_l is a bullet point, STOP! It's not metadata.
+                if re.match(r"^(?:[-+]|\d+[.)]|\*\s+)", next_l):
+                    break
+                if (next_l.startswith("*") and next_l.endswith("*")) or (next_l.startswith("_") and next_l.endswith("_")) or (not next_l.startswith(("#", "-", "*", "+")) and any(kw in next_l.lower() for kw in ["github:", "github.com/", "doi:", "doi.org/", "zenodo.org/", "core technologies:", "tech stack:", "technologies:"])):
+                    meta_lines.append(next_l)
+                    i += 1
+                else:
+                    break
 
-            # Split title and organization if '|' present
-            if "|" in clean_item:
+            github_url = None
+            doi_url = None
+            tech_stack = None
+            date_part = ""
+
+            for ml in meta_lines:
+                m_gh = re.search(r"https?://(?:www\.)?github\.com/[^\s)\]\"'>*]+", ml)
+                if m_gh:
+                    github_url = m_gh.group(0).rstrip("/*")
+                m_doi = re.search(r"https?://(?:dx\.)?(?:doi\.org|zenodo\.org|arxiv\.org)/[^\s)\]\"'>*]+", ml)
+                if m_doi:
+                    doi_url = m_doi.group(0).rstrip("/*")
+                if any(kw in ml.lower() for kw in ["core technologies:", "tech stack:", "technologies:"]):
+                    tech_stack = re.sub(r"^\*?(?:core\s+technologies|tech\s+stack|technologies)[:\s]+", "", ml.strip("*").strip(), flags=re.I).strip()
+                elif not date_part and not m_gh and not m_doi:
+                    date_part = ml.strip("*").strip()
+
+            is_publication = "publication" in (current_section or "")
+            is_spices_paper = "scientific literature" in clean_item.lower() or "ieee spices" in clean_item.lower()
+
+            if is_publication and is_spices_paper:
+                if not doi_url:
+                    doi_url = "https://doi.org/10.5281/zenodo.22676649"
+                if not github_url:
+                    github_url = "https://github.com/GenAI-Scientific-Literature-System/GenAI-Scientific-Literature-System-multi-agent-system"
+
+            is_project = bool(github_url) or bool(doi_url) or ("project" in (current_section or "")) or is_publication
+
+            if is_project:
+                # Project or Publication Heading
+                links = []
+                if doi_url:
+                    clean_doi = doi_url.replace("%", "\\%")
+                    label = "Paper" if is_publication else "DOI"
+                    links.append(f"\\href{{{clean_doi}}}{{\\underline{{{label}}}}}")
+                if github_url:
+                    clean_gh = github_url.replace("%", "\\%")
+                    links.append(f"\\href{{{clean_gh}}}{{\\underline{{GitHub}}}}")
+
+                if links:
+                    date_or_link = " $|$ ".join(links)
+                elif date_part:
+                    date_or_link = escape_latex(date_part)
+                else:
+                    date_or_link = ""
+
+                if "|" in clean_item:
+                    parts = [p.strip() for p in clean_item.split("|", 1)]
+                    title_text = parts[0]
+                    stack_text = parts[1]
+                else:
+                    m_stack = re.match(r"^(.*?)\s*\(([^)]+)\)$", clean_item)
+                    if m_stack:
+                        title_text = m_stack.group(1).strip()
+                        stack_text = m_stack.group(2).strip()
+                    else:
+                        title_text = clean_item
+                        stack_text = tech_stack
+
+                if is_publication and is_spices_paper and not stack_text:
+                    stack_text = "IEEE SPICES"
+                    title_text = re.sub(r"\s*\(?IEEE\s+SPICES\)?", "", title_text, flags=re.IGNORECASE).strip()
+
+                if stack_text:
+                    heading_content = f"\\textbf{{{format_inline_latex(title_text)}}} $|$ \\textit{{{format_inline_latex(stack_text)}}}"
+                else:
+                    heading_content = f"\\textbf{{{format_inline_latex(title_text)}}}"
+
+                latex_parts.append(
+                    f"    \\resumeProjectHeading\n"
+                    f"      {{{heading_content}}}{{{date_or_link}}}"
+                )
+            elif "|" in clean_item:
+                # Experience Subheading: Title | Company
                 parts = [p.strip() for p in clean_item.split("|", 1)]
                 title_part = parts[0]
                 org_part = parts[1]
-                date_part = meta_line.strip("*").strip() if meta_line else ""
                 
                 latex_parts.append(
                     f"    \\resumeSubheading\n"
@@ -345,33 +461,12 @@ def markdown_to_latex(markdown_text: str) -> str:
                     f"      {{{format_inline_latex(org_part)}}}{{}}"
                 )
             else:
-                # Project or Publication Heading
-                clean_meta = meta_line.strip("*").strip() if meta_line else ""
-                if len(clean_meta) > 40 and not clean_meta.lower().startswith("github:"):
-                    # Long metadata (e.g. publication authors/institution) -> format as subheading with subtitle
-                    latex_parts.append(
-                        f"    \\resumeSubheading\n"
-                        f"      {{{format_inline_latex(clean_item)}}}{{}}\n"
-                        f"      {{{format_inline_latex(clean_meta)}}}{{}}"
-                    )
-                elif clean_meta.lower().startswith("github:"):
-                    m_gh = re.search(r"https?://[^\s)\]\"'>]+", clean_meta)
-                    if m_gh:
-                        gh_url = m_gh.group(0).rstrip("/")
-                        clean_u = gh_url.replace("%", "\\%")
-                        date_or_link = f"\\href{{{clean_u}}}{{\\underline{{GitHub}}}}"
-                    else:
-                        date_or_link = format_inline_latex(clean_meta)
-                    latex_parts.append(
-                        f"    \\resumeProjectHeading\n"
-                        f"      {{\\textbf{{{format_inline_latex(clean_item)}}}}}{{{date_or_link}}}"
-                    )
-                else:
-                    date_or_link = format_inline_latex(clean_meta)
-                    latex_parts.append(
-                        f"    \\resumeProjectHeading\n"
-                        f"      {{\\textbf{{{format_inline_latex(clean_item)}}}}}{{{date_or_link}}}"
-                    )
+                # Standard Subheading without '|'
+                latex_parts.append(
+                    f"    \\resumeSubheading\n"
+                    f"      {{{format_inline_latex(clean_item)}}}{{{escape_latex(date_part)}}}\n"
+                    f"      {{}}{{}}"
+                )
             continue
 
         # Bullet point: - ... or * ...
@@ -398,9 +493,9 @@ def markdown_to_latex(markdown_text: str) -> str:
             continue
 
         # Subheading or metadata without ### (e.g. *Sem 5* or *GitHub: ...*)
-        if line.startswith("*") and line.endswith("*"):
+        if re.match(r"^\*[^*].*[^*]\*$", line):
             if not in_item_list:
-                latex_parts.append(f"\\small{{\\textit{{{format_inline_latex(line.strip('*'))}}}}} \\\\[2pt]")
+                latex_parts.append(f"\\small{{\\textit{{{format_inline_latex(line[1:-1].strip())}}}}} \\\\[2pt]")
             continue
 
         # General body text (e.g. Career Objective, Education Institution header)
