@@ -25,7 +25,7 @@ echo "Step 1: Discovering direct ATS listings..."
 python ats_collector.py
 
 echo "Step 2: Running Job Collector..."
-python collector.py 15 72
+python collector.py 20 168
 
 # Execute step 3: Matching
 echo "Step 3: Running Resume Matcher..."
