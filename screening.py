@@ -90,6 +90,17 @@ def deterministic_hard_filter(job: dict) -> tuple[bool, str | None]:
     experience = str(job.get("experience_range") or "")
     searchable = f"{title}\n{description}\n{experience}".lower()
 
+    NON_CSE_TITLE_MARKERS = (
+        "video editor", "graphic designer", "content writer", "content creator", "telecaller",
+        "customer support", "customer success", "sales", "marketing", "account executive",
+        "business development", "recruiter", "recruitment", "human resources", "talent acquisition",
+        "mechanical", "civil", "structural", "chemical", "copywriter", "social media",
+        "event manager", "store manager", "office administrator", "executive assistant",
+    )
+    title_lower = title.lower()
+    if any(marker in title_lower for marker in NON_CSE_TITLE_MARKERS):
+        return False, "Role title is outside target CSE/software/AI engineering scope."
+
     # Preserve the deterministic hard-filter contract for ordinary unknown
     # employers; the stricter quality gate rejects them before recommendation.
     if is_explicitly_unverified_company(company):
