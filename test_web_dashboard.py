@@ -348,6 +348,32 @@ class TestWebDashboard(unittest.TestCase):
             self.assertEqual(res["title"], "Staff AI Engineer")
             self.assertEqual(res["company"], "Anthropic")
 
+    def test_custom_job_endpoint_triggers_tailoring(self):
+        import json
+        handler = web_dashboard.DashboardRequestHandler.__new__(web_dashboard.DashboardRequestHandler)
+        handler.path = "/api/custom"
+        payload = json.dumps({
+            "url": "https://www.linkedin.com/jobs/view/4471488562/",
+            "profile": "madhav"
+        }).encode("utf-8")
+        handler.headers = {"Content-Length": str(len(payload))}
+        handler.rfile = io.BytesIO(payload)
+        handler.send_response = MagicMock()
+        handler.send_header = MagicMock()
+        handler.end_headers = MagicMock()
+        handler.wfile = io.BytesIO()
+
+        with patch("custom_job.ingest_custom_job", return_value="li-4471488562") as mock_ingest, \
+             patch.object(web_dashboard.tailor, "tailor_materials", return_value=("/tmp/r.md", "/tmp/r.pdf")) as mock_tailor:
+            handler.do_POST()
+            handler.send_response.assert_called_with(200)
+            mock_ingest.assert_called_once_with("https://www.linkedin.com/jobs/view/4471488562/", custom_text=None)
+            mock_tailor.assert_called_once_with("li-4471488562", profile_name="madhav")
+            res = json.loads(handler.wfile.getvalue().decode("utf-8"))
+            self.assertTrue(res["success"])
+            self.assertEqual(res["job_id"], "li-4471488562")
+            self.assertEqual(res["resume_pdf_path"], "/tmp/r.pdf")
+
     def test_discovered_today_bucket(self):
         from datetime import datetime, timedelta
         conn = db.get_db_connection()
@@ -381,6 +407,14 @@ class TestWebDashboard(unittest.TestCase):
             c.execute("DELETE FROM jobs WHERE job_id IN (?, ?)", (today_id, old_id))
             conn.commit()
             conn.close()
+
+    def test_pipeline_run_preserves_previous_run_when_pipeline_not_yet_run_today(self):
+        data = web_dashboard.get_dashboard_data()
+        self.assertIn("last_pipeline_date", data["stats"])
+        self.assertTrue(len(data["stats"]["last_pipeline_date"]) >= 10)
+        # If there are jobs from the latest run, today_jobs must not be empty
+        if data["stats"]["discovered_today"] > 0:
+            self.assertGreater(len(data["today_jobs"]), 0)
 
 
 if __name__ == "__main__":
