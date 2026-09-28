@@ -412,83 +412,6 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         </div>
     </header>
 
-    <!-- METRICS RIBBON (Compact, Vibrant, Clickable) -->
-    <div class="bg-black border-b border-[#141620] py-3">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6">
-            <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
-                <div onclick="switchTab('today')" class="cursor-pointer bg-[#0c0e14] border border-emerald-500/20 hover:border-emerald-500/50 transition rounded-xl p-2.5 flex items-center gap-3 shadow-sm group">
-                    <div class="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm group-hover:scale-105 transition shrink-0">
-                        <i class="fa-solid fa-calendar-day"></i>
-                    </div>
-                    <div class="min-w-0">
-                        <div class="text-lg font-bold text-white tracking-tight" id="ribbon-today">0</div>
-                        <div class="text-[10px] font-medium text-emerald-400 truncate" id="ribbon-today-label">Today's Drops</div>
-                    </div>
-                </div>
-
-                <div onclick="switchTab('fresh')" class="cursor-pointer bg-[#0c0e14] border border-[#1a1e2b] hover:border-amber-500/40 transition rounded-xl p-2.5 flex items-center gap-3 shadow-sm group">
-                    <div class="w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 text-sm group-hover:scale-105 transition shrink-0">
-                        <i class="fa-solid fa-fire-flame-curved"></i>
-                    </div>
-                    <div class="min-w-0">
-                        <div class="text-lg font-bold text-white tracking-tight" id="ribbon-fresh">0</div>
-                        <div class="text-[10px] font-medium text-slate-400 truncate">Fresh (48h)</div>
-                    </div>
-                </div>
-
-                <div onclick="switchTab('big_tech')" class="cursor-pointer bg-[#0c0e14] border border-[#1a1e2b] hover:border-cyan-500/40 transition rounded-xl p-2.5 flex items-center gap-3 shadow-sm group">
-                    <div class="w-9 h-9 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 text-sm group-hover:scale-105 transition shrink-0">
-                        <i class="fa-solid fa-building-columns"></i>
-                    </div>
-                    <div class="min-w-0">
-                        <div class="text-lg font-bold text-white tracking-tight" id="ribbon-big-tech">0</div>
-                        <div class="text-[10px] font-medium text-slate-400 truncate">Big Tech & MNC</div>
-                    </div>
-                </div>
-
-                <div onclick="switchTab('unicorns')" class="cursor-pointer bg-[#0c0e14] border border-[#1a1e2b] hover:border-purple-500/40 transition rounded-xl p-2.5 flex items-center gap-3 shadow-sm group">
-                    <div class="w-9 h-9 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 text-sm group-hover:scale-105 transition shrink-0">
-                        <i class="fa-solid fa-wand-magic-sparkles"></i>
-                    </div>
-                    <div class="min-w-0">
-                        <div class="text-lg font-bold text-white tracking-tight" id="ribbon-unicorns">0</div>
-                        <div class="text-[10px] font-medium text-slate-400 truncate">Unicorns</div>
-                    </div>
-                </div>
-
-                <div onclick="switchTab('startups')" class="cursor-pointer bg-[#0c0e14] border border-[#1a1e2b] hover:border-indigo-500/40 transition rounded-xl p-2.5 flex items-center gap-3 shadow-sm group">
-                    <div class="w-9 h-9 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 text-sm group-hover:scale-105 transition shrink-0">
-                        <i class="fa-solid fa-rocket"></i>
-                    </div>
-                    <div class="min-w-0">
-                        <div class="text-lg font-bold text-white tracking-tight" id="ribbon-startups">0</div>
-                        <div class="text-[10px] font-medium text-slate-400 truncate">AI Startups</div>
-                    </div>
-                </div>
-
-                <div onclick="switchTab('remote')" class="cursor-pointer bg-[#0c0e14] border border-[#1a1e2b] hover:border-teal-500/40 transition rounded-xl p-2.5 flex items-center gap-3 shadow-sm group">
-                    <div class="w-9 h-9 rounded-lg bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400 text-sm group-hover:scale-105 transition shrink-0">
-                        <i class="fa-solid fa-globe"></i>
-                    </div>
-                    <div class="min-w-0">
-                        <div class="text-lg font-bold text-white tracking-tight" id="ribbon-remote">0</div>
-                        <div class="text-[10px] font-medium text-slate-400 truncate">Remote Roles</div>
-                    </div>
-                </div>
-
-                <div onclick="switchTab('applied')" class="cursor-pointer bg-[#0c0e14] border border-[#1a1e2b] hover:border-emerald-500/40 transition rounded-xl p-2.5 flex items-center gap-3 shadow-sm group">
-                    <div class="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm group-hover:scale-105 transition shrink-0">
-                        <i class="fa-solid fa-circle-check"></i>
-                    </div>
-                    <div class="min-w-0">
-                        <div class="text-lg font-bold text-white tracking-tight" id="ribbon-applied">0</div>
-                        <div class="text-[10px] font-medium text-slate-400 truncate">Applied Tracker</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- TABS BAR & SORT -->
     <div class="bg-black/95 border-b border-[#181a24] sticky top-16 z-30">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between gap-4 overflow-x-auto no-scrollbar">
@@ -705,19 +628,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             setVal('stat-tier2', s.tier2_count || 0);
             setVal('stat-applied', s.total_applied || 0);
 
-            // Ribbon numbers
-            setVal('ribbon-today', s.discovered_today || 0);
-            setVal('ribbon-fresh', s.fresh_48h || 0);
-            setVal('ribbon-big-tech', (allData.big_tech_jobs || []).length);
-            setVal('ribbon-unicorns', (allData.unicorn_jobs || []).length);
-            setVal('ribbon-startups', (allData.startup_jobs || []).length);
-            setVal('ribbon-remote', (allData.remote_jobs || []).length);
-            setVal('ribbon-applied', s.total_applied || 0);
-
             // Dynamic date label for Today / Latest Run
             const latestDate = s.last_pipeline_date || '';
             const todayISO = new Date().toISOString().slice(0, 10);
-            let dateLabel = "Today's Drops";
             let tabLabel = "Today";
             if (latestDate && latestDate !== todayISO) {
                 try {
@@ -725,12 +638,10 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                     if (parts.length === 3) {
                         const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
                         const monthName = d.toLocaleString('en-US', { month: 'short' });
-                        dateLabel = `Latest Run (${monthName} ${parseInt(parts[2], 10)})`;
                         tabLabel = `Today (${monthName} ${parseInt(parts[2], 10)})`;
                     }
                 } catch(e) {}
             }
-            setVal('ribbon-today-label', dateLabel);
             setVal('tab-today-label', tabLabel);
             setVal('badge-fresh-today', s.discovered_today || 0);
 
