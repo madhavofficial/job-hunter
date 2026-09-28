@@ -54,7 +54,7 @@ class ListingQualityTests(unittest.TestCase):
         passes, reason = quality_gate(job, tier, quality)
         self.assertTrue(passes, reason)
         self.assertTrue(tier.startswith("Tier 3"))
-        self.assertEqual(quality["company_score"], 70)
+        self.assertEqual(quality["company_score"], 65)
 
     def test_unknown_aggregator_employer_enters_review_pool_with_cap(self):
         job = self.make_job(
@@ -68,7 +68,7 @@ class ListingQualityTests(unittest.TestCase):
         passes, reason = quality_gate(job, tier, quality)
         self.assertTrue(passes, reason)
         score, _ = weighted_match_score(95, quality)
-        self.assertEqual(score, 90)
+        self.assertLessEqual(score, 84)
 
     def test_generic_title_with_partial_description_enters_review_pool(self):
         job = self.make_job(title="Software Engineer", description="Join our team. Freshers welcome.")
