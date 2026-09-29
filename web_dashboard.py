@@ -185,18 +185,24 @@ def get_dashboard_data():
     cursor.execute("SELECT COUNT(*) FROM jobs WHERE status = 'scraped'")
     total_scraped = cursor.fetchone()[0]
 
-    # Find the latest date the pipeline collected jobs (site not in 'pdf_upload', 'custom')
-    cursor.execute("SELECT MAX(date(created_at)) FROM jobs WHERE site NOT IN ('pdf_upload', 'custom')")
-    latest_run_row = cursor.fetchone()
-    latest_pipeline_date = latest_run_row[0] if (latest_run_row and latest_run_row[0]) else None
-
-    if not latest_pipeline_date:
-        cursor.execute("SELECT MAX(date(created_at)) FROM jobs")
-        fallback_row = cursor.fetchone()
-        latest_pipeline_date = fallback_row[0] if (fallback_row and fallback_row[0]) else datetime.now().strftime("%Y-%m-%d")
-
     today_str = datetime.now().strftime("%Y-%m-%d")
-    effective_run_date = latest_pipeline_date or today_str
+
+    # Check if there are shortlisted jobs from today's pipeline run first
+    cursor.execute("SELECT COUNT(*) FROM jobs WHERE status = 'shortlisted' AND created_at LIKE ?", (f"{today_str}%",))
+    today_shortlisted_cnt = cursor.fetchone()[0]
+
+    if today_shortlisted_cnt > 0:
+        effective_run_date = today_str
+    else:
+        # Fall back to the most recent pipeline run date that produced shortlisted or applied jobs
+        cursor.execute("""
+            SELECT MAX(date(created_at))
+            FROM jobs
+            WHERE site NOT IN ('pdf_upload', 'custom')
+              AND status IN ('shortlisted', 'applied')
+        """)
+        latest_run_row = cursor.fetchone()
+        effective_run_date = latest_run_row[0] if (latest_run_row and latest_run_row[0]) else today_str
 
     cursor.execute("SELECT COUNT(*) FROM jobs WHERE created_at LIKE ? OR created_at LIKE ?", (f"{effective_run_date}%", f"{today_str}%"))
     total_discovered_today = cursor.fetchone()[0]
@@ -424,7 +430,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 </button>
                 <button onclick="switchTab('today')" id="tab-today" class="tab-btn h-11 px-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 text-xs font-medium flex items-center gap-1.5 transition">
                     <i class="fa-solid fa-calendar-day text-emerald-400 text-[11px]"></i>
-                    <span id="tab-today-label">Today</span>
+                    <span id="tab-today-label">Latest Run</span>
                     <span id="tab-cnt-today" class="text-[10px] px-1.5 py-0.5 rounded-full bg-[#161a26] text-slate-300 font-mono">0</span>
                 </button>
                 <button onclick="switchTab('recommended')" id="tab-recommended" class="tab-btn h-11 px-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 text-xs font-medium flex items-center gap-1.5 transition">
@@ -631,16 +637,22 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             // Dynamic date label for Today / Latest Run
             const latestDate = s.last_pipeline_date || '';
             const todayISO = new Date().toISOString().slice(0, 10);
-            let tabLabel = "Today";
-            if (latestDate && latestDate !== todayISO) {
+            let tabLabel = "Latest Run";
+            if (latestDate) {
                 try {
                     const parts = latestDate.split('-');
                     if (parts.length === 3) {
                         const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
                         const monthName = d.toLocaleString('en-US', { month: 'short' });
-                        tabLabel = `Today (${monthName} ${parseInt(parts[2], 10)})`;
+                        if (latestDate === todayISO && (s.discovered_today || 0) > 0) {
+                            tabLabel = `Today (${monthName} ${parseInt(parts[2], 10)})`;
+                        } else {
+                            tabLabel = `Latest Run (${monthName} ${parseInt(parts[2], 10)})`;
+                        }
                     }
-                } catch(e) {}
+                } catch(e) {
+                    tabLabel = `Latest Run (${latestDate})`;
+                }
             }
             setVal('tab-today-label', tabLabel);
             setVal('badge-fresh-today', s.discovered_today || 0);
