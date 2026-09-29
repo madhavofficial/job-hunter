@@ -100,7 +100,7 @@ Webpage Content:
 
 Respond ONLY with a valid JSON object matching this exact schema:
 {{
-  "title": "<Exact Job Title, e.g. Senior Software Engineer - Backend>",
+  "title": "<Specific Job Title. If the title is generic like 'Analyst', 'Associate', 'Consultant', 'Intern', or 'Engineer', but a specific domain, practice, or team is specified (e.g. 'Cyber Risk & Compliance', 'Cyber Security & Technology'), combine them into a specific title like 'Analyst - Cyber Risk & Compliance'>",
   "company": "<Exact Company Name, e.g. Google or Datadog>",
   "location": "<Job Location / Remote Status, e.g. Bengaluru, Karnataka, India or Remote>",
   "job_type": "<e.g. Full-time, Internship, Contract>",
