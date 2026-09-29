@@ -81,6 +81,7 @@ SEED_UNICORNS = {
     "modal", "langchain", "cohere", "replit", "cursor", "anysphere", "cognition",
     "warp", "wandb", "weights & biases", "stability ai", "runway", "elevenlabs",
     "thumbtack", "torc robotics", "weave", "zepto", "elastic", "mongodb",
+    "arize ai", "arize", "arizeai",
 }
 
 SEED_IT_SERVICES = {
