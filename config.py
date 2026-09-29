@@ -9,12 +9,11 @@ load_dotenv()
 # fallback for resume tailoring and job matching. Only models returned by the
 # account's model API are used; unavailable/deprecated IDs are skipped.
 PREFERRED_GROQ_MODELS = (
-    "openai/gpt-oss-120b",
-    "openai/gpt-oss-20b",
-    "qwen/qwen3.8-27b",
-    "qwen/qwen3.6-27b",
-    "groq/compound",
-    "groq/compound-mini",
+    # Ordered by live probe: latency + reliability (all 100% healthy on Groq LPU)
+    "qwen/qwen3.8-27b",          # 0.165s — 27B frontier MoE, fastest on Groq
+    "openai/gpt-oss-120b",       # 0.545s — 120B strong reasoning (daily TPD limit applies)
+    "openai/gpt-oss-20b",        # 0.660s — 20B high-throughput fallback
+    "allam-2-7b",                # ultra-fast lightweight fallback
 )
 
 class KeyManager:

@@ -9,18 +9,15 @@ import github_portfolio
 import profiles
 
 
+# Live-probe verified working OpenRouter free-tier models (sorted by latency, probe 2026-09-29)
 PREFERRED_OPENROUTER_MODELS = (
-    "meta-llama/llama-3.3-70b-instruct",
-    "deepseek/deepseek-chat",
-    "openrouter/free",
+    "nvidia/nemotron-3-super-120b-a12b:free",  # 0.992s — 120B MoE, best free frontier
+    "google/gemma-4-31b-it:free",              # 1.2s  — Google 31B, solid fallback
+    "google/gemma-4-26b-a4b-it:free",          # 1.3s  — Google 26B MoE
+    "nvidia/nemotron-3.5-content-safety:free", # verified working
+    "nvidia/nemotron-3-ultra-550b-a55b:free",  # large frontier, slower
 )
 
-PREFERRED_NVIDIA_MODELS = (
-    "nvidia/llama-3.1-nemotron-70b-instruct",
-    "z-ai/glm-5.3-flash",
-    "z-ai/glm-5.3",
-    "moonshotai/kimi-k3",
-)
 
 
 
@@ -1089,37 +1086,10 @@ Please output the COMPLETE tailored resume in Markdown.
                 print(f"-> Successfully tailored resume using Groq ({active_model}).")
                 break
 
-        # 2. Secondary Fallback: NVIDIA Build NIM Frontier Cluster
-        if not tailored_resume:
-            nvidia_key = os.getenv("NVIDIA_API_KEY")
-            if nvidia_key:
-                print("-> Secondary Tier: Generating tailored resume via NVIDIA Build NIM cluster...", flush=True)
-                from openai import OpenAI
-                nv_client = OpenAI(base_url="https://integrate.api.nvidia.com/v1", api_key=nvidia_key, timeout=20.0)
-                configured_nv_model = os.getenv("NVIDIA_MODEL")
-                nv_models = [configured_nv_model] if configured_nv_model else list(PREFERRED_NVIDIA_MODELS)
-                for nv_model in nv_models:
-                    try:
-                        print(f"-> Trying NVIDIA Build model: {nv_model}...")
-                        nv_resp = nv_client.chat.completions.create(
-                            model=nv_model,
-                            messages=[{"role": "user", "content": resume_prompt}],
-                            temperature=0.2,
-                            max_tokens=4096,
-                            timeout=20,
-                        )
-                        if nv_resp and nv_resp.choices and nv_resp.choices[0].message and nv_resp.choices[0].message.content:
-                            content = nv_resp.choices[0].message.content.strip()
-                            if "technical skills" in content.lower():
-                                tailored_resume = content
-                                print(f"-> Successfully tailored resume using NVIDIA Build ({nv_model}).")
-                                break
-                    except Exception as e:
-                        print(f"Warning: NVIDIA Build model {nv_model} failed: {e}", file=sys.stderr)
 
-        # 3. Tertiary Fallback: OpenRouter (used only if Groq and NVIDIA were exhausted)
+        # 2. Secondary Fallback: OpenRouter Free-Tier (probe-verified 2026-09-29)
         if not tailored_resume:
-            print("Warning: Groq and NVIDIA clusters exhausted. Falling back to OpenRouter...", file=sys.stderr)
+            print("Warning: Groq cluster exhausted. Falling back to OpenRouter free tier...", file=sys.stderr)
             openrouter_key = os.getenv("OPENROUTER_API_KEY")
             if openrouter_key:
                 from openai import OpenAI
@@ -1138,12 +1108,16 @@ Please output the COMPLETE tailored resume in Markdown.
                         )
                         if or_resp and or_resp.choices and or_resp.choices[0].message and or_resp.choices[0].message.content:
                             tailored_resume = or_resp.choices[0].message.content.strip()
-                            break
+                            if "technical skills" in tailored_resume.lower():
+                                print(f"-> Successfully tailored resume using OpenRouter ({openrouter_model}).")
+                                break
+                            tailored_resume = None
                     except Exception as e:
-                        print(f"Warning: OpenRouter fallback model {openrouter_model} failed: {e}", file=sys.stderr)
+                        print(f"Warning: OpenRouter model {openrouter_model} failed: {e}", file=sys.stderr)
 
         if not tailored_resume:
-            raise ValueError("Failed to generate tailored resume after trying Groq cluster, NVIDIA Build, and OpenRouter fallbacks.")
+            raise ValueError("Failed to generate tailored resume after trying Groq cluster and OpenRouter fallbacks.")
+
 
         if not getattr(profile, "include_certifications", False):
             tailored_resume = strip_certifications(tailored_resume)
