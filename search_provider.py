@@ -25,7 +25,7 @@ class SearchRateLimitError(SearchProviderError):
 
 def _request_json(url: str, headers: dict[str, str], params: dict[str, str | int]) -> dict:
     request = Request(f"{url}?{urlencode(params)}", headers=headers)
-    timeout = max(10, int(os.getenv("ATS_SEARCH_TIMEOUT_SECONDS", "45")))
+    timeout = max(5, int(os.getenv("ATS_SEARCH_TIMEOUT_SECONDS", "10")))
     try:
         with urlopen(request, timeout=timeout) as response:
             return json.load(response)

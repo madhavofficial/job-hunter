@@ -406,16 +406,12 @@ def run_ats_collector(batch_size: int = 200) -> int:
     print("====================================================")
 
     # 1. Dynamically sync board registries from live engineering feeds (zero hardcoding)
-    print("Priority 1: Syncing tech company ATS boards from dynamic community feeds...")
+    print("Priority 1: Syncing tech company ATS boards from dynamic community feeds...", flush=True)
     sync_external_board_feeds()
 
-    # 2. Discover new India/Remote boards via live search index
-    print("Priority 2: Discovering fresh ATS boards via search index...")
-    discover_ats_urls()
-
-    # 3. Retrieve registered active boards from persistent cache
+    # 2. Retrieve registered active boards from persistent cache and scrape concurrently
     active_boards = db.get_registered_ats_boards(active_only=True, limit=batch_size)
-    print(f"Priority 3: Concurrently scraping {len(active_boards)} registered ATS boards...")
+    print(f"Priority 2: Concurrently scraping {len(active_boards)} registered ATS boards...", flush=True)
 
     def _scrape_board(item: tuple[str, str]) -> tuple[str, str, int, list[dict]]:
         ats, board = item
@@ -436,16 +432,27 @@ def run_ats_collector(batch_size: int = 200) -> int:
             if jobs:
                 added = db.add_jobs(pd.DataFrame(jobs))
                 total += added
-                print(f"✓ ATS {ats}/{board}: {len(jobs)} India/remote jobs ({added} new).")
+                print(f"✓ ATS {ats}/{board}: {len(jobs)} India/remote jobs ({added} new).", flush=True)
             db.update_ats_board_scraped(ats, board, len(jobs), is_active=is_active)
 
+    # 3. Discover new India/Remote boards via live search index (incremental discovery)
+    print("Priority 3: Discovering fresh ATS boards via search index...", flush=True)
+    try:
+        discover_ats_urls()
+    except Exception as exc:
+        print(f"Notice: search ATS discovery skipped: {exc}", file=sys.stderr)
+
     # 4. Discover Workday/Oracle career-board listings
-    print("Priority 4: Discovering Workday/Oracle and enterprise career-board listings...")
-    career_jobs = discover_career_board_jobs()
-    if not career_jobs.empty:
-        added = db.add_jobs(career_jobs)
-        total += added
-        print(f"Dynamic career boards: {len(career_jobs)} indexed jobs, {added} new.")
+    print("Priority 4: Discovering Workday/Oracle and enterprise career-board listings...", flush=True)
+    try:
+        career_jobs = discover_career_board_jobs()
+        if not career_jobs.empty:
+            added = db.add_jobs(career_jobs)
+            total += added
+            print(f"Dynamic career boards: {len(career_jobs)} indexed jobs, {added} new.", flush=True)
+    except Exception as exc:
+        print(f"Notice: career board discovery skipped: {exc}", file=sys.stderr)
+
 
     print(f"\n✅ Dynamic ATS collection complete. New direct jobs stored: {total}\n")
     return total
