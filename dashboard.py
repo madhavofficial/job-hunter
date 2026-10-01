@@ -13,7 +13,7 @@ import os
 from datetime import datetime, timedelta
 
 import db
-from screening import classify_company_tier, is_job_truly_remote
+from screening import classify_company_tier, is_job_truly_remote, deduplicate_multi_location_jobs
 from quality import assess_listing_quality, quality_gate, weighted_match_score
 
 
@@ -28,8 +28,8 @@ def generate_dashboard():
     # 1. Backlog retention
     archived_stale = auto_archive_stale_jobs(days=5)
 
-    # 2. Retrieve active shortlisted jobs
-    all_shortlisted = db.get_shortlisted_jobs()
+    # 2. Retrieve active shortlisted jobs and deduplicate multi-location clones
+    all_shortlisted = deduplicate_multi_location_jobs(db.get_shortlisted_jobs())
     shortlisted = all_shortlisted
     for job in shortlisted:
         tier = classify_company_tier(job["company"])

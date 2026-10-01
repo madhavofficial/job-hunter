@@ -81,7 +81,7 @@ SEED_UNICORNS = {
     "modal", "langchain", "cohere", "replit", "cursor", "anysphere", "cognition",
     "warp", "wandb", "weights & biases", "stability ai", "runway", "elevenlabs",
     "thumbtack", "torc robotics", "weave", "zepto", "elastic", "mongodb",
-    "arize ai", "arize", "arizeai",
+    "arize ai", "arize", "arizeai", "groww",
 }
 
 SEED_IT_SERVICES = {
@@ -97,6 +97,7 @@ SEED_AI_STARTUPS = {
     "coderound ai", "juicelabs ai", "wisdomai", "whatfix", "spearmint technologies",
     "zenup health", "hasamex", "engradar", "deskbuddy", "newspace research",
     "42 learn", "blackhawk network", "nxtpe", "freight tiger", "ixigo",
+    "sarvam", "sarvam ai", "signoz",
 }
 
 

@@ -1,0 +1,47 @@
+[
+  {
+    "ats": "ashby",
+    "board_slug": "sarvam",
+    "notes": "Sarvam AI (Indian Sovereign GenAI / Foundational Models)"
+  },
+  {
+    "ats": "ashby",
+    "board_slug": "browserbase",
+    "notes": "Browserbase (Headless Web Automation / AI Agents)"
+  },
+  {
+    "ats": "ashby",
+    "board_slug": "signoz",
+    "notes": "SigNoz (Open Source Observability / Systems Engineering)"
+  },
+  {
+    "ats": "ashby",
+    "board_slug": "coram-ai",
+    "notes": "Coram AI (Edge Computer Vision / Distributed AI Infrastructure)"
+  },
+  {
+    "ats": "greenhouse",
+    "board_slug": "razorpaysoftwareprivatelimited",
+    "notes": "Razorpay (Fintech Platform / Scaled Distributed Systems)"
+  },
+  {
+    "ats": "greenhouse",
+    "board_slug": "groww",
+    "notes": "Groww (Fintech / Wealth Investment Platform)"
+  },
+  {
+    "ats": "ashby",
+    "board_slug": "perplexity",
+    "notes": "Perplexity AI (Search / Frontier AI Infrastructure)"
+  },
+  {
+    "ats": "greenhouse",
+    "board_slug": "anthropic",
+    "notes": "Anthropic (Frontier AI Safety / Foundation Models)"
+  },
+  {
+    "ats": "ashby",
+    "board_slug": "openai",
+    "notes": "OpenAI (Frontier Research & Applied AI Engineering)"
+  }
+]

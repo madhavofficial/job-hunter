@@ -103,8 +103,22 @@ EXTERNAL_BOARD_FEEDS = (
 
 
 def sync_external_board_feeds() -> int:
-    """Dynamically discover tech company ATS boards from live open-source engineering feeds without hardcoding."""
+    """Dynamically discover tech company ATS boards from live open-source feeds and seed configs."""
     discovered = set()
+
+    # 1. Declarative local seeds (zero hardcoded companies in code)
+    local_seeds_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "ats_boards.json")
+    if os.path.exists(local_seeds_path):
+        try:
+            with open(local_seeds_path, "r", encoding="utf-8") as f:
+                seeds = json.load(f)
+                for item in seeds:
+                    if isinstance(item, dict) and item.get("ats") and item.get("board_slug"):
+                        discovered.add((item["ats"].strip().lower(), item["board_slug"].strip().lower()))
+        except Exception as exc:
+            print(f"Notice: local board seeds sync notice: {exc}", file=sys.stderr)
+
+    # 2. Open-source engineering feeds
     for feed_url in EXTERNAL_BOARD_FEEDS:
         try:
             req = Request(feed_url, headers={"User-Agent": "job-hunter/2.0"})
@@ -123,7 +137,6 @@ def sync_external_board_feeds() -> int:
     return 0
 
 
-
 class _DynamicBoardsTuple(tuple):
     """Dynamic board tuple that resolves from the database cache without hardcoded company lists."""
     def __contains__(self, item):
@@ -140,6 +153,35 @@ class _DynamicBoardsTuple(tuple):
         return len(db.get_registered_ats_boards())
 
 CURATED_ATS_BOARDS = _DynamicBoardsTuple()
+
+
+def is_target_engineering_title(title: str) -> bool:
+    """Fast ATS pre-filter: rejects non-technical and senior/leadership titles early."""
+    if not title or not isinstance(title, str):
+        return False
+    t = title.strip().lower()
+
+    # Reject non-CSE / non-technical domains
+    NON_TECH_KEYWORDS = (
+        "sales", "marketing", "account executive", "account manager", "account director",
+        "business development", "bdr", "sdr", "recruiter", "recruitment", "talent acquisition",
+        "human resources", "people partner", "people operations", "legal", "counsel",
+        "compliance", "financial analyst", "accountant", "finance manager", "controller",
+        "payroll", "communications", "pr manager", "copywriter", "content writer",
+        "graphic designer", "video editor", "office manager", "executive assistant",
+        "customer success", "customer support", "workplace experience", "facilities",
+        "policy",
+    )
+    for kw in NON_TECH_KEYWORDS:
+        if kw in t:
+            return False
+
+    # Reject senior / leadership / executive level titles
+    SENIOR_PATTERN = r"\b(?:senior|sr\.?|lead|principal|staff|manager|director|head of|vp|vice president|chief)\b"
+    if re.search(SENIOR_PATTERN, t, re.I):
+        return False
+
+    return True
 
 
 def _is_india_or_remote(location: str, is_remote: bool = False) -> bool:
@@ -171,12 +213,15 @@ def _greenhouse_jobs(board: str) -> list[dict]:
     payload = _fetch_json(f"https://boards-api.greenhouse.io/v1/boards/{board}/jobs?content=true")
     jobs = []
     for item in payload.get("jobs", []):
+        title = item.get("title", "")
+        if not is_target_engineering_title(title):
+            continue
         location = (item.get("location") or {}).get("name", "")
         is_remote = "remote" in location.lower()
         if not _is_india_or_remote(location, is_remote):
             continue
         jobs.append({
-            "id": f"gh-{item['id']}", "site": "ats:greenhouse", "title": item.get("title", ""),
+            "id": f"gh-{item['id']}", "site": "ats:greenhouse", "title": title,
             "company": board.replace("-", " ").title(), "location": location,
             "job_url": item.get("absolute_url", ""), "job_url_direct": item.get("absolute_url", ""),
             "date_posted": _date_value(item.get("updated_at")),
@@ -190,6 +235,9 @@ def _lever_jobs(board: str) -> list[dict]:
     payload = _fetch_json(f"https://api.lever.co/v0/postings/{board}?mode=json")
     jobs = []
     for item in payload if isinstance(payload, list) else []:
+        title = item.get("text", "")
+        if not is_target_engineering_title(title):
+            continue
         categories = item.get("categories") or {}
         locations = categories.get("locations") or []
         location = "; ".join(locations) if isinstance(locations, list) else str(locations)
@@ -197,7 +245,7 @@ def _lever_jobs(board: str) -> list[dict]:
         if not _is_india_or_remote(location, is_remote):
             continue
         jobs.append({
-            "id": f"lever-{item.get('id')}", "site": "ats:lever", "title": item.get("text", ""),
+            "id": f"lever-{item.get('id')}", "site": "ats:lever", "title": title,
             "company": board.replace("-", " ").title(), "location": location,
             "job_url": item.get("hostedUrl", ""), "job_url_direct": item.get("applyUrl") or item.get("hostedUrl", ""),
             "date_posted": _date_value(item.get("createdAt")),
@@ -211,13 +259,16 @@ def _ashby_jobs(board: str) -> list[dict]:
     payload = _fetch_json(f"https://api.ashbyhq.com/posting-api/job-board/{board}")
     jobs = []
     for item in payload.get("jobs", []) if isinstance(payload, dict) else []:
+        title = item.get("title", "")
+        if not is_target_engineering_title(title):
+            continue
         locations = [item.get("location", "")] + [x.get("location", "") for x in item.get("secondaryLocations", [])]
         location = "; ".join(filter(None, locations))
         is_remote = bool(item.get("isRemote")) or "remote" in location.lower()
         if not _is_india_or_remote(location, is_remote):
             continue
         jobs.append({
-            "id": f"ashby-{item.get('id')}", "site": "ats:ashby", "title": item.get("title", ""),
+            "id": f"ashby-{item.get('id')}", "site": "ats:ashby", "title": title,
             "company": board.replace("-", " ").title(), "location": location,
             "job_url": item.get("jobUrl", ""), "job_url_direct": item.get("applyUrl") or item.get("jobUrl", ""),
             "date_posted": _date_value(item.get("publishedAt") or item.get("updatedAt")),
@@ -312,6 +363,8 @@ def _career_listing_from_url(url: str, domain: str) -> dict | None:
         meta_match = re.search(r'<meta[^>]+name=["\']description["\'][^>]+content=["\'](.*?)["\']', html, flags=re.IGNORECASE | re.DOTALL)
         description = html_lib.unescape(meta_match.group(1)).strip() if meta_match else ""
     if not title or not company:
+        return None
+    if not is_target_engineering_title(title):
         return None
     return {
         "id": f"career-{hashlib.sha1(url.encode()).hexdigest()[:16]}",

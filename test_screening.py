@@ -111,6 +111,44 @@ class ScreeningTests(unittest.TestCase):
         self.assertTrue(ok)
         self.assertIsNone(reason)
 
+    def test_normalize_job_title(self):
+        from screening import normalize_job_title
+        self.assertEqual(
+            normalize_job_title("Software Engineer, Platform - Bangalore, India"),
+            "Software Engineer, Platform"
+        )
+        self.assertEqual(
+            normalize_job_title("Software Engineer, iOS Core Product - Ahmedabad, India"),
+            "Software Engineer, iOS Core Product"
+        )
+        self.assertEqual(
+            normalize_job_title("Full Stack Engineer (Bangalore)"),
+            "Full Stack Engineer"
+        )
+        self.assertEqual(
+            normalize_job_title("AI Engineer [Remote]"),
+            "AI Engineer"
+        )
+        self.assertEqual(
+            normalize_job_title("Backend Developer"),
+            "Backend Developer"
+        )
+
+    def test_deduplicate_multi_location_jobs(self):
+        from screening import deduplicate_multi_location_jobs
+        jobs = [
+            {"job_id": "1", "company": "Speechify", "title": "Software Engineer, Platform - Bangalore, India", "location": "Bangalore, India", "score": 85, "job_url_direct": "https://example.com/1"},
+            {"job_id": "2", "company": "Speechify", "title": "Software Engineer, Platform - Mumbai, India", "location": "Mumbai, India", "score": 85, "job_url_direct": "https://example.com/2"},
+            {"job_id": "3", "company": "Speechify", "title": "Software Engineer, Platform - Delhi, India", "location": "Delhi, India", "score": 85, "job_url_direct": "https://example.com/3"},
+            {"job_id": "4", "company": "Google", "title": "Software Engineer Intern", "location": "Bengaluru, India", "score": 90, "job_url_direct": "https://example.com/4"},
+        ]
+        deduped = deduplicate_multi_location_jobs(jobs)
+        self.assertEqual(len(deduped), 2)
+        speechify_job = next(j for j in deduped if j["company"] == "Speechify")
+        self.assertEqual(speechify_job["title"], "Software Engineer, Platform")
+        self.assertIn("(+2 locations)", speechify_job["location"])
+
 
 if __name__ == "__main__":
     unittest.main()
+

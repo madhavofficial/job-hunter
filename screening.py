@@ -36,7 +36,7 @@ KNOWN_PRODUCT_COMPANIES = {
     "weekday ai", "everseen", "revolte ai", "peryx ai", "startx med",
     "coderound ai", "juicelabs ai", "wisdomai", "whatfix", "spearmint technologies",
     "zenup health", "hasamex", "engradar", "deskbuddy", "newspace research",
-    "42 learn", "blackhawk network", "nxtpe",
+    "42 learn", "blackhawk network", "nxtpe", "sarvam", "signoz", "groww",
 }
 
 AGENCY_MARKERS = (
@@ -168,3 +168,75 @@ def is_job_truly_remote(job: dict) -> bool:
         return True
 
     return False
+
+
+def normalize_job_title(title: str) -> str:
+    """Normalize a title by stripping location suffixes like ' - Bangalore, India' or ' (Mumbai)'."""
+    if not title:
+        return ""
+    cleaned = str(title).strip()
+    # 1. Match ' - <Any City>, India/IN'
+    cleaned = re.sub(r"\s*[-–—|/]\s*[A-Za-z\s]+,\s*(?:India|IN)\s*$", "", cleaned, flags=re.I)
+    # 2. Match specific known cities / locations in suffixes or parentheses/brackets
+    loc_tokens = (
+        r"bangalore|bengaluru|mumbai|delhi|hyderabad|chennai|gurgaon|gurugram|noida|pune|"
+        r"kolkata|kochi|ahmedabad|chandigarh|jaipur|indore|coimbatore|kerala|karnataka|india|remote"
+    )
+    cleaned = re.sub(rf"\s*[-–—|/]\s*(?:{loc_tokens}).*$", "", cleaned, flags=re.I)
+    cleaned = re.sub(rf"\s*\((?:{loc_tokens})[^)]*\)", "", cleaned, flags=re.I)
+    cleaned = re.sub(rf"\s*\[(?:{loc_tokens})[^\]]*\]", "", cleaned, flags=re.I)
+    return cleaned.strip()
+
+
+def deduplicate_multi_location_jobs(job_list: list[dict]) -> list[dict]:
+    """Group duplicate postings across multiple cities/locations from the same company.
+
+    Retains the highest-fit representative listing while collapsing location clones
+    (e.g., Speechify in 8 Indian cities -> 'Bangalore (+7 locations)').
+    """
+    if not job_list:
+        return []
+
+    groups: dict[tuple[str, str], list[dict]] = {}
+    for j in job_list:
+        if not isinstance(j, dict):
+            continue
+        comp_key = company_classifier.normalize_company_key(j.get("company", ""))
+        title_key = normalize_job_title(j.get("title", "")).lower()
+        key = (comp_key, title_key)
+        groups.setdefault(key, []).append(j)
+
+    deduped = []
+    for (comp_key, title_key), group in groups.items():
+        if len(group) == 1:
+            deduped.append(group[0])
+            continue
+
+        # Choose best candidate: highest score, prefer direct URL, prefer remote
+        best_candidate = max(
+            group,
+            key=lambda x: (
+                x.get("score") or 0,
+                bool(x.get("job_url_direct")),
+                is_job_truly_remote(x),
+            )
+        )
+        rep = dict(best_candidate)
+        rep["title"] = normalize_job_title(best_candidate.get("title", ""))
+
+        # Collect distinct location strings
+        locs = []
+        for g in group:
+            loc = (g.get("location") or "").strip()
+            if loc and loc not in locs:
+                locs.append(loc)
+
+        if len(locs) > 1:
+            first_loc = locs[0].split(",")[0].strip()
+            other_cnt = len(locs) - 1
+            rep["location"] = f"{first_loc} (+{other_cnt} locations)"
+
+        deduped.append(rep)
+
+    return deduped
+

@@ -79,6 +79,34 @@ class ATSCollectorTests(unittest.TestCase):
         self.assertFalse(_is_india_or_remote("Support Engineer (EMEA)", True))
 
 
+    def test_is_target_engineering_title(self):
+        from ats_collector import is_target_engineering_title
+        # Target engineering / technical roles
+        self.assertTrue(is_target_engineering_title("Software Engineer"))
+        self.assertTrue(is_target_engineering_title("AI Engineer"))
+        self.assertTrue(is_target_engineering_title("Backend Developer Intern"))
+        self.assertTrue(is_target_engineering_title("Founding Engineer"))
+        self.assertTrue(is_target_engineering_title("Associate Data Scientist"))
+        self.assertTrue(is_target_engineering_title("Machine Learning Researcher"))
+
+        # Non-technical / business domains rejected early
+        self.assertFalse(is_target_engineering_title("Account Executive"))
+        self.assertFalse(is_target_engineering_title("Director of Sales"))
+        self.assertFalse(is_target_engineering_title("Product Marketing Manager"))
+        self.assertFalse(is_target_engineering_title("Legal Counsel"))
+        self.assertFalse(is_target_engineering_title("Senior Recruiter"))
+        self.assertFalse(is_target_engineering_title("Customer Success Manager"))
+        self.assertFalse(is_target_engineering_title("Public Policy Associate"))
+
+        # Senior / leadership levels rejected early
+        self.assertFalse(is_target_engineering_title("Senior Software Engineer"))
+        self.assertFalse(is_target_engineering_title("Staff Platform Engineer"))
+        self.assertFalse(is_target_engineering_title("Principal Backend Engineer"))
+        self.assertFalse(is_target_engineering_title("Engineering Director"))
+        self.assertFalse(is_target_engineering_title("Team Lead, Android Core Product"))
+
+
 if __name__ == "__main__":
     unittest.main()
+
 

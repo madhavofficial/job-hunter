@@ -215,23 +215,23 @@ def run_collector(limit_per_query=20, hours_old=168, include_companies=True):
                 
         except Exception as e:
             print(f"-> Error searching for '{term}': {e}", file=sys.stderr)
-            # If a site is aggressively blocking, we can try to fall back to just indeed
-            print("Retrying with Indeed only...")
-            try:
-                jobs = scrape_jobs(
-                    site_name=["indeed"],
-                    search_term=term,
-                    location="India",
-                    results_wanted=limit_per_query,
-                    country_indeed='india',
-                    **kwargs
-                )
-                if not jobs.empty:
-                    new_count = db.add_jobs(jobs)
-                    total_new_jobs += new_count
-                    print(f"-> [Fallback] Found {len(jobs)} jobs. Inserted {new_count} new unique jobs.")
-            except Exception as fallback_err:
-                print(f"-> [Fallback Error] Failed: {fallback_err}", file=sys.stderr)
+            if enable_indeed:
+                print("Retrying with Indeed only...")
+                try:
+                    jobs = scrape_jobs(
+                        site_name=["indeed"],
+                        search_term=term,
+                        location="India",
+                        results_wanted=limit_per_query,
+                        country_indeed='india',
+                        **kwargs
+                    )
+                    if not jobs.empty:
+                        new_count = db.add_jobs(jobs)
+                        total_new_jobs += new_count
+                        print(f"-> [Fallback] Found {len(jobs)} jobs. Inserted {new_count} new unique jobs.")
+                except Exception as fallback_err:
+                    print(f"-> [Fallback Error] Failed: {fallback_err}", file=sys.stderr)
 
         if index < len(search_terms) - 1:
             time.sleep(random.uniform(2.0, 4.0))
@@ -253,7 +253,9 @@ def run_remote_collector(limit_per_query=15, hours_old=72):
     """Dedicated scraper for remote and work-from-anywhere software opportunities."""
     db.init_db()
     total_remote = 0
-    sites = ["indeed", "linkedin"]
+    enable_indeed = os.getenv("ENABLE_INDEED_SCRAPER", "false").lower() in ("true", "1", "yes")
+    sites = ["linkedin", "indeed"] if enable_indeed else ["linkedin"]
+
 
     remote_queries = [
         "Applied AI Engineer",
