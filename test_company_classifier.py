@@ -71,21 +71,12 @@ class CompanyClassifierTests(unittest.TestCase):
         self.assertEqual(get_company_category("L&T Technology Services", allow_network=False), "IT Services & Consultancies")
         self.assertEqual(get_company_category("AtkinsRéalis", allow_network=False), "Big Tech & Global MNC")
 
-    def test_seed_precedence_over_stale_cache(self):
-        # Plant a stale / incorrect cache row for Google
-        norm = normalize_company_key("Google")
-        save_classification(norm, "Google", "Staffing Agency / Unverified", "low", "stale_bot", "Erroneous cache")
-        cached = get_cached_classification(norm)
-        self.assertEqual(cached["category"], "Staffing Agency / Unverified")
-
-        # Calling get_company_category should prioritize the curated seed over the stale cache entry
-        result = get_company_category("Google", allow_network=False)
-        self.assertEqual(result, "Big Tech & Global MNC")
-
-        # And verify that the cache was corrected
-        refreshed = get_cached_classification(norm)
-        self.assertEqual(refreshed["category"], "Big Tech & Global MNC")
-        self.assertEqual(refreshed["source"], "seed")
+    def test_dynamic_classification_caching(self):
+        # Verify that dynamic classifications persist and are retrieved from cache
+        norm = normalize_company_key("DynamicTechCo")
+        save_classification(norm, "DynamicTechCo", "AI & Tech Startup", "high", "ai_search", "Dynamic AI resolution")
+        result = get_company_category("DynamicTechCo", allow_network=False)
+        self.assertEqual(result, "AI & Tech Startup")
 
 
 if __name__ == "__main__":

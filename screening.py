@@ -2,52 +2,10 @@
 
 import re
 
-KNOWN_ENTERPRISES = {
-    # Global IT Services & Consultancies
-    "infosys", "tcs", "tata consultancy services", "wipro", "cognizant",
-    "capgemini", "accenture", "ibm", "hcl", "tech mahindra", "ltimindtree",
-    "genpact", "ust", "indium", "hexaware", "mphasis", "birlasoft", "coforge",
-    "zensar", "cyient", "virtusa", "persistent systems",
-    # Global Tech, Hardware & Telecom
-    "google", "microsoft", "amazon", "apple", "meta", "nvidia", "intel", "amd",
-    "qualcomm", "broadcom", "cisco", "oracle", "sap", "salesforce", "adobe",
-    "dell", "hp", "hpe", "hewlett packard enterprise", "hewlett packard",
-    "teradata", "ptc", "eaton", "siemens", "bosch", "philips", "honeywell",
-    "general electric", "ge", "hitachi", "hitachi energy", "micron technology",
-    "samsung", "sony", "bt group", "comcast",
-    # Global Finance & Banking
-    "jpmorgan", "jpmorganchase", "goldman sachs", "morgan stanley", "citi",
-    "citigroup", "barclays", "wells fargo", "hsbc", "standard chartered",
-    "deutsche bank", "bnp paribas", "ubs", "blackrock", "fidelity", "mastercard",
-    "visa", "american express", "paypal", "nuvama", "idfc", "morningstar",
-    "munich re", "metlife", "natwest", "natwest group", "lpl financial",
-    # Global Healthcare / Pharma / Life Sciences
-    "novartis", "amgen", "solventum", "edwards lifesciences", "pfizer",
-    "johnson & johnson", "astrazeneca", "electronic arts", "ea",
-    "scientific games", "nielsen", "nielsen iq", "dhl", "fedex", "walmart",
-    "target", "pearson", "celonis", "anaplan", "servicenow", "workday",
-    "snowflake", "databricks", "splunk", "vmware", "atlassian", "intuit",
-    "autodesk", "atkinsréalis", "wsp", "ixigo", "stripe",
-}
-
-KNOWN_PRODUCT_COMPANIES = {
-    "openai", "anthropic", "google", "microsoft", "stripe", "swiggy", "zerodha",
-    "postman", "razorpay", "gitlab", "carousell", "freight tiger", "coram ai",
-    "weekday ai", "everseen", "revolte ai", "peryx ai", "startx med",
-    "coderound ai", "juicelabs ai", "wisdomai", "whatfix", "spearmint technologies",
-    "zenup health", "hasamex", "engradar", "deskbuddy", "newspace research",
-    "42 learn", "blackhawk network", "nxtpe", "sarvam", "signoz", "groww",
-}
-
 AGENCY_MARKERS = (
-    "zepcruit", "hiringhood", "principle pride", "top gen ai jobs", "minute sourcing",
-    "codepillars", "rediente", "staffing", "workforce", "recruit", "rytloop",
-    "genesect", "rythiring", "absolutehub", "tasks expert", "zenithbyte", "nexal iit",
-    "sparks to ideas", "sourcing", "uplers", "dasp digital", "zerotwo", "jansoft",
-    "recruitment", "headhunter", "manpower", "talent acquisition", "consulting",
+    "staffing", "workforce", "recruit", "sourcing", "uplers", "headhunter", "manpower",
+    "talent acquisition", "consulting", "body shop", "placement consultancy",
 )
-
-ENTERPRISE_PATTERNS = tuple(re.compile(rf"\b{re.escape(name)}\b", re.I) for name in sorted(KNOWN_ENTERPRISES, key=len, reverse=True))
 
 
 import sqlite3

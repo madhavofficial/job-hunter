@@ -26,8 +26,8 @@ class ScreeningTests(unittest.TestCase):
         self.assertIn("2027", reason)
 
     def test_rejects_unverified_company(self):
-        self.assertTrue(classify_company_tier("Zenithbyte").startswith("Tier 3"))
-        ok, _ = deterministic_hard_filter({"title": "Python Intern", "company": "Zenithbyte"})
+        self.assertTrue(classify_company_tier("Zenithbyte Staffing").startswith("Tier 3"))
+        ok, _ = deterministic_hard_filter({"title": "Python Intern", "company": "Zenithbyte Staffing"})
         self.assertFalse(ok)
 
     def test_accepts_india_entry_role(self):

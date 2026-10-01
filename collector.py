@@ -48,15 +48,23 @@ def get_dynamic_target_companies(limit: int = 40) -> list[str]:
 
 
 class _DynamicTargetCompanies(list):
-    """Dynamic company list that resolves verified employers without static lists in collector code."""
+    """Dynamic company list that resolves verified employers dynamically without static lists in code."""
     def __contains__(self, item):
         raw = str(item or "").strip().lower()
-        import company_classifier
-        seeds = {s.lower() for s in (company_classifier.SEED_BIG_TECH_MNC | company_classifier.SEED_UNICORNS | company_classifier.SEED_AI_STARTUPS)}
-        if raw in seeds:
+        conn = db.get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT 1 FROM ats_boards WHERE is_active = 1 AND lower(board_slug) = ?", (raw,))
+        if cur.fetchone():
+            conn.close()
             return True
-        db_companies = {c.lower() for c in get_dynamic_target_companies(limit=100)}
-        return raw in db_companies
+        cur.execute("SELECT 1 FROM company_classifications WHERE company_normalized = ? AND category IN ('Big Tech & Global MNC', 'Unicorn / Tech Giant', 'AI & Tech Startup')", (raw,))
+        if cur.fetchone():
+            conn.close()
+            return True
+        cur.execute("SELECT 1 FROM jobs WHERE (site LIKE 'ats:%' OR score >= 75) AND lower(company) = ?", (raw,))
+        found = cur.fetchone()
+        conn.close()
+        return bool(found)
 
     def __iter__(self):
         return iter(get_dynamic_target_companies(limit=50))

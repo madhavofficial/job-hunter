@@ -36,68 +36,14 @@ CANONICAL_CATEGORIES = (
 )
 
 AGENCY_MARKERS = (
-    "zepcruit", "hiringhood", "principle pride", "top gen ai jobs", "minute sourcing",
-    "codepillars", "rediente", "staffing", "workforce", "recruit", "rytloop",
-    "genesect", "rythiring", "absolutehub", "tasks expert", "zenithbyte", "nexal iit",
-    "sparks to ideas", "sourcing", "uplers", "dasp digital", "zerotwo", "jansoft",
-    "recruitment", "headhunter", "manpower", "talent acquisition", "randstad",
-    "michael page", "adecco", "allegis", "robert half", "kelly services", "hays",
-    "teksystems", "collabera",
+    "staffing", "workforce", "recruit", "sourcing", "uplers", "recruitment",
+    "headhunter", "manpower", "talent acquisition", "consulting", "body shop",
+    "placement consultancy",
 )
 
 PLACEHOLDER_NAMES = {
     "none", "confidential", "private limited", "company name", "unknown",
     "mystery labs", "various", "client of", "stealth",
-}
-
-# Curated seed anchors for sub-millisecond classification without network calls
-SEED_BIG_TECH_MNC = {
-    "google", "microsoft", "amazon", "apple", "meta", "nvidia", "intel", "amd",
-    "qualcomm", "broadcom", "cisco", "oracle", "sap", "salesforce", "adobe",
-    "dell", "hp", "hpe", "hewlett packard enterprise", "hewlett packard",
-    "teradata", "ptc", "eaton", "siemens", "bosch", "philips", "honeywell",
-    "general electric", "ge", "hitachi", "hitachi energy", "micron technology",
-    "samsung", "sony", "bt group", "comcast", "at&t", "at & t", "verizon",
-    "jpmorgan", "jpmorganchase", "goldman sachs", "morgan stanley", "citi",
-    "citigroup", "barclays", "wells fargo", "hsbc", "standard chartered",
-    "deutsche bank", "bnp paribas", "ubs", "blackrock", "fidelity", "mastercard",
-    "visa", "american express", "paypal", "nuvama", "idfc", "morningstar",
-    "munich re", "metlife", "natwest", "natwest group", "lpl financial",
-    "novartis", "amgen", "solventum", "edwards lifesciences", "pfizer",
-    "johnson & johnson", "johnson and johnson", "astrazeneca", "electronic arts", "ea",
-    "scientific games", "nielsen", "nielsen iq", "dhl", "fedex", "walmart",
-    "target", "pearson", "celonis", "anaplan", "servicenow", "workday",
-    "snowflake", "databricks", "splunk", "vmware", "atlassian", "intuit",
-    "autodesk", "atkinsréalis", "atkinsrealis", "wsp",
-}
-
-SEED_UNICORNS = {
-    "openai", "anthropic", "stripe", "swiggy", "zomato", "razorpay", "zerodha",
-    "postman", "gitlab", "carousell", "cred", "meesho", "phonepe", "flipkart",
-    "uber", "airbnb", "canva", "figma", "notion", "retool", "vercel", "supabase",
-    "cloudflare", "linear", "raycast", "inmobi", "freshworks", "darwinbox",
-    "browserbase", "perplexity", "scale ai", "hugging face", "mistral",
-    "posthog", "clickup", "datadog", "applied intuition", "together ai", "groq",
-    "modal", "langchain", "cohere", "replit", "cursor", "anysphere", "cognition",
-    "warp", "wandb", "weights & biases", "stability ai", "runway", "elevenlabs",
-    "thumbtack", "torc robotics", "weave", "zepto", "elastic", "mongodb",
-    "arize ai", "arize", "arizeai", "groww",
-}
-
-SEED_IT_SERVICES = {
-    "infosys", "tcs", "tata consultancy services", "wipro", "cognizant",
-    "capgemini", "accenture", "ibm", "hcl", "tech mahindra", "ltimindtree",
-    "genpact", "ust", "indium", "hexaware", "mphasis", "birlasoft", "coforge",
-    "zensar", "cyient", "virtusa", "persistent systems", "l&t technology services",
-    "l & t technology services", "kpit", "mindtree", "sonata software", "tata elxsi", "nihilent",
-}
-
-SEED_AI_STARTUPS = {
-    "coram ai", "weekday ai", "everseen", "revolte ai", "peryx ai", "startx med",
-    "coderound ai", "juicelabs ai", "wisdomai", "whatfix", "spearmint technologies",
-    "zenup health", "hasamex", "engradar", "deskbuddy", "newspace research",
-    "42 learn", "blackhawk network", "nxtpe", "freight tiger", "ixigo",
-    "sarvam", "sarvam ai", "signoz",
 }
 
 
@@ -341,31 +287,6 @@ def get_company_category(
 
     if any(marker in norm for marker in AGENCY_MARKERS):
         return "Staffing Agency / Unverified"
-
-    # Curated seed anchors take precedence over cache (ensures code updates override stale DB entries)
-    for name in sorted(SEED_BIG_TECH_MNC, key=len, reverse=True):
-        if re.search(rf"\b{re.escape(name)}\b", norm, re.I):
-            cat = "Big Tech & Global MNC"
-            save_classification(norm, raw_name, cat, "high", "seed", f"Matched global enterprise anchor: {name}", conn)
-            return cat
-
-    for name in sorted(SEED_UNICORNS, key=len, reverse=True):
-        if re.search(rf"\b{re.escape(name)}\b", norm, re.I):
-            cat = "Unicorn / Tech Giant"
-            save_classification(norm, raw_name, cat, "high", "seed", f"Matched unicorn anchor: {name}", conn)
-            return cat
-
-    for name in sorted(SEED_IT_SERVICES, key=len, reverse=True):
-        if re.search(rf"\b{re.escape(name)}\b", norm, re.I):
-            cat = "IT Services & Consultancies"
-            save_classification(norm, raw_name, cat, "high", "seed", f"Matched IT services anchor: {name}", conn)
-            return cat
-
-    for name in sorted(SEED_AI_STARTUPS, key=len, reverse=True):
-        if re.search(rf"\b{re.escape(name)}\b", norm, re.I):
-            cat = "AI & Tech Startup"
-            save_classification(norm, raw_name, cat, "high", "seed", f"Matched curated AI/tech startup anchor: {name}", conn)
-            return cat
 
     # Check cache for previously verified AI/search classifications
     cached = get_cached_classification(norm, conn)

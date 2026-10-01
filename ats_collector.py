@@ -103,22 +103,10 @@ EXTERNAL_BOARD_FEEDS = (
 
 
 def sync_external_board_feeds() -> int:
-    """Dynamically discover tech company ATS boards from live open-source feeds and seed configs."""
+    """Dynamically discover tech company ATS boards from live open-source feeds."""
     discovered = set()
 
-    # 1. Declarative local seeds (zero hardcoded companies in code)
-    local_seeds_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "ats_boards.json")
-    if os.path.exists(local_seeds_path):
-        try:
-            with open(local_seeds_path, "r", encoding="utf-8") as f:
-                seeds = json.load(f)
-                for item in seeds:
-                    if isinstance(item, dict) and item.get("ats") and item.get("board_slug"):
-                        discovered.add((item["ats"].strip().lower(), item["board_slug"].strip().lower()))
-        except Exception as exc:
-            print(f"Notice: local board seeds sync notice: {exc}", file=sys.stderr)
-
-    # 2. Open-source engineering feeds
+    # Open-source engineering feeds
     for feed_url in EXTERNAL_BOARD_FEEDS:
         try:
             req = Request(feed_url, headers={"User-Agent": "job-hunter/2.0"})
