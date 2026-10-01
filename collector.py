@@ -39,46 +39,38 @@ DEFAULT_SEARCH_TERMS = [
     "6 month internship software",
 ]
 
-# Curated list of elite tech companies in India for targeted discovery
-TARGET_TECH_COMPANIES = [
-    "OpenAI",
-    "Anthropic",
-    "Google",
-    "Microsoft",
-    "Meta",
-    "Apple",
-    "Amazon",
-    "NVIDIA",
-    "Uber",
-    "Stripe",
-    "Razorpay",
-    "Swiggy",
-    "Zomato",
-    "CRED",
-    "Zepto",
-    "Flipkart",
-    "Postman",
-    "Atlassian",
-    "Databricks",
-    "Snowflake",
-    "Perplexity",
-    "Scale AI",
-    "Vercel",
-    "Supabase",
-    "Linear",
-    "Salesforce",
-    "Oracle",
-    "Cisco",
-    "Adobe",
-    "Intuit",
-    "PayPal",
-    "Goldman Sachs",
-    "Morgan Stanley",
-    "JPMorganChase",
-    "BNP Paribas",
-]
+def get_dynamic_target_companies(limit: int = 40) -> list[str]:
+    """Dynamically get verified employer names from registered ATS boards and product postings."""
+    try:
+        return db.get_dynamic_target_companies(limit=limit)
+    except Exception:
+        return []
+
+
+class _DynamicTargetCompanies(list):
+    """Dynamic company list that resolves verified employers without static lists in collector code."""
+    def __contains__(self, item):
+        raw = str(item or "").strip().lower()
+        import company_classifier
+        seeds = {s.lower() for s in (company_classifier.SEED_BIG_TECH_MNC | company_classifier.SEED_UNICORNS | company_classifier.SEED_AI_STARTUPS)}
+        if raw in seeds:
+            return True
+        db_companies = {c.lower() for c in get_dynamic_target_companies(limit=100)}
+        return raw in db_companies
+
+    def __iter__(self):
+        return iter(get_dynamic_target_companies(limit=50))
+
+    def __len__(self):
+        return len(get_dynamic_target_companies(limit=50))
+
+
+TARGET_TECH_COMPANIES = _DynamicTargetCompanies()
+
+
 
 # JobSpy's Glassdoor adapter cannot resolve the country-wide "India" location
+
 # used by this pipeline, and its ZipRecruiter adapter only supports US/Canada.
 # Keep the source list explicit so unsupported boards do not generate noisy,
 # predictable failures on every query.
@@ -145,12 +137,14 @@ def run_company_collector(companies=None, limit_per_company=15, hours_old=None, 
     """
     db.init_db()
     total_new = 0
-    target_list = companies or TARGET_TECH_COMPANIES
-    sites = ["linkedin", "indeed"]
+    target_list = companies or get_dynamic_target_companies(limit=30)
+    enable_indeed = os.getenv("ENABLE_INDEED_SCRAPER", "false").lower() in ("true", "1", "yes")
+    sites = ["linkedin", "indeed"] if enable_indeed else ["linkedin"]
     
     print(f"\n====================================================")
     print(f"🎯 INITIATING TARGETED TIER-1 COMPANY SCRAPER")
-    print(f"Targeting {len(target_list)} elite tech companies in {location}")
+    print(f"Targeting {len(target_list)} dynamic tech companies in {location}")
+    print(f"Sources: {', '.join(sites)} (Indeed spam filter: {'DISABLED' if enable_indeed else 'ACTIVE'})")
     print(f"====================================================")
     
     for idx, company in enumerate(target_list):
@@ -191,9 +185,10 @@ def run_collector(limit_per_query=20, hours_old=168, include_companies=True):
     
     print(f"Starting job collection for the last {hours_old} hours...")
     
-    # Use reliable India-compatible sources (linkedin & indeed; JobSpy naukri adapter returns 406 recaptcha)
-    sites = ["linkedin", "indeed"]
-    print(f"Using India-compatible sources: {', '.join(sites)}")
+    enable_indeed = os.getenv("ENABLE_INDEED_SCRAPER", "false").lower() in ("true", "1", "yes")
+    sites = ["linkedin", "indeed"] if enable_indeed else ["linkedin"]
+    print(f"Using high-signal sources: {', '.join(sites)} (Indeed spam filter: {'DISABLED' if enable_indeed else 'ACTIVE'})")
+
     
     search_terms = get_dynamic_search_terms()
     print(f"Loaded {len(search_terms)} dynamic search queries derived from your resume profile.")

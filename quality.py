@@ -112,9 +112,11 @@ def assess_listing_quality(job: dict, company_tier: str, now: datetime | None = 
     elif company_tier.startswith("Tier 2"):
         company_score = 80
     elif direct:
-        company_score = 70
-    else:
         company_score = 65
+    else:
+        company_score = 50
+
+
 
     date_value = str(job.get("date_posted") or job.get("created_at") or "")[:19]
     freshness_score = 35
@@ -199,7 +201,10 @@ def weighted_match_score(role_fit: int, quality: dict) -> tuple[int, dict]:
     final = round(role_fit * 0.65 + company * 0.20 + evidence * 0.10 + freshness * 0.05)
     if evidence < 80:
         final = min(final, 79)
+    if not quality.get("direct_employer_signal", True):
+        final = min(final, 84)
     components = {
+
         "role_fit": role_fit,
         "company_quality": company,
         "evidence_quality": evidence,
@@ -230,4 +235,6 @@ def is_recommended_role(quality_passes: bool, company_tier: str, final_score: in
         and final_score >= 80
         and quality.get("description_score", 0) >= 80
     )
+
+
 

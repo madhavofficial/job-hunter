@@ -49,6 +49,20 @@ def init_db():
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS ats_boards (
+        ats TEXT NOT NULL,
+        board_slug TEXT NOT NULL,
+        source TEXT DEFAULT 'discovered',
+        last_scraped TIMESTAMP,
+        job_count INTEGER DEFAULT 0,
+        is_active INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (ats, board_slug)
+    )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_ats_boards_active ON ats_boards (is_active)")
+
     # Add columns when upgrading an existing local database created by an older version.
     for column, definition in (
         ("tailored_resume_pdf_path", "TEXT"),
@@ -377,3 +391,135 @@ def mark_as_shortlisted(job_id: str):
     cursor.execute("UPDATE jobs SET status = 'shortlisted' WHERE job_id = ?", (job_id,))
     conn.commit()
     conn.close()
+
+
+def add_ats_boards(boards: list[tuple[str, str]], source: str = "discovered") -> int:
+    """Register dynamically discovered ATS boards into the persistent cache."""
+    if not boards:
+        return 0
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS ats_boards (
+        ats TEXT NOT NULL,
+        board_slug TEXT NOT NULL,
+        source TEXT DEFAULT 'discovered',
+        last_scraped TIMESTAMP,
+        job_count INTEGER DEFAULT 0,
+        is_active INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (ats, board_slug)
+    )
+    """)
+    added = 0
+    for ats, board_slug in boards:
+        ats_clean = str(ats or "").strip().lower()
+        slug_clean = str(board_slug or "").strip().lower()
+        if not ats_clean or not slug_clean or len(slug_clean) > 80:
+            continue
+        try:
+            cursor.execute("""
+            INSERT OR IGNORE INTO ats_boards (ats, board_slug, source, is_active)
+            VALUES (?, ?, ?, 1)
+            """, (ats_clean, slug_clean, source))
+            if cursor.rowcount > 0:
+                added += 1
+        except Exception:
+            pass
+    conn.commit()
+    conn.close()
+    return added
+
+
+def get_registered_ats_boards(active_only: bool = True, limit: int | None = None) -> list[tuple[str, str]]:
+    """Retrieve registered ATS boards dynamically without hardcoding."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS ats_boards (
+        ats TEXT NOT NULL,
+        board_slug TEXT NOT NULL,
+        source TEXT DEFAULT 'discovered',
+        last_scraped TIMESTAMP,
+        job_count INTEGER DEFAULT 0,
+        is_active INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (ats, board_slug)
+    )
+    """)
+    query = "SELECT ats, board_slug FROM ats_boards"
+    params = []
+    if active_only:
+        query += " WHERE is_active = 1"
+    query += " ORDER BY job_count DESC, created_at ASC"
+    if limit:
+        query += f" LIMIT {int(limit)}"
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+    conn.close()
+    return [(row["ats"], row["board_slug"]) for row in rows]
+
+
+def update_ats_board_scraped(ats: str, board_slug: str, job_count: int, is_active: int = 1):
+    """Update board scrape statistics and health."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+    UPDATE ats_boards
+    SET last_scraped = datetime('now'),
+        job_count = ?,
+        is_active = ?
+    WHERE ats = ? AND board_slug = ?
+    """, (job_count, is_active, str(ats).lower(), str(board_slug).lower()))
+    conn.commit()
+    conn.close()
+
+
+def get_dynamic_target_companies(limit: int = 50) -> list[str]:
+    """Dynamically extract verified company names from active ATS boards and product postings."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS ats_boards (
+        ats TEXT NOT NULL,
+        board_slug TEXT NOT NULL,
+        source TEXT DEFAULT 'discovered',
+        last_scraped TIMESTAMP,
+        job_count INTEGER DEFAULT 0,
+        is_active INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (ats, board_slug)
+    )
+    """)
+    # Extract clean company names from registered boards with postings
+    cursor.execute("""
+        SELECT DISTINCT board_slug FROM ats_boards 
+        WHERE is_active = 1 AND job_count > 0
+        ORDER BY job_count DESC
+        LIMIT ?
+    """, (limit,))
+    board_slugs = [r["board_slug"].replace("-", " ").replace("_", " ").title() for r in cursor.fetchall()]
+    
+    # Also pull from high-scoring product companies already in jobs.db
+    cursor.execute("""
+        SELECT DISTINCT company FROM jobs
+        WHERE (site LIKE 'ats:%' OR score >= 85)
+          AND company NOT IN ('None', '', 'Custom Opportunity')
+          AND company NOT LIKE '%Consultancy%'
+          AND company NOT LIKE '%Staffing%'
+        ORDER BY score DESC
+        LIMIT ?
+    """, (limit,))
+    job_companies = [r["company"] for r in cursor.fetchall()]
+    conn.close()
+
+    # Deduplicate while preserving order
+    seen = set()
+    combined = []
+    for c in board_slugs + job_companies:
+        norm = c.strip().lower()
+        if norm and norm not in seen and len(norm) > 2:
+            seen.add(norm)
+            combined.append(c.strip())
+    return combined[:limit]
+

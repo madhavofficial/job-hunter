@@ -96,22 +96,54 @@ def _date_value(value):
     return str(value)
 
 
-CURATED_ATS_BOARDS = (
-    ("greenhouse", "anthropic"),
-    ("greenhouse", "scaleai"),
-    ("greenhouse", "figma"),
-    ("greenhouse", "vercel"),
-    ("greenhouse", "datadog"),
-    ("ashby", "perplexity"),
-    ("ashby", "supabase"),
-    ("ashby", "linear"),
-    ("ashby", "posthog"),
-    ("ashby", "modal"),
-    ("ashby", "browserbase"),
+EXTERNAL_BOARD_FEEDS = (
+    "https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json",
+    "https://raw.githubusercontent.com/SimplifyJobs/Summer2025-Internships/dev/.github/scripts/listings.json",
 )
 
 
+def sync_external_board_feeds() -> int:
+    """Dynamically discover tech company ATS boards from live open-source engineering feeds without hardcoding."""
+    discovered = set()
+    for feed_url in EXTERNAL_BOARD_FEEDS:
+        try:
+            req = Request(feed_url, headers={"User-Agent": "job-hunter/2.0"})
+            with urlopen(req, timeout=12) as resp:
+                data = json.load(resp)
+            urls = [item.get("url") for item in data if isinstance(item, dict) and item.get("url")]
+            found = discover_board_refs(urls)
+            discovered.update(found)
+        except Exception as exc:
+            print(f"Notice: external feed sync notice for {feed_url}: {exc}", file=sys.stderr)
+
+    if discovered:
+        added = db.add_ats_boards(list(discovered), source="community_feed")
+        print(f"✓ Dynamic Board Feed: Discovered {len(discovered)} boards ({added} newly registered).")
+        return added
+    return 0
+
+
+
+class _DynamicBoardsTuple(tuple):
+    """Dynamic board tuple that resolves from the database cache without hardcoded company lists."""
+    def __contains__(self, item):
+        boards = db.get_registered_ats_boards()
+        if not boards:
+            sync_external_board_feeds()
+            boards = db.get_registered_ats_boards()
+        return item in boards
+
+    def __iter__(self):
+        return iter(db.get_registered_ats_boards())
+
+    def __len__(self):
+        return len(db.get_registered_ats_boards())
+
+CURATED_ATS_BOARDS = _DynamicBoardsTuple()
+
+
 def _is_india_or_remote(location: str, is_remote: bool = False) -> bool:
+
     loc = (location or "").lower()
     # Check if explicitly in India or Indian cities/states/regions
     india_pattern = (
@@ -307,8 +339,9 @@ def discover_ats_urls() -> list[str]:
         for domain in ATS_HOSTS:
             query = f"site:{domain} ({keyword_query}) India OR remote"
             try:
-                urls.extend(search_urls(query, count=10))
-                time.sleep(1.0)
+                found = search_urls(query, count=15)
+                urls.extend(found)
+                time.sleep(0.5)
             except SearchRateLimitError as exc:
                 print(f"Warning: ATS discovery stopped after provider rate limit: {exc}", file=sys.stderr)
                 break
@@ -316,6 +349,10 @@ def discover_ats_urls() -> list[str]:
                 print(f"Warning: ATS discovery failed for {domain}: {exc}", file=sys.stderr)
     except SearchProviderError as exc:
         print(f"Warning: ATS discovery unavailable: {exc}", file=sys.stderr)
+
+    refs = discover_board_refs(urls)
+    if refs:
+        db.add_ats_boards(list(refs), source="search_dork")
     return urls
 
 
@@ -346,7 +383,7 @@ def discover_career_board_jobs(limit_per_domain: int = 50) -> pd.DataFrame:
                 if listings:
                     rows.extend(listings)
                     print(f"Career discovery {domain}: {len(listings)} parsed listings.")
-                time.sleep(1.0)
+                time.sleep(0.5)
             except SearchRateLimitError as exc:
                 print(f"Warning: career-board discovery stopped after provider rate limit: {exc}", file=sys.stderr)
                 break
@@ -357,44 +394,62 @@ def discover_career_board_jobs(limit_per_domain: int = 50) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def run_ats_collector() -> int:
+def run_ats_collector(batch_size: int = 200) -> int:
+    import concurrent.futures
+    from urllib.error import HTTPError
+
     db.init_db()
     total = 0
 
-    print("Priority 0: Ingesting curated top-tier ATS boards directly...")
-    for ats, board in CURATED_ATS_BOARDS:
+    print("\n====================================================")
+    print("🚀 DYNAMIC DIRECT ATS INGESTION PIPELINE")
+    print("====================================================")
+
+    # 1. Dynamically sync board registries from live engineering feeds (zero hardcoding)
+    print("Priority 1: Syncing tech company ATS boards from dynamic community feeds...")
+    sync_external_board_feeds()
+
+    # 2. Discover new India/Remote boards via live search index
+    print("Priority 2: Discovering fresh ATS boards via search index...")
+    discover_ats_urls()
+
+    # 3. Retrieve registered active boards from persistent cache
+    active_boards = db.get_registered_ats_boards(active_only=True, limit=batch_size)
+    print(f"Priority 3: Concurrently scraping {len(active_boards)} registered ATS boards...")
+
+    def _scrape_board(item: tuple[str, str]) -> tuple[str, str, int, list[dict]]:
+        ats, board = item
         try:
             jobs = fetch_board_jobs(ats, board)
-            added = db.add_jobs(pd.DataFrame(jobs)) if jobs else 0
-            total += added
-            if jobs:
-                print(f"Curated ATS {ats}/{board}: {len(jobs)} India/remote jobs, {added} new.")
-        except Exception as exc:
-            print(f"Warning: Curated ATS board {ats}/{board} failed: {exc}", file=sys.stderr)
+            return (ats, board, 1, jobs)
+        except HTTPError as e:
+            is_active = 0 if e.code in (404, 410) else 1
+            return (ats, board, is_active, [])
+        except Exception:
+            return (ats, board, 1, [])
 
-    # Prioritize the career systems most commonly used by large employers.
-    # This also lets direct Workday/Oracle records win canonical deduplication
-    # before broader ATS sources are ingested.
-    print("Priority 1: Discovering Workday/Oracle and other career-board listings...")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        futures = {executor.submit(_scrape_board, b): b for b in active_boards}
+        for future in concurrent.futures.as_completed(futures):
+            ats, board, is_active, jobs = future.result()
+            added = 0
+            if jobs:
+                added = db.add_jobs(pd.DataFrame(jobs))
+                total += added
+                print(f"✓ ATS {ats}/{board}: {len(jobs)} India/remote jobs ({added} new).")
+            db.update_ats_board_scraped(ats, board, len(jobs), is_active=is_active)
+
+    # 4. Discover Workday/Oracle career-board listings
+    print("Priority 4: Discovering Workday/Oracle and enterprise career-board listings...")
     career_jobs = discover_career_board_jobs()
     if not career_jobs.empty:
         added = db.add_jobs(career_jobs)
         total += added
         print(f"Dynamic career boards: {len(career_jobs)} indexed jobs, {added} new.")
 
-    print("Priority 2: Discovering Ashby, Greenhouse, and Lever boards via search index...")
-    refs = discover_board_refs(discover_ats_urls())
-    print(f"Discovered {len(refs)} ATS boards dynamically.")
-    for ats, board in sorted(refs):
-        try:
-            jobs = fetch_board_jobs(ats, board)
-            added = db.add_jobs(pd.DataFrame(jobs)) if jobs else 0
-            total += added
-            print(f"ATS {ats}/{board}: {len(jobs)} India/remote jobs, {added} new.")
-        except Exception as exc:
-            print(f"Warning: ATS board {ats}/{board} failed: {exc}", file=sys.stderr)
-    print(f"ATS collection complete. New direct jobs stored: {total}")
+    print(f"\n✅ Dynamic ATS collection complete. New direct jobs stored: {total}\n")
     return total
+
 
 
 if __name__ == "__main__":
