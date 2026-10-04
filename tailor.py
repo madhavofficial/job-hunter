@@ -697,17 +697,11 @@ def ensure_selected_project_github_links(markdown: str, portfolio: list[dict], p
     return "\n".join(output) + ("\n" if markdown.endswith("\n") else "")
 
 
-def ensure_career_objective_target(markdown: str, company: str, title: str) -> str:
-    """Ensure the Career Objective names the exact target company and role."""
+def ensure_career_objective_target(markdown: str, company: str = "", title: str = "") -> str:
+    """Ensure Career Objective is professional, employment-ready, and free of company/role references."""
     if not markdown:
         markdown = ""
 
-    company = " ".join((company or "").split())
-    title = " ".join((title or "").split())
-    if not company or not title:
-        return markdown
-
-    target_line = f"Targeting the **{title}** position at **{company}** to build resilient, production-grade software."
     lines = markdown.splitlines()
     objective_index = None
     for index, line in enumerate(lines):
@@ -724,9 +718,23 @@ def ensure_career_objective_target(markdown: str, company: str, title: str) -> s
                 lines.insert(index + 1, remainder)
             break
 
+    is_mahika = "mahika" in markdown.lower()
+    if is_mahika:
+        default_objective = (
+            "Employment-ready Computer Science engineer specializing in machine learning, full-stack systems, "
+            "and data pipelines. Seeking engineering roles to build resilient, production-grade software and high-impact solutions."
+        )
+        seeking_suffix = "Seeking engineering roles to build resilient, production-grade software and high-impact solutions."
+    else:
+        default_objective = (
+            "Employment-ready Computer Science engineer specializing in backend systems and autonomous AI workflows. "
+            "Seeking Software Engineering roles to build resilient, production-grade software and distributed solutions."
+        )
+        seeking_suffix = "Seeking Software Engineering roles to build resilient, production-grade software and distributed solutions."
+
     if objective_index is None:
         insert_at = 1 if lines and re.match(r"^#\s+", lines[0]) else 0
-        lines[insert_at:insert_at] = ["## Career Objective", f"Employment-ready Computer Science engineer specializing in backend systems and autonomous AI workflows. {target_line}", ""]
+        lines[insert_at:insert_at] = ["## Career Objective", default_objective, ""]
         return "\n".join(lines) + ("\n" if markdown.endswith("\n") else "")
 
     next_heading = len(lines)
@@ -735,28 +743,84 @@ def ensure_career_objective_target(markdown: str, company: str, title: str) -> s
             next_heading = index
             break
 
-    # Ensure employment-ready phrasing in objective body text
-    body_indices = [idx for idx in range(objective_index + 1, next_heading) if lines[idx].strip()]
-    if body_indices:
-        full_obj = " ".join(lines[idx] for idx in body_indices).lower()
-        if "employment-ready" not in full_obj and "employment ready" not in full_obj:
-            first_idx = body_indices[0]
-            orig = lines[first_idx]
+    company_clean = (" ".join((company or "").split())).strip()
+    title_clean = (" ".join((title or "").split())).strip()
+
+    valid_sentences = []
+    for idx in range(objective_index + 1, next_heading):
+        line = lines[idx].strip()
+        if not line:
+            continue
+        # Split line into individual sentences to cleanly drop targeting clauses without losing base attributes
+        raw_sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", line) if s.strip()]
+        for sent in raw_sentences:
+            # Drop targeting clauses
+            if re.search(r"\btargeting\b", sent, re.I):
+                continue
+            if re.search(r"\bposition\s+at\b|\brole\s+at\b|\binternship\s+at\b", sent, re.I):
+                continue
+            # Drop company name references
+            if company_clean and re.search(r"\b" + re.escape(company_clean) + r"\b", sent, re.I):
+                continue
+            # Scrub specific title references in targeting context
+            if title_clean and re.search(r"\b" + re.escape(title_clean) + r"\b", sent, re.I):
+                sent = re.sub(r"\*+" + re.escape(title_clean) + r"\*+", "Software Engineering", sent, flags=re.I)
+                sent = re.sub(re.escape(title_clean), "Software Engineering", sent, flags=re.I)
+            sent = " ".join(sent.split()).strip()
+            if sent:
+                valid_sentences.append(sent)
+
+    if not valid_sentences:
+        valid_sentences = [default_objective]
+    else:
+        full_text = " ".join(valid_sentences)
+        if "employment-ready" not in full_text.lower() and "employment ready" not in full_text.lower():
+            orig = valid_sentences[0]
             if re.search(r"\b(aspiring|motivated|passionate)\s+computer\s+science\s+(?:student|undergraduate|engineer)\b", orig, flags=re.I):
-                lines[first_idx] = re.sub(r"\b(aspiring|motivated|passionate)\s+computer\s+science\s+(?:student|undergraduate|engineer)\b", "Employment-ready Computer Science engineer", orig, count=1, flags=re.I)
+                valid_sentences[0] = re.sub(
+                    r"\b(aspiring|motivated|passionate)\s+computer\s+science\s+(?:student|undergraduate|engineer)\b",
+                    "Employment-ready Computer Science engineer",
+                    orig,
+                    count=1,
+                    flags=re.I,
+                )
             elif re.search(r"\bcomputer\s+science\s+(?:student|undergraduate)\b", orig, flags=re.I):
-                lines[first_idx] = re.sub(r"\bcomputer\s+science\s+(?:student|undergraduate)\b", "Employment-ready Computer Science engineer", orig, count=1, flags=re.I)
+                valid_sentences[0] = re.sub(
+                    r"\bcomputer\s+science\s+(?:student|undergraduate)\b",
+                    "Employment-ready Computer Science engineer",
+                    orig,
+                    count=1,
+                    flags=re.I,
+                )
             elif re.search(r"\bsoftware\s+engineering\s+(?:student|undergraduate)\b", orig, flags=re.I):
-                lines[first_idx] = re.sub(r"\bsoftware\s+engineering\s+(?:student|undergraduate)\b", "Employment-ready software engineer", orig, count=1, flags=re.I)
-            elif not orig.strip().startswith("Targeting"):
-                lines[first_idx] = f"Employment-ready Computer Science engineer. {orig}"
+                valid_sentences[0] = re.sub(
+                    r"\bsoftware\s+engineering\s+(?:student|undergraduate)\b",
+                    "Employment-ready software engineer",
+                    orig,
+                    count=1,
+                    flags=re.I,
+                )
+            else:
+                valid_sentences[0] = f"Employment-ready Computer Science engineer. {orig}"
 
-    objective_text = "\n".join(lines[objective_index + 1:next_heading]).lower()
-    if company.lower() in objective_text and title.lower() in objective_text:
-        return "\n".join(lines) + ("\n" if markdown.endswith("\n") else "")
+        # If only 1 sentence remains without a seeking clause, ensure the punchy second sentence is included
+        if len(valid_sentences) == 1 and not re.search(r"\bseeking\b", valid_sentences[0], re.I):
+            valid_sentences.append(seeking_suffix)
 
-    lines.insert(objective_index + 1, target_line)
-    return "\n".join(lines) + ("\n" if markdown.endswith("\n") else "")
+    # Normalize punctuation and sentences
+    final_body = []
+    for s in valid_sentences:
+        s = re.sub(r"\s+([.,;:!?])", r"\1", s)
+        s = re.sub(r"\.{2,}", ".", s)
+        s = re.sub(r"\s{2,}", " ", s).strip()
+        if s and not s.endswith(('.', '!', '?')):
+            s += "."
+        if s:
+            final_body.append(s)
+
+    combined_body = " ".join(final_body)
+    new_lines = lines[:objective_index + 1] + [combined_body, ""] + lines[next_heading:]
+    return "\n".join(new_lines) + ("\n" if markdown.endswith("\n") else "")
 
 
 def is_job_description_ambiguous(title: str, description: str) -> tuple[bool, str]:
@@ -976,7 +1040,7 @@ def tailor_materials(job_id: str, profile_name: str = "madhav"):
        - Bullet 1 (Retrieval & Ingestion): Built an evidence-grounded multi-agent system querying scholarly APIs (arXiv, PubMed, Semantic Scholar) and ingesting 300-800 papers per query with automated hallucination guardrails to eliminate false citations.
        - Bullet 2 (Graph Clustering & Ensemble): Applied semantic Louvain graph clustering to partition literature into thematic sub-corpora and coordinated a 5-agent ensemble to extract empirical claims, evaluate methodology, and cross-examine evidence to resolve contradictions across papers.
        - DO NOT output abstract or context-free percentage metrics (e.g. '92.7% accuracy / 89.8% F1')—focus strictly on what the system does, the multi-agent coordination, and the contradiction resolution mechanism.
-   - CAREER OBJECTIVE: Keep the Career Objective to a crisp, dynamic 2-sentence punch: "Employment-ready Computer Science engineer specializing in backend systems and autonomous AI workflows. Targeting the **{title}** position at **{company}** to build resilient, production-grade software." (Tailor the technical domain specialization concisely to the role).
+   - CAREER OBJECTIVE: Keep the Career Objective to a crisp, dynamic 2-sentence punch: "Employment-ready Computer Science engineer specializing in backend systems and autonomous AI workflows. Seeking Software Engineering roles to build resilient, production-grade software and distributed solutions." (Tailor the technical domain specialization concisely to the role, but NEVER mention the company name or target position).
    - ZERO HARDWARE / NON-CS FABRICATION: Candidate is strictly a Computer Science and Engineering (CSE) student. NEVER claim grounding in analog circuits, circuit design, high-speed board design, PCB, or FPGA development. For telecom or embedded postings, frame interest and experience strictly around Embedded Software, C/C++, Linux systems programming, device interfacing, and OS internals.
    - CERTIFICATIONS: Do NOT include any Certifications section under any circumstances.
    - ZERO FACT FABRICATION: Rely strictly on facts and verified metrics in the source material."""
@@ -992,7 +1056,7 @@ def tailor_materials(job_id: str, profile_name: str = "madhav"):
      * In '## Leadership and Experience', include ONLY 1 concise bullet for Teaching Assistant (Python Programming Lab, PES University) and 1 concise bullet for Head of Social Media (TAMS).
      * DO NOT duplicate Teaching Assistant or TAMS under '## Professional Experience'. Under '## Professional Experience', include ONLY DRDO.
      * In '## Extracurricular Activities', include ONLY 1 line: 15+ years Classical Dance (Bharatanatyam).
-   - CAREER OBJECTIVE: Keep the Career Objective to a crisp, dynamic 2-sentence punch: "Employment-ready Computer Science engineer specializing in backend systems and autonomous AI workflows. Targeting the **{title}** position at **{company}** to build resilient, production-grade software." (Tailor the technical domain specialization concisely to the role).
+   - CAREER OBJECTIVE: Keep the Career Objective to a crisp, dynamic 2-sentence punch: "Employment-ready Computer Science engineer specializing in machine learning, full-stack systems, and data pipelines. Seeking engineering roles to build resilient, production-grade software and high-impact solutions." (Tailor the technical domain specialization concisely to the role, but NEVER mention the company name or target position).
    - ZERO HARDWARE / NON-CS FABRICATION: Candidate is strictly a Computer Science and Engineering (CSE) student. NEVER claim grounding in analog circuits, circuit design, high-speed board design, PCB, or FPGA development. For telecom or embedded postings, frame interest and experience strictly around Embedded Software, C/C++, Linux systems programming, device interfacing, and OS internals.
    - CERTIFICATIONS: Do NOT include any Certifications section under any circumstances.
    - ZERO FACT FABRICATION: Rely strictly on facts and verified metrics in the source material."""

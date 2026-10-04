@@ -99,9 +99,8 @@ class ResumeNamingAndFolderTests(unittest.TestCase):
 
         self.assertEqual(result.count("https://github.com/madhavofficial/CareerTime"), 1)
 
-    def test_career_objective_names_target_company_and_position(self):
+    def test_career_objective_removes_company_and_position_references(self):
         markdown = """# Madhav Jayam
-
 ## Career Objective
 Software engineering student seeking an internship.
 
@@ -110,8 +109,9 @@ PES University
 """
         result = ensure_career_objective_target(markdown, "Acme AI", "Backend Engineer Intern")
 
-        self.assertIn("**Backend Engineer Intern**", result)
-        self.assertIn("**Acme AI**", result)
+        self.assertNotIn("Backend Engineer Intern", result)
+        self.assertNotIn("Acme AI", result)
+        self.assertIn("Employment-ready", result)
 
     def test_career_objective_target_is_not_duplicated(self):
         markdown = """# Madhav Jayam
@@ -120,7 +120,10 @@ Targeting the **Backend Engineer Intern** position at **Acme AI**.
 """
         result = ensure_career_objective_target(markdown, "Acme AI", "Backend Engineer Intern")
 
-        self.assertEqual(result.count("Backend Engineer Intern"), 1)
+        self.assertNotIn("Acme AI", result)
+        self.assertNotIn("Backend Engineer Intern", result)
+        self.assertIn("Employment-ready", result)
+        self.assertIn("Seeking Software Engineering roles", result)
 
     def test_bold_career_objective_heading_is_updated_in_place(self):
         markdown = """# Madhav Jayam
@@ -133,9 +136,10 @@ PES University
         result = ensure_career_objective_target(markdown, "GE HealthCare", "Software Engineering Intern")
 
         self.assertEqual(result.count("Career Objective"), 0)
-        self.assertIn("**Software Engineering Intern**", result)
-        self.assertIn("**GE HealthCare**", result)
+        self.assertNotIn("Software Engineering Intern", result)
+        self.assertNotIn("GE HealthCare", result)
         self.assertEqual(result.count("## **CAREER OBJECTIVE**"), 1)
+        self.assertIn("Employment-ready", result)
 
     def test_career_objective_contains_employment_ready_punch(self):
         markdown = """# Madhav Jayam
@@ -148,8 +152,9 @@ PES University
 """
         result = ensure_career_objective_target(markdown, "Stripe", "Software Engineer")
         self.assertIn("Employment-ready", result)
-        self.assertIn("**Software Engineer**", result)
-        self.assertIn("**Stripe**", result)
+        self.assertNotIn("Stripe", result)
+        self.assertNotIn("**Software Engineer**", result)
+        self.assertNotIn("position at", result)
         self.assertIn("resilient, production-grade software", result)
 
 
