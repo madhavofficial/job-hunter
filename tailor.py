@@ -123,6 +123,14 @@ def scrub_unverified_metrics(markdown: str, profile_id: str = "") -> str:
             flags=re.IGNORECASE
         )
 
+    # Strip hallucinated token reduction percentages (e.g. cutting LLM token usage by ~45%)
+    markdown = re.sub(
+        r"(?:cutting|slashing|reducing)\s+(?:LLM\s+)?token\s+(?:usage|consumption)\s+by\s+(?:≈|~|approximately)?\s*\d{1,2}\s*%",
+        "significantly minimizing operational token overhead and inference latency",
+        markdown,
+        flags=re.IGNORECASE
+    )
+
     # 1. Strip 'robotics' and fabricated non-CS hardware/FPGA terms from Career Objective
     def _clean_obj(m):
         block = m.group(0)
@@ -1045,7 +1053,10 @@ def tailor_materials(job_id: str, profile_name: str = "madhav"):
    - EDUCATION: MUST always include '## Education' with PES University, B.Tech in Computer Science and Engineering (Expected May 2027) and relevant coursework.
    - CURATED PROJECT SELECTION: Select EXACTLY the TOP 3 BEST-FITTING projects for this role from the candidate's verified pool (EXACTLY 2 concise, punchy bullets per project). DO NOT include more than 3 projects under any circumstances.
    - CONDENSED PROFESSIONAL EXPERIENCE:
-     * Condense Qualcomm into EXACTLY 3 high-impact bullets focusing on autonomous agents, Claude Code Skills, MCP integrations, Jira/Splunk automation, and Pydantic guardrails.
+     * Condense Qualcomm into EXACTLY 3 high-impact bullets balancing business objectives and technical mechanisms (DO NOT include percentage metrics for token reduction like 45% or 30%):
+       - Bullet 1 (Triage Automation & Velocity): Architected an autonomous Jira triage & resolution agent integrating Claude Code Skills via Model Context Protocol (MCP); analyzed 8,700+ historical tickets to map recurring workflow patterns, substantially accelerating cross-functional issue resolution.
+       - Bullet 2 (Cost & Latency Optimization): Engineered deterministic routing logic using keyword heuristics and attachment inspection to bypass expensive multi-turn LLM reasoning loops, significantly minimizing operational token overhead and request latency.
+       - Bullet 3 (Reliability & Execution Safety): Delivered a reusable library of 15+ MCP skills (Playwright browser automation, pre-validated Splunk log queries) hardened with Pydantic schema guardrails, achieving 100% structured-output compliance and eliminating manual intervention in routine triage.
      * Condense O.C. Tanner into EXACTLY 2 bullets (Kotlin accessibility Jira tickets, 10% to 70% automated test coverage across Scala/Android).
    - CONDENSED PUBLICATIONS:
      * In '## Publications', include the IEEE SPICES paper condensed into EXACTLY 2 high-impact bullets focusing on technical functionality and system architecture:
