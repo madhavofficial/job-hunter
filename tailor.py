@@ -737,23 +737,25 @@ def ensure_career_objective_target(markdown: str, company: str = "", title: str 
         lines[insert_at:insert_at] = ["## Career Objective", default_objective, ""]
         return "\n".join(lines) + ("\n" if markdown.endswith("\n") else "")
 
-    next_heading = len(lines)
+    next_boundary = len(lines)
     for index in range(objective_index + 1, len(lines)):
-        if re.match(r"^#{1,3}\s+", lines[index]):
-            next_heading = index
+        if re.match(r"^(?:#{1,3}\s+|[-*_]{2,}\s*$)", lines[index]):
+            next_boundary = index
             break
 
     company_clean = (" ".join((company or "").split())).strip()
     title_clean = (" ".join((title or "").split())).strip()
 
     valid_sentences = []
-    for idx in range(objective_index + 1, next_heading):
+    for idx in range(objective_index + 1, next_boundary):
         line = lines[idx].strip()
-        if not line:
+        if not line or re.match(r"^[-*_]{2,}\s*$", line):
             continue
         # Split line into individual sentences to cleanly drop targeting clauses without losing base attributes
         raw_sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", line) if s.strip()]
         for sent in raw_sentences:
+            if re.match(r"^[-*_]{2,}\.?$", sent):
+                continue
             # Drop targeting clauses
             if re.search(r"\btargeting\b", sent, re.I):
                 continue
@@ -767,8 +769,16 @@ def ensure_career_objective_target(markdown: str, company: str = "", title: str 
                 sent = re.sub(r"\*+" + re.escape(title_clean) + r"\*+", "Software Engineering", sent, flags=re.I)
                 sent = re.sub(re.escape(title_clean), "Software Engineering", sent, flags=re.I)
             sent = " ".join(sent.split()).strip()
-            if sent:
+            if sent and sent not in valid_sentences:
                 valid_sentences.append(sent)
+
+    # Clean up duplicate fragments like "Employment-ready Computer Science engineer"
+    # if a subsequent sentence already includes it
+    if len(valid_sentences) > 1:
+        first = valid_sentences[0].rstrip('.').strip().lower()
+        if first in ["employment-ready computer science engineer", "employment ready computer science engineer"]:
+            if "employment-ready" in valid_sentences[1].lower() or "employment ready" in valid_sentences[1].lower():
+                valid_sentences.pop(0)
 
     if not valid_sentences:
         valid_sentences = [default_objective]
@@ -813,13 +823,15 @@ def ensure_career_objective_target(markdown: str, company: str = "", title: str 
         s = re.sub(r"\s+([.,;:!?])", r"\1", s)
         s = re.sub(r"\.{2,}", ".", s)
         s = re.sub(r"\s{2,}", " ", s).strip()
+        if re.match(r"^[-*_]{2,}\.?$", s):
+            continue
         if s and not s.endswith(('.', '!', '?')):
             s += "."
-        if s:
+        if s and s not in final_body:
             final_body.append(s)
 
     combined_body = " ".join(final_body)
-    new_lines = lines[:objective_index + 1] + [combined_body, ""] + lines[next_heading:]
+    new_lines = lines[:objective_index + 1] + [combined_body, ""] + lines[next_boundary:]
     return "\n".join(new_lines) + ("\n" if markdown.endswith("\n") else "")
 
 

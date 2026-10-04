@@ -528,6 +528,18 @@ def markdown_to_latex(markdown_text: str) -> str:
                 # Extract date: "(May 2026 – Jul 2026)" after the bold
                 _date_m2 = re.search(r"\(([^)]+)\)", _after_bold)
                 _date2 = _date_m2.group(1).strip() if _date_m2 else _after_bold.strip("()\u2013\u2014- ").strip()
+
+                # If no date on same line, look ahead for date on next line (e.g. *May 2026 – Jul 2026*)
+                if not _date2:
+                    peek_idx = i
+                    while peek_idx < total and not lines[peek_idx].strip():
+                        peek_idx += 1
+                    if peek_idx < total and re.match(r"^\*[^*].*[^*]\*$", lines[peek_idx].strip()):
+                        _next_s = lines[peek_idx].strip()[1:-1].strip()
+                        if not any(kw in _next_s.lower() for kw in ["paper:", "github:", "doi:", "tech stack:"]):
+                            _date2 = _next_s
+                            i = peek_idx + 1
+
                 # Split title from company on em-dash, en-dash, or pipe
                 _title2, _org2 = _bold_content, ""
                 for _sep2 in [" \u2013 ", " \u2014 ", " \u2012 ", " - ", " | "]:
