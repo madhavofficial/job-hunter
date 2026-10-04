@@ -254,6 +254,9 @@ def enforce_one_page_budget(markdown: str, profile_id: str = "madhav", strict_mo
             current_sec = re.sub(r"[*_#]", "", line).strip().lower()
             current_item = None
             item_bullets = 0
+            if "selected projects" in current_sec:
+                line = "## Academic Projects"
+                current_sec = "academic projects"
             output.append(line)
             i += 1
             continue
@@ -384,6 +387,13 @@ def strip_robotic_bullet_labels(markdown: str) -> str:
                 line = f"{m.group(1)}{m.group(2).upper()}{m.group(3)}"
         output.append(line)
     return "\n".join(output) + ("\n" if markdown.endswith("\n") else "")
+
+
+def normalize_academic_projects(markdown: str) -> str:
+    """Normalize 'Selected Projects' heading to 'Academic Projects'."""
+    if not markdown:
+        return ""
+    return re.sub(r"^##\s*\*?\*?Selected\s+Projects\*?\*?\s*$", "## Academic Projects", markdown, flags=re.MULTILINE | re.IGNORECASE)
 
 
 def ensure_education(markdown: str, profile=None) -> str:
@@ -1017,7 +1027,7 @@ def tailor_materials(job_id: str, profile_name: str = "madhav"):
           CRITICAL: NEVER include 'Mini-UnionFS' on an AI, ML, Data, or Web/Application engineering resume! 'Mini-UnionFS' is a C/FUSE filesystem project that is completely irrelevant to AI/ML and is strictly reserved for Systems / OS / Kernel / C / C++ / Embedded systems roles.
         * For Systems / OS / C / C++ / Embedded / Linux / Filesystems / Networking / Wireless / Cellular roles -> STRONGLY PRIORITIZE 'Mini-UnionFS: Layered Union File System in C with FUSE' (GitHub: https://github.com/madhavofficial/mini-unionfs) paired with 'GLAS-Med: Evidence-Grounded Clinical Literature Synthesis' and 'Autonomous Job Discovery, Career Intelligence & Application Automation Engine' or 'Multi-Modal AI Protein Analysis & Pathogenicity Reasoning Platform'.
         * For Quality Engineering / SDET / Test Automation / QE / GenAI Testing roles -> STRONGLY PRIORITIZE 'Autonomous Job Discovery, Career Intelligence & Application Automation Engine' (GitHub: https://github.com/madhavofficial/job-hunter), 'Mini-UnionFS: Layered Union File System in C with FUSE' (GitHub: https://github.com/madhavofficial/mini-unionfs), and 'GLAS-Med: Evidence-Grounded Clinical Literature Synthesis' (GitHub: https://github.com/madhavofficial/evidence-grounded-clinical-literature-synthesis).
-        * CRITICAL ANTI-DUPLICATION RULE: 'GLAS-Med: Evidence-Grounded Clinical Literature Synthesis' and 'Multi-Agent Generative AI System for Scientific Literature Analysis' (IEEE SPICES) are the SAME research project. The IEEE SPICES paper belongs STRICTLY under '## Publications'. NEVER list 'Multi-Agent Generative AI System for Scientific Literature Analysis' under '## Selected Projects'! NEVER select both 'GLAS-Med' and 'Multi-Agent Generative AI System' as separate projects on the same resume.
+        * CRITICAL ANTI-DUPLICATION RULE: 'GLAS-Med: Evidence-Grounded Clinical Literature Synthesis' and 'Multi-Agent Generative AI System for Scientific Literature Analysis' (IEEE SPICES) are the SAME research project. The IEEE SPICES paper belongs STRICTLY under '## Publications'. NEVER list 'Multi-Agent Generative AI System for Scientific Literature Analysis' under '## Academic Projects'! NEVER select both 'GLAS-Med' and 'Multi-Agent Generative AI System' as separate projects on the same resume.
         * For DevOps / Cloud / Automation / Tooling roles -> prioritize 'Autonomous Job Discovery, Career Intelligence & Application Automation Engine' (GitHub: https://github.com/madhavofficial/job-hunter).
         * For Big Data / Data Engineering / Streaming / Kafka / Distributed Systems -> prioritize 'Distributed High-Throughput Stream & Image Processing Pipeline with Apache Kafka' (GitHub: https://github.com/varunnhn/153_Project3_BD) and 'Hourly Bike-Sharing Demand Forecasting & Time-Series Regression Pipeline' (GitHub: https://github.com/madhavofficial/Forecasting-Bike-Rental-Demand).
         * For Full-Stack / TypeScript / FinTech / Database roles -> prioritize 'Smart Market Watchlist & Real-Time Trading Terminal' (GitHub: https://github.com/madhavofficial/Ultimate-Trader-Dashboard-GitHub-Repository-Structure).
@@ -1106,7 +1116,7 @@ Instructions & Rules:
 5. FORMATTING & TYPOGRAPHY:
    - Heavily utilize markdown bolding (**bold**) for all key metrics, numbers, core technologies, and frameworks across every bullet point.
    - GITHUB REPOSITORY LINKS RULE:
-     * Under `## Selected Projects`, ONLY include a `*GitHub: <url>*` line beneath a project title IF that project has an explicit, verified GitHub repository URL in the candidate's Verified Project Portfolio below.
+     * Under `## Academic Projects`, ONLY include a `*GitHub: <url>*` line beneath a project title IF that project has an explicit, verified GitHub repository URL in the candidate's Verified Project Portfolio below.
      * NEVER invent, guess, or fabricate GitHub URLs (e.g. NEVER use /Portfolio or guess repo names). If a project does not have a verified repository or its repository is None, DO NOT include a `*GitHub: ...*` line for it at all.
      * When a verified repository exists, place it on the line immediately beneath the title:
        `### Project Name (Core Technologies)`
@@ -1225,6 +1235,7 @@ Please output the COMPLETE tailored resume in Markdown.
 
         if not getattr(profile, "include_certifications", False):
             tailored_resume = strip_certifications(tailored_resume)
+        tailored_resume = normalize_academic_projects(tailored_resume)
         tailored_resume = ensure_selected_project_github_links(tailored_resume, portfolio, profile=profile)
         tailored_resume = ensure_publication_links(tailored_resume)
         tailored_resume = ensure_career_objective_target(tailored_resume, company, title)

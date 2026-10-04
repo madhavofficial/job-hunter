@@ -66,7 +66,7 @@ class ResumeNamingAndFolderTests(unittest.TestCase):
         self.assertEqual(clean_company, "Hewlett_Packard_Enterprise")
 
     def test_selected_projects_receive_verified_github_links(self):
-        markdown = """## Selected Projects
+        markdown = """## Academic Projects
 
 ### CareerTime (Python, LangChain)
 - Built a career intelligence application.
@@ -88,7 +88,7 @@ class ResumeNamingAndFolderTests(unittest.TestCase):
         self.assertNotIn("Unmatched Project\n*GitHub:", result)
 
     def test_existing_project_link_is_not_duplicated(self):
-        markdown = """## Selected Projects
+        markdown = """## Academic Projects
 ### CareerTime
 *GitHub: https://github.com/madhavofficial/CareerTime*
 - Built a career intelligence application.
@@ -214,11 +214,11 @@ Computer Science undergraduate at PES University with a solid grounding in elect
         from profiles import MADHAV_PROFILE
         flagship_inst = MADHAV_PROFILE.flagship_instruction
         self.assertIn("CRITICAL ANTI-DUPLICATION RULE", flagship_inst)
-        self.assertIn("NEVER list 'Multi-Agent Generative AI System for Scientific Literature Analysis' under '## Selected Projects'", flagship_inst)
+        self.assertIn("NEVER list 'Multi-Agent Generative AI System for Scientific Literature Analysis' under '## Academic Projects'", flagship_inst)
 
         from tailor import scrub_unverified_metrics
         sample_md = """# Madhav Jayam
-## Selected Projects
+## Academic Projects
 ### GLAS-Med: Evidence-Grounded Clinical Literature Synthesis
 - Multi-agent micro-service ingesting 300-800 papers.
 

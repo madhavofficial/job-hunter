@@ -347,6 +347,8 @@ def markdown_to_latex(markdown_text: str) -> str:
         if line.startswith("## "):
             latex_parts.extend(close_lists())
             raw_sec = re.sub(r"[*#_]+", "", line[3:]).strip()
+            if raw_sec.lower() == "selected projects":
+                raw_sec = "Academic Projects"
             current_section = raw_sec.lower()
             latex_parts.append("")
             latex_parts.append(f"\\section{{{escape_latex(raw_sec)}}}")

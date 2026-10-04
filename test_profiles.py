@@ -40,7 +40,7 @@ class ProfileUnitTests(unittest.TestCase):
     def test_mahika_project_github_link_injection(self):
         p_mahika = profiles.get_profile("mahika")
         markdown = """# Mahika Neranjen
-## Selected Projects
+## Academic Projects
 ### Capstone Project: AI for Neurodegenerative Protein Analysis
 - High-recall biophysical reasoning pipeline.
 """
@@ -94,7 +94,7 @@ Worked here.
 
     def test_unverified_github_link_is_stripped_from_project_without_repo(self):
         p_mahika = profiles.get_profile("mahika")
-        md = """## Selected Projects
+        md = """## Academic Projects
 ### Proprietary Kernel Driver (C, Systems)
 *GitHub: https://github.com/Mahika6/Portfolio*
 - What it does: Experimental kernel driver without public repo.
@@ -109,7 +109,7 @@ Worked here.
 
     def test_mini_unionfs_github_link_is_verified(self):
         p_mahika = profiles.get_profile("mahika")
-        md = """## Selected Projects
+        md = """## Academic Projects
 ### Mini-UnionFS File System (C, FUSE)
 - What it does: Lightweight union file system in C.
 """
