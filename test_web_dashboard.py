@@ -374,6 +374,33 @@ class TestWebDashboard(unittest.TestCase):
             self.assertEqual(res["job_id"], "li-4471488562")
             self.assertEqual(res["resume_pdf_path"], "/tmp/r.pdf")
 
+    def test_custom_job_endpoint_pasted_text_without_url(self):
+        import json
+        handler = web_dashboard.DashboardRequestHandler.__new__(web_dashboard.DashboardRequestHandler)
+        handler.path = "/api/custom"
+        payload = json.dumps({
+            "url": None,
+            "text": "Role: Backend Engineer\nCompany: Acme Labs\nStack: Python, FastAPI",
+            "profile": "madhav"
+        }).encode("utf-8")
+        handler.headers = {"Content-Length": str(len(payload))}
+        handler.rfile = io.BytesIO(payload)
+        handler.send_response = MagicMock()
+        handler.send_header = MagicMock()
+        handler.end_headers = MagicMock()
+        handler.wfile = io.BytesIO()
+
+        with patch("custom_job.ingest_custom_job", return_value="custom-text-1234567890") as mock_ingest, \
+             patch.object(web_dashboard.tailor, "tailor_materials", return_value=("/tmp/r.md", "/tmp/r.pdf")) as mock_tailor:
+            handler.do_POST()
+            handler.send_response.assert_called_with(200)
+            mock_ingest.assert_called_once_with(None, custom_text="Role: Backend Engineer\nCompany: Acme Labs\nStack: Python, FastAPI")
+            mock_tailor.assert_called_once_with("custom-text-1234567890", profile_name="madhav")
+            res = json.loads(handler.wfile.getvalue().decode("utf-8"))
+            self.assertTrue(res["success"])
+            self.assertEqual(res["job_id"], "custom-text-1234567890")
+            self.assertEqual(res["resume_pdf_path"], "/tmp/r.pdf")
+
     def test_discovered_today_bucket(self):
         from datetime import datetime, timedelta
         conn = db.get_db_connection()

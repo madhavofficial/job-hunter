@@ -18,6 +18,49 @@ class TestCustomJob(unittest.TestCase):
         self.assertEqual(custom_job.extract_linkedin_id(url2), "4459114214")
         url3 = "https://example.com/careers/job-12345"
         self.assertIsNone(custom_job.extract_linkedin_id(url3))
+        self.assertIsNone(custom_job.extract_linkedin_id(None))
+        self.assertIsNone(custom_job.extract_linkedin_id(""))
+
+    def test_ingest_custom_job_pasted_text_without_url(self):
+        pasted_text = """
+        Company: Frontier Systems Lab
+        Title: Autonomous Systems Infrastructure Engineer
+        Location: Bengaluru, India
+        Requirements: Python, C++, Linux, Docker, Distributed Systems
+        Responsibilities: Build backend infrastructure for autonomous agent orchestration.
+        """
+        import hashlib
+        text_hash = hashlib.md5(pasted_text.strip().encode("utf-8", errors="ignore")).hexdigest()[:10]
+        expected_job_id = f"custom-text-{text_hash}"
+        expected_url = f"pasted://{text_hash}"
+
+        # Clean previous if any
+        conn = db.get_db_connection()
+        conn.execute("DELETE FROM jobs WHERE job_id = ? OR job_url = ?", (expected_job_id, expected_url))
+        conn.commit()
+        conn.close()
+
+        with patch.object(custom_job.matcher, "run_matcher") as run_matcher:
+            job_id = custom_job.ingest_custom_job(url=None, custom_text=pasted_text)
+            run_matcher.assert_called_once_with(job_ids=[job_id])
+
+        self.assertEqual(job_id, expected_job_id)
+        conn = db.get_db_connection()
+        row = conn.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+        conn.close()
+        self.assertIsNotNone(row)
+        self.assertEqual(row["job_url"], expected_url)
+        self.assertEqual(row["site"], "custom")
+        self.assertEqual(row["company"], "Frontier Systems Lab")
+        self.assertEqual(row["title"], "Autonomous Systems Infrastructure Engineer")
+
+        # Ingesting same pasted text again returns existing without duplicate
+        jid_second = custom_job.ingest_custom_job(url="", custom_text=pasted_text)
+        self.assertEqual(jid_second, job_id)
+
+    def test_ingest_custom_job_empty_inputs_returns_none(self):
+        self.assertIsNone(custom_job.ingest_custom_job(url=None, custom_text=None))
+        self.assertIsNone(custom_job.ingest_custom_job(url="", custom_text="   "))
 
     def test_ingest_custom_job_direct(self):
         custom_url = "https://careers.example.com/jobs/test-unique-unit-12345"

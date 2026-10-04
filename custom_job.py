@@ -32,9 +32,9 @@ USER_AGENTS = [
 ]
 
 
-def extract_linkedin_id(url: str) -> Optional[str]:
+def extract_linkedin_id(url: Optional[str]) -> Optional[str]:
     """Extract numeric job ID from a LinkedIn URL."""
-    if "linkedin.com" not in url:
+    if not url or "linkedin.com" not in url:
         return None
     match = re.search(r"/jobs/view/(\d+)", url) or re.search(r"currentJobId=(\d+)", url)
     return match.group(1) if match else None
@@ -137,6 +137,8 @@ Respond ONLY with a valid JSON object matching this exact schema:
     # Fallback heuristic if LLM unavailable
     guessed_title = page_title.replace("PDF Job: ", "").replace(".pdf", "").replace("_", " ").strip()[:60]
     guessed_company = "Custom Opportunity"
+    guessed_location = "India / Remote"
+    guessed_skills = "Software Engineering, Python, Backend"
     if " at " in guessed_title:
         parts = guessed_title.split(" at ")
         guessed_title = parts[0].strip()
@@ -146,12 +148,27 @@ Respond ONLY with a valid JSON object matching this exact schema:
         guessed_company = parts[0].strip()
         guessed_title = parts[1].strip()
 
+    for line in raw_text.splitlines()[:25]:
+        line_s = line.strip()
+        m_co = re.match(r"^(?:Company|Organization):\s*(.+)$", line_s, re.IGNORECASE)
+        if m_co:
+            guessed_company = m_co.group(1).strip()
+        m_ti = re.match(r"^(?:Title|Role|Position):\s*(.+)$", line_s, re.IGNORECASE)
+        if m_ti:
+            guessed_title = m_ti.group(1).strip()
+        m_loc = re.match(r"^(?:Location):\s*(.+)$", line_s, re.IGNORECASE)
+        if m_loc:
+            guessed_location = m_loc.group(1).strip()
+        m_req = re.match(r"^(?:Requirements|Skills|Tech Stack):\s*(.+)$", line_s, re.IGNORECASE)
+        if m_req:
+            guessed_skills = m_req.group(1).strip()
+
     return {
         "title": guessed_title or page_title[:60],
         "company": guessed_company,
-        "location": "India / Remote",
+        "location": guessed_location,
         "job_type": "Full-time",
-        "skills": "Software Engineering, Python, Backend",
+        "skills": guessed_skills,
         "description": raw_text[:3000],
     }
 
@@ -246,9 +263,15 @@ def ingest_pdf_job(
     return job_id, dict(row) if row else parsed
 
 
-def ingest_custom_job(url: str, custom_text: Optional[str] = None) -> Optional[str]:
-    """Ingests a custom job URL into jobs.db and returns its job_id."""
+def ingest_custom_job(url: Optional[str] = None, custom_text: Optional[str] = None) -> Optional[str]:
+    """Ingests a custom job URL or pasted text into jobs.db and returns its job_id."""
     db.init_db()
+
+    url = (url or "").strip()
+    custom_text = (custom_text or "").strip()
+
+    if not url and not custom_text:
+        return None
 
     if url and ((url.startswith("file://") and url.lower().endswith(".pdf")) or (os.path.isfile(url) and url.lower().endswith(".pdf"))):
         local_path = url.replace("file://", "")
@@ -259,23 +282,40 @@ def ingest_custom_job(url: str, custom_text: Optional[str] = None) -> Optional[s
 
     print(f"\n====================================================")
     print(f"📥 INGESTING CUSTOM JOB OPPORTUNITY")
-    print(f"Target URL: {url}")
+    if url:
+        print(f"Target URL: {url}")
+    else:
+        print(f"Target: Pasted Job Description ({len(custom_text)} chars)")
     print(f"====================================================")
+
+    lid = extract_linkedin_id(url) if url else None
+
+    # Determine deterministic candidate job_id
+    if lid:
+        candidate_job_id = f"li-{lid}"
+    elif url:
+        url_hash = hashlib.md5(url.encode("utf-8")).hexdigest()[:10]
+        candidate_job_id = f"custom-{url_hash}"
+    else:
+        text_hash = hashlib.md5(custom_text.encode("utf-8", errors="ignore")).hexdigest()[:10]
+        candidate_job_id = f"custom-text-{text_hash}"
 
     # 1. Check if already in DB
     conn = db.get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT job_id, title, company FROM jobs WHERE job_url = ? OR job_url_direct = ?", (url, url))
+    if url:
+        cursor.execute(
+            "SELECT job_id, title, company FROM jobs WHERE job_url = ? OR job_url_direct = ? OR job_id = ?",
+            (url, url, candidate_job_id),
+        )
+    else:
+        pasted_ref = f"pasted://{text_hash}"
+        cursor.execute(
+            "SELECT job_id, title, company FROM jobs WHERE job_id = ? OR job_url = ? OR job_url_direct = ?",
+            (candidate_job_id, pasted_ref, pasted_ref),
+        )
     existing = cursor.fetchone()
     conn.close()
-
-    lid = extract_linkedin_id(url)
-    if not existing and lid:
-        conn = db.get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT job_id, title, company FROM jobs WHERE job_id = ?", (f"li-{lid}",))
-        existing = cursor.fetchone()
-        conn.close()
 
     if existing:
         print(f"✓ Found existing job in database: `{existing['job_id']}` ({existing['title']} at {existing['company']})")
@@ -286,9 +326,11 @@ def ingest_custom_job(url: str, custom_text: Optional[str] = None) -> Optional[s
         if custom_text:
             page_title = "Custom Pasted Job"
             raw_text = custom_text
-        else:
+        elif url:
             print("Step 1/3: Scraping job description from URL...")
             page_title, raw_text = fetch_webpage_content(url)
+        else:
+            page_title, raw_text = "Custom Pasted Job", ""
     except Exception as e:
         print(f"Warning: Failed to fetch webpage directly ({e}).", file=sys.stderr)
         if not custom_text:
@@ -303,25 +345,36 @@ def ingest_custom_job(url: str, custom_text: Optional[str] = None) -> Optional[s
             raw_text = "\n".join(lines).strip()
             page_title = "User Pasted Job"
 
+    if not raw_text:
+        print("Error: No job description text provided or scraped.", file=sys.stderr)
+        return None
+
     # 3. Parse with LLM
     print("Step 2/3: Analyzing role requirements & tech stack with AI...")
-    parsed = parse_job_with_llm(url, raw_text, page_title)
+    parsed = parse_job_with_llm(url or "Pasted Job Description", raw_text, page_title)
 
     title = parsed.get("title", "Software Engineer").strip()
-    company = parsed.get("company", "Custom Company").strip()
+    company = parsed.get("company", "Custom Opportunity").strip()
     location = parsed.get("location", "India / Remote").strip()
     description = parsed.get("description", raw_text).strip()
     skills = parsed.get("skills", "").strip()
     job_type = parsed.get("job_type", "Full-time").strip()
 
-    # Generate deterministic ID
+    # Generate deterministic ID & site & URL
     if lid:
         job_id = f"li-{lid}"
         site = "linkedin"
-    else:
+        job_url_val = url
+    elif url:
         url_hash = hashlib.md5(url.encode("utf-8")).hexdigest()[:10]
         job_id = f"custom-{url_hash}"
         site = "custom"
+        job_url_val = url
+    else:
+        text_hash = hashlib.md5(custom_text.encode("utf-8", errors="ignore")).hexdigest()[:10]
+        job_id = f"custom-text-{text_hash}"
+        site = "custom"
+        job_url_val = f"pasted://{text_hash}"
 
     print(f"-> Parsed: '{title}' at '{company}' ({location})")
 
@@ -334,7 +387,7 @@ def ingest_custom_job(url: str, custom_text: Optional[str] = None) -> Optional[s
         date_posted, job_type, description, is_remote, skills, experience_range,
         score, status, matching_notes, evidence, created_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, 0, ?, '', ?, ?, ?, '', datetime('now'))
-    """, (job_id, site, url, url, title, company, location, job_type, description, skills,
+    """, (job_id, site, job_url_val, job_url_val, title, company, location, job_type, description, skills,
            0, "scraped", "Custom Ingested Opportunity"))
     conn.commit()
     conn.close()

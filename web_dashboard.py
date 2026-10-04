@@ -828,7 +828,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             container.innerHTML = currentJobs.map((j) => {
                 const initials = getCompanyInitials(j.company);
                 const hasPdf = !!j.tailored_resume_pdf_path;
-                const targetUrl = j.job_url_direct || j.job_url || '#';
+                const rawTargetUrl = j.job_url_direct || j.job_url || '';
+                const isPasted = rawTargetUrl.startsWith('pasted://') || j.site === 'pasted_text';
+                const targetUrl = (isPasted || !rawTargetUrl) ? '#' : rawTargetUrl;
                 const portalUrl = j.status_portal_url || '';
                 const matchScore = j.score || 0;
                 const isExpanded = expandedJobs.has(j.job_id);
@@ -857,10 +859,17 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                                                 <span class="text-[10px] text-slate-500 font-mono"><i class="fa-regular fa-clock mr-1"></i>Applied ${escapeHtml(j.created_at ? j.created_at.split(' ')[0] : 'Recently')}</span>
                                             </div>
                                             <h3 class="text-base font-bold text-white leading-snug mt-0.5">
-                                                <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" class="hover:text-sky-400 transition inline-flex items-center gap-1.5">
-                                                    ${escapeHtml(j.title)}
-                                                    <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-slate-500"></i>
-                                                </a>
+                                                ${isPasted ? `
+                                                    <button onclick="openDetailsModal('${j.job_id}')" class="hover:text-sky-400 transition inline-flex items-center gap-1.5 text-left font-bold text-white" title="View pasted job details">
+                                                        ${escapeHtml(j.title)}
+                                                        <i class="fa-solid fa-file-lines text-[10px] text-slate-500"></i>
+                                                    </button>
+                                                ` : `
+                                                    <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" class="hover:text-sky-400 transition inline-flex items-center gap-1.5">
+                                                        ${escapeHtml(j.title)}
+                                                        <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-slate-500"></i>
+                                                    </a>
+                                                `}
                                             </h3>
                                         </div>
                                     </div>
@@ -915,10 +924,17 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                                             ${j.direct_apply ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Direct</span>' : ''}
                                         </div>
                                         <h3 class="text-base font-bold text-white leading-snug mt-0.5">
-                                            <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" class="hover:text-sky-400 transition inline-flex items-center gap-1.5" title="Open original job posting">
-                                                ${escapeHtml(j.title)}
-                                                <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-slate-500"></i>
-                                            </a>
+                                            ${isPasted ? `
+                                                <button onclick="openDetailsModal('${j.job_id}')" class="hover:text-sky-400 transition inline-flex items-center gap-1.5 text-left font-bold text-white" title="View pasted job details">
+                                                    ${escapeHtml(j.title)}
+                                                    <i class="fa-solid fa-file-lines text-[10px] text-slate-500"></i>
+                                                </button>
+                                            ` : `
+                                                <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" class="hover:text-sky-400 transition inline-flex items-center gap-1.5" title="Open original job posting">
+                                                    ${escapeHtml(j.title)}
+                                                    <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-slate-500"></i>
+                                                </a>
+                                            `}
                                         </h3>
                                     </div>
                                 </div>
@@ -1017,7 +1033,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             if (!modal || !headerInfo || !bodyContent || !footerActions) return;
 
             const initials = getCompanyInitials(j.company);
-            const targetUrl = j.job_url_direct || j.job_url || '#';
+            const rawTargetUrl = j.job_url_direct || j.job_url || '';
+            const isPasted = rawTargetUrl.startsWith('pasted://') || j.site === 'pasted_text';
+            const targetUrl = (isPasted || !rawTargetUrl) ? '#' : rawTargetUrl;
             const hasPdf = !!j.tailored_resume_pdf_path;
             const matchScore = j.score || 0;
             const scoreColor = (matchScore >= 88) ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-sky-500/10 text-sky-400 border-sky-500/20';
@@ -1080,9 +1098,11 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                     <button onclick="dismissJob('${j.job_id}'); closeDetailsModal();" class="px-3.5 py-2 rounded-xl bg-[#0c0e16] hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 border border-[#1f2438] text-xs font-medium transition flex items-center gap-1.5">
                         <i class="fa-solid fa-xmark"></i> Pass / Dismiss
                     </button>
-                    <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" class="px-3.5 py-2 rounded-xl bg-[#0c0e16] hover:bg-[#151926] text-slate-300 hover:text-white border border-[#1f2438] text-xs font-medium transition flex items-center gap-1.5">
-                        <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i> View Posting
-                    </a>
+                    ${!isPasted && targetUrl !== '#' ? `
+                        <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" class="px-3.5 py-2 rounded-xl bg-[#0c0e16] hover:bg-[#151926] text-slate-300 hover:text-white border border-[#1f2438] text-xs font-medium transition flex items-center gap-1.5">
+                            <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i> View Posting
+                        </a>
+                    ` : ''}
                 </div>
                 <div class="flex items-center gap-2">
                     ${hasPdf ? `
@@ -2056,6 +2076,19 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
                     self.end_headers()
                     self.wfile.write(json.dumps({"error": "Failed to parse and ingest job."}).encode("utf-8"))
                     return
+
+                # Ensure custom job is marked as shortlisted so it is visible in dashboard
+                try:
+                    conn = db.get_db_connection()
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT status FROM jobs WHERE job_id = ?", (job_id,))
+                    row = cursor.fetchone()
+                    if row and row["status"] not in ("shortlisted", "applied"):
+                        cursor.execute("UPDATE jobs SET status = 'shortlisted' WHERE job_id = ?", (job_id,))
+                        conn.commit()
+                    conn.close()
+                except Exception as de:
+                    print(f"Status update notice for {job_id}: {de}", file=sys.stderr)
 
                 # Automatically generate tailored resume materials for candidate profile
                 resume_path, resume_pdf_path = None, None
