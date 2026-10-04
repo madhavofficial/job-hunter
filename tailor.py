@@ -707,7 +707,7 @@ def ensure_career_objective_target(markdown: str, company: str, title: str) -> s
     if not company or not title:
         return markdown
 
-    target_line = f"Targeting the **{title}** position at **{company}**."
+    target_line = f"Targeting the **{title}** position at **{company}** to build resilient, production-grade software."
     lines = markdown.splitlines()
     objective_index = None
     for index, line in enumerate(lines):
@@ -726,7 +726,7 @@ def ensure_career_objective_target(markdown: str, company: str, title: str) -> s
 
     if objective_index is None:
         insert_at = 1 if lines and re.match(r"^#\s+", lines[0]) else 0
-        lines[insert_at:insert_at] = ["## Career Objective", target_line, ""]
+        lines[insert_at:insert_at] = ["## Career Objective", f"Employment-ready Computer Science engineer specializing in backend systems and autonomous AI workflows. {target_line}", ""]
         return "\n".join(lines) + ("\n" if markdown.endswith("\n") else "")
 
     next_heading = len(lines)
@@ -734,6 +734,23 @@ def ensure_career_objective_target(markdown: str, company: str, title: str) -> s
         if re.match(r"^#{1,3}\s+", lines[index]):
             next_heading = index
             break
+
+    # Ensure employment-ready phrasing in objective body text
+    body_indices = [idx for idx in range(objective_index + 1, next_heading) if lines[idx].strip()]
+    if body_indices:
+        full_obj = " ".join(lines[idx] for idx in body_indices).lower()
+        if "employment-ready" not in full_obj and "employment ready" not in full_obj:
+            first_idx = body_indices[0]
+            orig = lines[first_idx]
+            if re.search(r"\b(aspiring|motivated|passionate)\s+computer\s+science\s+(?:student|undergraduate|engineer)\b", orig, flags=re.I):
+                lines[first_idx] = re.sub(r"\b(aspiring|motivated|passionate)\s+computer\s+science\s+(?:student|undergraduate|engineer)\b", "Employment-ready Computer Science engineer", orig, count=1, flags=re.I)
+            elif re.search(r"\bcomputer\s+science\s+(?:student|undergraduate)\b", orig, flags=re.I):
+                lines[first_idx] = re.sub(r"\bcomputer\s+science\s+(?:student|undergraduate)\b", "Employment-ready Computer Science engineer", orig, count=1, flags=re.I)
+            elif re.search(r"\bsoftware\s+engineering\s+(?:student|undergraduate)\b", orig, flags=re.I):
+                lines[first_idx] = re.sub(r"\bsoftware\s+engineering\s+(?:student|undergraduate)\b", "Employment-ready software engineer", orig, count=1, flags=re.I)
+            elif not orig.strip().startswith("Targeting"):
+                lines[first_idx] = f"Employment-ready Computer Science engineer. {orig}"
+
     objective_text = "\n".join(lines[objective_index + 1:next_heading]).lower()
     if company.lower() in objective_text and title.lower() in objective_text:
         return "\n".join(lines) + ("\n" if markdown.endswith("\n") else "")
@@ -959,7 +976,7 @@ def tailor_materials(job_id: str, profile_name: str = "madhav"):
        - Bullet 1 (Retrieval & Ingestion): Built an evidence-grounded multi-agent system querying scholarly APIs (arXiv, PubMed, Semantic Scholar) and ingesting 300-800 papers per query with automated hallucination guardrails to eliminate false citations.
        - Bullet 2 (Graph Clustering & Ensemble): Applied semantic Louvain graph clustering to partition literature into thematic sub-corpora and coordinated a 5-agent ensemble to extract empirical claims, evaluate methodology, and cross-examine evidence to resolve contradictions across papers.
        - DO NOT output abstract or context-free percentage metrics (e.g. '92.7% accuracy / 89.8% F1')—focus strictly on what the system does, the multi-agent coordination, and the contradiction resolution mechanism.
-   - CAREER OBJECTIVE: Keep the Career Objective intact, tailored specifically to the target company and role.
+   - CAREER OBJECTIVE: Keep the Career Objective to a crisp, dynamic 2-sentence punch: "Employment-ready Computer Science engineer specializing in backend systems and autonomous AI workflows. Targeting the **{title}** position at **{company}** to build resilient, production-grade software." (Tailor the technical domain specialization concisely to the role).
    - ZERO HARDWARE / NON-CS FABRICATION: Candidate is strictly a Computer Science and Engineering (CSE) student. NEVER claim grounding in analog circuits, circuit design, high-speed board design, PCB, or FPGA development. For telecom or embedded postings, frame interest and experience strictly around Embedded Software, C/C++, Linux systems programming, device interfacing, and OS internals.
    - CERTIFICATIONS: Do NOT include any Certifications section under any circumstances.
    - ZERO FACT FABRICATION: Rely strictly on facts and verified metrics in the source material."""
@@ -975,7 +992,7 @@ def tailor_materials(job_id: str, profile_name: str = "madhav"):
      * In '## Leadership and Experience', include ONLY 1 concise bullet for Teaching Assistant (Python Programming Lab, PES University) and 1 concise bullet for Head of Social Media (TAMS).
      * DO NOT duplicate Teaching Assistant or TAMS under '## Professional Experience'. Under '## Professional Experience', include ONLY DRDO.
      * In '## Extracurricular Activities', include ONLY 1 line: 15+ years Classical Dance (Bharatanatyam).
-   - CAREER OBJECTIVE: Keep the Career Objective intact, tailored specifically to the target company and role.
+   - CAREER OBJECTIVE: Keep the Career Objective to a crisp, dynamic 2-sentence punch: "Employment-ready Computer Science engineer specializing in backend systems and autonomous AI workflows. Targeting the **{title}** position at **{company}** to build resilient, production-grade software." (Tailor the technical domain specialization concisely to the role).
    - ZERO HARDWARE / NON-CS FABRICATION: Candidate is strictly a Computer Science and Engineering (CSE) student. NEVER claim grounding in analog circuits, circuit design, high-speed board design, PCB, or FPGA development. For telecom or embedded postings, frame interest and experience strictly around Embedded Software, C/C++, Linux systems programming, device interfacing, and OS internals.
    - CERTIFICATIONS: Do NOT include any Certifications section under any circumstances.
    - ZERO FACT FABRICATION: Rely strictly on facts and verified metrics in the source material."""

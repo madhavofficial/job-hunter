@@ -137,6 +137,21 @@ PES University
         self.assertIn("**GE HealthCare**", result)
         self.assertEqual(result.count("## **CAREER OBJECTIVE**"), 1)
 
+    def test_career_objective_contains_employment_ready_punch(self):
+        markdown = """# Madhav Jayam
+
+## Career Objective
+Aspiring Computer Science student with experience in software engineering.
+
+## Education
+PES University
+"""
+        result = ensure_career_objective_target(markdown, "Stripe", "Software Engineer")
+        self.assertIn("Employment-ready", result)
+        self.assertIn("**Software Engineer**", result)
+        self.assertIn("**Stripe**", result)
+        self.assertIn("resilient, production-grade software", result)
+
 
     def test_enforce_one_page_budget_returns_valid_string(self):
         from tailor import enforce_one_page_budget

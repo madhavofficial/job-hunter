@@ -152,7 +152,7 @@ MADHAV_PROFILE = Profile(
     experience_instruction="""1. PROFESSIONAL EXPERIENCE (STRICT 1-PAGE BUDGET):
    - Qualcomm India Pvt. Ltd.: Condense into EXACTLY 3 high-impact bullets (autonomous Jira agent + Claude Code Skills + MCP, deterministic routing + pre-validated Splunk queries, Pydantic validation guardrails + 8,700 analyzed tickets). DO NOT output more than 3 bullets.
    - O.C. Tanner India Pvt. Ltd.: Condense into EXACTLY 2 bullets (50+ Jira tickets for Kotlin accessibility API, 10% to 70% automated test coverage across Scala/Android).
-   - DO NOT remove Career Objective — keep it targeted to the company and role.
+   - DO NOT remove Career Objective — keep it to a crisp, dynamic 2-sentence punch: "Employment-ready Computer Science engineer specializing in backend systems and autonomous AI workflows. Targeting the **[Position]** position at **[Company]** to build resilient, production-grade software."
    - ZERO HARDWARE / NON-CS FABRICATION: Candidate is strictly a Computer Science and Engineering (CSE) student. NEVER claim expertise, grounding, or career interest in hardware board design, electronic circuits, analogue/digital circuits, PCB layout, or FPGA development. For telecom or hardware companies, frame contributions strictly around low-level C/C++, Linux systems programming, embedded firmware, networking stacks, and data processing.""",
     flagship_instruction="""2.5. PUBLICATIONS & PROJECTS DEDUPLICATION (STRICT 1-PAGE BUDGET):
    - Under '## Publications', include the IEEE SPICES paper:
@@ -276,7 +276,7 @@ SECONDARY_PROFILE = Profile(
      * **Head of Social Media & Content | The Amateur Manager and Scientist (TAMS)**: Led content strategy and social media presence for PES University inter-college technical events, driving participant outreach and event engagement. (CRITICAL: Do NOT invent arbitrary percentages like "30% increase in registrations").
     - ZERO METRIC FABRICATION: Rely strictly on numbers present in the base resume. Never fabricate statistics, coverage percentages, or performance multipliers.
     - ZERO HARDWARE / NON-CS FABRICATION: The candidate is strictly a Computer Science and Engineering (CSE) undergraduate. NEVER claim grounding, training, or career interest in electronic circuits, digital/analogue circuit design, PCB layout, high-speed board design, VLSI, or FPGA development in the Career Objective, Technical Skills, or any bullet points. For hardware or telecom companies (such as Tejas Networks), position the candidate strictly as an Embedded Software, C/C++, Linux Systems Programming, and Firmware engineer.
-    - CAREER OBJECTIVE: In `## Career Objective`, NEVER mention or include 'robotics' or 'hardware engineering / FPGA'.
+    - CAREER OBJECTIVE: In `## Career Objective`, keep it to a crisp 2-sentence punch: "Employment-ready Computer Science engineer specializing in machine learning, full-stack systems, and data pipelines. Targeting the **[Position]** position at **[Company]** to build resilient, production-grade software."; NEVER mention or include 'robotics' or 'hardware engineering / FPGA'.
     - LONG FORMS RULE: Use long forms ONLY for these specific terms (do not expand other acronyms):
       * Use 'Database management systems' instead of 'DBMS'.
       * Use 'Generative AI and applications' instead of 'Generative AI' ONLY under Relevant Coursework.
