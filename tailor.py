@@ -1057,7 +1057,7 @@ def tailor_materials(job_id: str, profile_name: str = "madhav"):
        - Bullet 1 (Triage Automation & Velocity): Architected an autonomous Jira triage & resolution agent integrating Claude Code Skills via Model Context Protocol (MCP); analyzed 8,700+ historical tickets to map recurring workflow patterns, substantially accelerating cross-functional issue resolution.
        - Bullet 2 (Cost & Latency Optimization): Engineered deterministic routing logic using keyword heuristics and attachment inspection to bypass expensive multi-turn LLM reasoning loops, significantly minimizing operational token overhead and request latency.
        - Bullet 3 (Reliability & Execution Safety): Delivered a reusable library of 15+ MCP skills (Playwright browser automation, pre-validated Splunk log queries) hardened with Pydantic schema guardrails, achieving 100% structured-output compliance and eliminating manual intervention in routine triage.
-     * Condense O.C. Tanner into EXACTLY 2 bullets (Kotlin accessibility Jira tickets, 10% to 70% automated test coverage across Scala/Android).
+     * Condense O.C. Tanner into EXACTLY 2 bullets (remediating 50+ Android accessibility issues via Kotlin API to improve UI compliance and elevate Google Play Store ranking, 10% to 70% automated test coverage across Scala/Android).
    - CONDENSED PUBLICATIONS:
      * In '## Publications', include the IEEE SPICES paper condensed into EXACTLY 2 high-impact bullets focusing on technical functionality and system architecture:
        - Bullet 1 (Retrieval & Ingestion): Built an evidence-grounded multi-agent system querying scholarly APIs (arXiv, PubMed, Semantic Scholar) and ingesting 300-800 papers per query with automated hallucination guardrails to eliminate false citations.
