@@ -119,7 +119,7 @@ async function main() {
             location: location,
             job_url: `https://www.linkedin.com/jobs/view/${rawJobId}`,
             job_url_direct: `https://www.linkedin.com/jobs/view/${rawJobId}`,
-            site: "linkedin",
+            site: "gmail",
             date_posted: new Date().toISOString().split("T")[0]
           });
           emailJobsCount++;
@@ -147,7 +147,7 @@ async function main() {
             location: location,
             job_url: `https://www.linkedin.com/jobs/view/${rawJobId}`,
             job_url_direct: `https://www.linkedin.com/jobs/view/${rawJobId}`,
-            site: "linkedin",
+            site: "gmail",
             date_posted: new Date().toISOString().split("T")[0]
           });
           emailJobsCount++;

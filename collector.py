@@ -2,11 +2,13 @@ import sys
 import pandas as pd
 from jobspy import scrape_jobs
 import db
+from quality import LINKEDIN_EASY_APPLY_SITE
 
 import os
 import re
 import random
 import time
+from datetime import date
 
 DEFAULT_SEARCH_TERMS = [
     # Modern High-Signal AI & ML Roles
@@ -87,6 +89,37 @@ TARGET_TECH_COMPANIES = _DynamicTargetCompanies()
 # adapter, and Glassdoor currently returns 400s for this pipeline's query shape.
 SUPPORTED_INDIA_SITES = ("indeed", "linkedin", "naukri")
 
+# Unauthenticated LinkedIn guest search starts returning HTTP 429 after about
+# 10-15 queries. Each query is one page when results_wanted stays at 10; a
+# larger page size costs another request. The daily pass stays under that.
+EASY_APPLY_QUERY_BUDGET = 8
+EASY_APPLY_PAGE_SIZE = 10
+
+
+def linkedin_easy_apply_rows(jobs: pd.DataFrame) -> pd.DataFrame:
+    """Keep scraped LinkedIn rows and mark them as Easy Apply.
+
+    The caller must already have searched with LinkedIn's Easy Apply filter.
+    Indeed and other boards in the same frame are dropped.
+    """
+    if jobs is None or jobs.empty or "site" not in jobs.columns:
+        return jobs.iloc[0:0] if isinstance(jobs, pd.DataFrame) else pd.DataFrame()
+    kept = jobs[jobs["site"].astype(str).str.lower().eq("linkedin")].copy()
+    kept["site"] = LINKEDIN_EASY_APPLY_SITE
+    return kept
+
+
+def scrape_listings(easy_apply: bool = False, **kwargs) -> pd.DataFrame:
+    """Scrape one query. Easy Apply mode asks LinkedIn for f_AL jobs only."""
+    if easy_apply:
+        kwargs["site_name"] = ["linkedin"]
+        kwargs["easy_apply"] = True
+    jobs = scrape_jobs(**kwargs)
+    if easy_apply:
+        jobs = linkedin_easy_apply_rows(jobs)
+    return jobs
+
+
 def get_dynamic_search_terms():
     """Dynamically parses resume.md to build relevant search queries based on the candidate's active stack and career objective."""
     resume_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resume.md")
@@ -136,7 +169,77 @@ def get_dynamic_search_terms():
 
     return sorted(list(terms))
 
-def run_company_collector(companies=None, limit_per_company=15, hours_old=None, location="India"):
+
+def easy_apply_queries(day_index: int | None = None) -> list[tuple[str, bool]]:
+    """Return at most EASY_APPLY_QUERY_BUDGET (term, is_remote) searches.
+
+    The pool is the resume role list plus a few remote titles. Each run takes
+    a rotating slice so the week covers the pool without 70 searches in a day.
+    """
+    remote_terms = (
+        "Software Engineer",
+        "AI Engineer",
+        "Software Engineer Intern",
+    )
+    pool: list[tuple[str, bool]] = []
+    seen = set()
+    for term, is_remote in [(term, False) for term in get_dynamic_search_terms()] + [
+        (term, True) for term in remote_terms
+    ]:
+        key = (term.lower(), is_remote)
+        if key in seen:
+            continue
+        seen.add(key)
+        pool.append((term, is_remote))
+    if not pool:
+        return []
+    if day_index is None:
+        day_index = date.today().toordinal()
+    start = day_index % len(pool)
+    rotated = pool[start:] + pool[:start]
+    return rotated[:EASY_APPLY_QUERY_BUDGET]
+
+
+def run_easy_apply_collector(limit_per_query: int = 20, hours_old: int = 168) -> int:
+    """Collect a small LinkedIn Easy Apply slice. Does not walk companies or every remote title."""
+    db.init_db()
+    queries = easy_apply_queries()
+    page_size = min(limit_per_query, EASY_APPLY_PAGE_SIZE)
+    print(
+        f"LinkedIn Easy Apply: {len(queries)} searches, {page_size} results each "
+        f"(budget {EASY_APPLY_QUERY_BUDGET}, one page per search).",
+        flush=True,
+    )
+    total_new = 0
+    for index, (term, is_remote) in enumerate(queries):
+        label = "Remote" if is_remote else "India"
+        print(f"\n[{index + 1}/{len(queries)}] Easy Apply {label}: '{term}'...", flush=True)
+        try:
+            jobs = scrape_listings(
+                easy_apply=True,
+                site_name=["linkedin"],
+                search_term=term,
+                location="India",
+                is_remote=is_remote,
+                results_wanted=page_size,
+                hours_old=hours_old,
+                country_indeed="india",
+            )
+            if not jobs.empty:
+                added = db.add_jobs(jobs)
+                total_new += added
+                print(f"-> Found {len(jobs)} Easy Apply jobs. Inserted {added} new listings.", flush=True)
+            else:
+                print("-> No Easy Apply jobs for this query.", flush=True)
+        except Exception as exc:
+            print(f"-> Easy Apply query failed for '{term}': {exc}", file=sys.stderr)
+        if index < len(queries) - 1:
+            time.sleep(random.uniform(2.0, 4.0))
+    print(f"\nEasy Apply collection complete. New jobs stored: {total_new}", flush=True)
+    return total_new
+
+
+def run_company_collector(companies=None, limit_per_company=15, hours_old=None, location="India", easy_apply: bool = False):
     """Targeted collector for tier-1 tech giants, decacorns, and unicorns.
     
     Directly scrapes target company openings on LinkedIn and Indeed in India,
@@ -147,19 +250,22 @@ def run_company_collector(companies=None, limit_per_company=15, hours_old=None, 
     total_new = 0
     target_list = companies or get_dynamic_target_companies(limit=30)
     enable_indeed = os.getenv("ENABLE_INDEED_SCRAPER", "false").lower() in ("true", "1", "yes")
-    sites = ["linkedin", "indeed"] if enable_indeed else ["linkedin"]
+    sites = ["linkedin"] if easy_apply else (["linkedin", "indeed"] if enable_indeed else ["linkedin"])
     
     print(f"\n====================================================")
     print(f"🎯 INITIATING TARGETED TIER-1 COMPANY SCRAPER")
     print(f"Targeting {len(target_list)} dynamic tech companies in {location}")
     print(f"Sources: {', '.join(sites)} (Indeed spam filter: {'DISABLED' if enable_indeed else 'ACTIVE'})")
+    if easy_apply:
+        print("LinkedIn filter: Easy Apply only")
     print(f"====================================================")
     
     for idx, company in enumerate(target_list):
         print(f"\n[{idx+1}/{len(target_list)}] Searching company: '{company}' in {location}...")
         try:
             kwargs = {"hours_old": hours_old} if hours_old else {}
-            jobs = scrape_jobs(
+            jobs = scrape_listings(
+                easy_apply=easy_apply,
                 site_name=sites,
                 search_term=company,
                 location=location,
@@ -187,15 +293,19 @@ def run_company_collector(companies=None, limit_per_company=15, hours_old=None, 
     print(f"\nTargeted company collection complete. Total new jobs stored: {total_new}")
     return total_new
 
-def run_collector(limit_per_query=20, hours_old=168, include_companies=True):
+def run_collector(limit_per_query=20, hours_old=168, include_companies=True, easy_apply: bool = False):
+    if easy_apply:
+        return run_easy_apply_collector(limit_per_query, hours_old)
     db.init_db()
     total_new_jobs = 0
     
     print(f"Starting job collection for the last {hours_old} hours...")
     
     enable_indeed = os.getenv("ENABLE_INDEED_SCRAPER", "false").lower() in ("true", "1", "yes")
-    sites = ["linkedin", "indeed"] if enable_indeed else ["linkedin"]
+    sites = ["linkedin"] if easy_apply else (["linkedin", "indeed"] if enable_indeed else ["linkedin"])
     print(f"Using high-signal sources: {', '.join(sites)} (Indeed spam filter: {'DISABLED' if enable_indeed else 'ACTIVE'})")
+    if easy_apply:
+        print("LinkedIn filter: Easy Apply only. Other LinkedIn listings are not stored.")
 
     
     search_terms = get_dynamic_search_terms()
@@ -205,7 +315,8 @@ def run_collector(limit_per_query=20, hours_old=168, include_companies=True):
         print(f"\n[{index+1}/{len(search_terms)}] Searching for: '{term}' in India...")
         try:
             kwargs = {"hours_old": hours_old} if hours_old else {}
-            jobs = scrape_jobs(
+            jobs = scrape_listings(
+                easy_apply=easy_apply,
                 site_name=sites,
                 search_term=term,
                 location="India",
@@ -223,7 +334,7 @@ def run_collector(limit_per_query=20, hours_old=168, include_companies=True):
                 
         except Exception as e:
             print(f"-> Error searching for '{term}': {e}", file=sys.stderr)
-            if enable_indeed:
+            if enable_indeed and not easy_apply:
                 print("Retrying with Indeed only...")
                 try:
                     jobs = scrape_jobs(
@@ -246,23 +357,23 @@ def run_collector(limit_per_query=20, hours_old=168, include_companies=True):
 
     # Run dedicated targeted company collection for elite tech employers in India
     if include_companies:
-        company_jobs_count = run_company_collector(limit_per_company=10, hours_old=None)
+        company_jobs_count = run_company_collector(limit_per_company=10, hours_old=None, easy_apply=easy_apply)
         total_new_jobs += company_jobs_count
 
     # Run dedicated remote job collection
-    remote_jobs_count = run_remote_collector(limit_per_query=limit_per_query, hours_old=hours_old)
+    remote_jobs_count = run_remote_collector(limit_per_query=limit_per_query, hours_old=hours_old, easy_apply=easy_apply)
     total_new_jobs += remote_jobs_count
 
     print(f"\nJob collection complete. Total new unique jobs stored: {total_new_jobs} (including {remote_jobs_count} remote)")
     return total_new_jobs
 
 
-def run_remote_collector(limit_per_query=15, hours_old=72):
+def run_remote_collector(limit_per_query=15, hours_old=72, easy_apply: bool = False):
     """Dedicated scraper for remote and work-from-anywhere software opportunities."""
     db.init_db()
     total_remote = 0
     enable_indeed = os.getenv("ENABLE_INDEED_SCRAPER", "false").lower() in ("true", "1", "yes")
-    sites = ["linkedin", "indeed"] if enable_indeed else ["linkedin"]
+    sites = ["linkedin"] if easy_apply else (["linkedin", "indeed"] if enable_indeed else ["linkedin"])
 
 
     remote_queries = [
@@ -281,12 +392,15 @@ def run_remote_collector(limit_per_query=15, hours_old=72):
 
     print(f"\n====================================================")
     print(f"🌐 INITIATING DEDICATED REMOTE JOB SCRAPER")
+    if easy_apply:
+        print("LinkedIn filter: Easy Apply only")
     print(f"====================================================")
 
     for idx, term in enumerate(remote_queries):
         print(f"\nSearching Remote: '{term}'...")
         try:
-            jobs = scrape_jobs(
+            jobs = scrape_listings(
+                easy_apply=easy_apply,
                 site_name=sites,
                 search_term=term,
                 location="India",
@@ -312,18 +426,18 @@ def run_remote_collector(limit_per_query=15, hours_old=72):
 
 
 if __name__ == "__main__":
-    limit = 20
-    hours = 72
-    if "--remote" in sys.argv:
-        run_remote_collector(limit, hours)
+    easy_apply = "--easy-apply" in sys.argv
+    numbers = [int(arg) for arg in sys.argv[1:] if arg.isdigit()]
+    limit = numbers[0] if numbers else 20
+    hours = numbers[1] if len(numbers) > 1 else 72
+    if easy_apply:
+        run_easy_apply_collector(limit, hours)
+    elif "--remote" in sys.argv:
+        run_remote_collector(limit, hours, easy_apply=easy_apply)
     elif "--companies" in sys.argv:
-        run_company_collector(limit_per_company=15, hours_old=hours)
+        run_company_collector(limit_per_company=15, hours_old=hours, easy_apply=easy_apply)
     elif "--roles" in sys.argv:
-        run_collector(limit, hours, include_companies=False)
+        run_collector(limit, hours, include_companies=False, easy_apply=easy_apply)
     else:
-        if len(sys.argv) > 1 and sys.argv[1].isdigit():
-            limit = int(sys.argv[1])
-        if len(sys.argv) > 2 and sys.argv[2].isdigit():
-            hours = int(sys.argv[2])
-        run_collector(limit, hours, include_companies=True)
+        run_collector(limit, hours, include_companies=True, easy_apply=easy_apply)
 
