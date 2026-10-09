@@ -22,6 +22,7 @@ import pandas as pd
 
 import db
 from collector import get_dynamic_search_terms
+from screening import is_india_or_worldwide as _is_india_or_remote, is_open_application_title
 from search_provider import SearchProviderError, SearchRateLimitError, search_urls
 
 
@@ -42,7 +43,12 @@ CAREER_BOARD_DOMAINS = (
     "jobs.smartrecruiters.com",
     "jobs.jobvite.com",
     "apply.workable.com",
-    "monster.com",
+)
+
+# Search is only a board index. Bare "remote" pulls US-remote copies, so the
+# location clause stays India or explicitly worldwide.
+INDIA_DISCOVERY_LOCATIONS = (
+    '(India OR Bengaluru OR Bangalore OR Hyderabad OR Pune OR Mumbai OR Worldwide OR "Remote, Global")'
 )
 
 
@@ -114,6 +120,8 @@ def sync_external_board_feeds() -> int:
                 data = json.load(resp)
             urls = [item.get("url") for item in data if isinstance(item, dict) and item.get("url")]
             found = discover_board_refs(urls)
+            from enterprise_boards import enterprise_refs_from_urls
+            found.update(enterprise_refs_from_urls(urls))
             discovered.update(found)
         except Exception as exc:
             print(f"Notice: external feed sync notice for {feed_url}: {exc}", file=sys.stderr)
@@ -148,6 +156,8 @@ def is_target_engineering_title(title: str) -> bool:
     if not title or not isinstance(title, str):
         return False
     t = title.strip().lower()
+    if is_open_application_title(t):
+        return False
 
     # Reject non-CSE / non-technical domains
     NON_TECH_KEYWORDS = (
@@ -172,108 +182,199 @@ def is_target_engineering_title(title: str) -> bool:
     return True
 
 
-def _is_india_or_remote(location: str, is_remote: bool = False) -> bool:
-
-    loc = (location or "").lower()
-    # Check if explicitly in India or Indian cities/states/regions
-    india_pattern = (
-        r"\bindia\b|bengaluru|bangalore|hyderabad|pune|mumbai|delhi|noida|gurugram|gurgaon|"
-        r"chennai|kolkata|ahmedabad|kochi|kerala|karnataka|tamil nadu|maharashtra|telangana|"
-        r"gujarat|chandigarh|jaipur|indore|bhopal|coimbatore|trivandrum|thiruvananthapuram"
-    )
-    if re.search(india_pattern, loc):
-        return True
-
-    if is_remote or "remote" in loc:
-        # Check if explicitly non-India remote (e.g. US, EMEA, AMER, etc.)
-        non_india_regions = (
-            r"\b(?:united states|u\.s\.a?\.?|usa|san francisco|new york|nyc|seattle|austin|"
-            r"california|los angeles|chicago|london|berlin|paris|tokyo|toronto|canada|uk|"
-            r"united kingdom|australia|sydney|singapore|germany|france|amer|emea|latam|belgrade)\b"
-        )
-        if re.search(non_india_regions, loc) and not re.search(r"\b(?:global|worldwide|anywhere|india)\b", loc):
-            return False
-        return True
-    return False
+def company_name_from_listing(item: dict, board: str) -> str:
+    """Prefer the employer name published by the ATS over the board slug."""
+    if isinstance(item, dict):
+        for key in ("company_name", "companyName", "organizationName"):
+            value = item.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return str(board or "").replace("-", " ").replace("_", " ").title()
 
 
-def _greenhouse_jobs(board: str) -> list[dict]:
+def board_persist_fields(outcome: str, jobs_found: int, saw_india: bool, ats: str | None = None) -> tuple[int | None, int | None]:
+    """Decide which board columns to write after a scrape.
+
+    A transport error leaves job_count and is_active unchanged. A Greenhouse,
+    Lever, or Ashby board with no India or worldwide role is deactivated so it
+    stops consuming the batch. An enterprise tenant stays active: one day
+    without a junior India opening is not evidence the company never hires there.
+    A removed board (HTTP 404 or 410) is deactivated for every ATS.
+    """
+    if outcome == "ok" and jobs_found:
+        return jobs_found, 1
+    if outcome == "ok" and saw_india:
+        return 0, 1
+    if outcome == "ok":
+        from enterprise_boards import ENTERPRISE_ATS
+        if str(ats or "").lower() in ENTERPRISE_ATS:
+            return 0, 1
+        return 0, 0
+    if outcome == "gone":
+        return None, 0
+    return None, None
+
+
+# Every active enterprise board should be revisited about once a week.
+# A board without India roles now costs one request, so the daily share can
+# scale with the catalog. The cap bounds a run when the registry grows.
+ENTERPRISE_CYCLE_DAYS = 7
+ENTERPRISE_MIN_DAILY = 8
+ENTERPRISE_MAX_DAILY = 300
+
+
+def enterprise_daily_limit(active_boards: int) -> int:
+    if active_boards <= 0:
+        return 0
+    share = -(-active_boards // ENTERPRISE_CYCLE_DAYS)
+    return max(ENTERPRISE_MIN_DAILY, min(ENTERPRISE_MAX_DAILY, share))
+
+
+def _join_location_parts(parts: list[str]) -> str:
+    seen = []
+    for part in parts:
+        text = str(part or "").strip()
+        if text and text not in seen:
+            seen.append(text)
+    return "; ".join(seen)
+
+
+def _greenhouse_location(item: dict) -> str:
+    parts = []
+    name = ((item.get("location") or {}).get("name") or "").strip()
+    if name:
+        parts.append(name)
+    for office in item.get("offices") or []:
+        if isinstance(office, dict):
+            office_name = str(office.get("name") or "").strip()
+            if office_name:
+                parts.append(office_name)
+    return _join_location_parts(parts)
+
+
+def _lever_location(item: dict) -> str:
+    categories = item.get("categories") or {}
+    parts = []
+    location = categories.get("location")
+    if isinstance(location, str) and location.strip():
+        parts.append(location.strip())
+    all_locations = categories.get("allLocations") or categories.get("locations") or []
+    if isinstance(all_locations, str):
+        all_locations = [all_locations]
+    if isinstance(all_locations, list):
+        parts.extend(str(value).strip() for value in all_locations if str(value or "").strip())
+    country = str(item.get("country") or "").strip()
+    if country:
+        parts.append(country)
+    return _join_location_parts(parts)
+
+
+def _ashby_location(item: dict) -> str:
+    parts = []
+    primary = str(item.get("location") or "").strip()
+    if primary:
+        parts.append(primary)
+    address = item.get("address") or {}
+    postal = address.get("postalAddress") if isinstance(address, dict) else {}
+    if isinstance(postal, dict):
+        for key in ("addressLocality", "addressRegion", "addressCountry"):
+            value = str(postal.get(key) or "").strip()
+            if value:
+                parts.append(value)
+    for secondary in item.get("secondaryLocations") or []:
+        if isinstance(secondary, dict):
+            value = str(secondary.get("location") or "").strip()
+        else:
+            value = str(secondary or "").strip()
+        if value:
+            parts.append(value)
+    return _join_location_parts(parts)
+
+
+def _accept_role(title: str, location: str, is_remote: bool, record: dict, jobs: list[dict], saw_india: bool) -> bool:
+    if not _is_india_or_remote(location, is_remote):
+        return saw_india
+    if is_target_engineering_title(title):
+        jobs.append(record)
+    return True
+
+
+def _greenhouse_jobs(board: str) -> tuple[list[dict], bool]:
     payload = _fetch_json(f"https://boards-api.greenhouse.io/v1/boards/{board}/jobs?content=true")
     jobs = []
+    saw_india = False
     for item in payload.get("jobs", []):
         title = item.get("title", "")
-        if not is_target_engineering_title(title):
-            continue
-        location = (item.get("location") or {}).get("name", "")
+        location = _greenhouse_location(item)
         is_remote = "remote" in location.lower()
-        if not _is_india_or_remote(location, is_remote):
-            continue
-        jobs.append({
+        record = {
             "id": f"gh-{item['id']}", "site": "ats:greenhouse", "title": title,
-            "company": board.replace("-", " ").title(), "location": location,
+            "company": company_name_from_listing(item, board), "location": location,
             "job_url": item.get("absolute_url", ""), "job_url_direct": item.get("absolute_url", ""),
             "date_posted": _date_value(item.get("updated_at")),
             "description": html_to_text(item.get("content")), "is_remote": is_remote,
             "skills": "", "experience_range": "",
-        })
-    return jobs
+        }
+        saw_india = _accept_role(title, location, is_remote, record, jobs, saw_india)
+    return jobs, saw_india
 
 
-def _lever_jobs(board: str) -> list[dict]:
+def _lever_jobs(board: str) -> tuple[list[dict], bool]:
     payload = _fetch_json(f"https://api.lever.co/v0/postings/{board}?mode=json")
     jobs = []
+    saw_india = False
     for item in payload if isinstance(payload, list) else []:
         title = item.get("text", "")
-        if not is_target_engineering_title(title):
-            continue
-        categories = item.get("categories") or {}
-        locations = categories.get("locations") or []
-        location = "; ".join(locations) if isinstance(locations, list) else str(locations)
+        location = _lever_location(item)
         is_remote = "remote" in location.lower() or "remote" in str(item.get("workplaceType", "")).lower()
-        if not _is_india_or_remote(location, is_remote):
-            continue
-        jobs.append({
+        record = {
             "id": f"lever-{item.get('id')}", "site": "ats:lever", "title": title,
-            "company": board.replace("-", " ").title(), "location": location,
+            "company": company_name_from_listing(item, board), "location": location,
             "job_url": item.get("hostedUrl", ""), "job_url_direct": item.get("applyUrl") or item.get("hostedUrl", ""),
             "date_posted": _date_value(item.get("createdAt")),
             "description": item.get("descriptionPlain") or html_to_text(item.get("description")),
             "is_remote": is_remote, "skills": "", "experience_range": "",
-        })
-    return jobs
+        }
+        saw_india = _accept_role(title, location, is_remote, record, jobs, saw_india)
+    return jobs, saw_india
 
 
-def _ashby_jobs(board: str) -> list[dict]:
+def _ashby_jobs(board: str) -> tuple[list[dict], bool]:
     payload = _fetch_json(f"https://api.ashbyhq.com/posting-api/job-board/{board}")
     jobs = []
+    saw_india = False
     for item in payload.get("jobs", []) if isinstance(payload, dict) else []:
         title = item.get("title", "")
-        if not is_target_engineering_title(title):
-            continue
-        locations = [item.get("location", "")] + [x.get("location", "") for x in item.get("secondaryLocations", [])]
-        location = "; ".join(filter(None, locations))
+        location = _ashby_location(item)
         is_remote = bool(item.get("isRemote")) or "remote" in location.lower()
-        if not _is_india_or_remote(location, is_remote):
-            continue
-        jobs.append({
+        record = {
             "id": f"ashby-{item.get('id')}", "site": "ats:ashby", "title": title,
-            "company": board.replace("-", " ").title(), "location": location,
+            "company": company_name_from_listing(item, board), "location": location,
             "job_url": item.get("jobUrl", ""), "job_url_direct": item.get("applyUrl") or item.get("jobUrl", ""),
             "date_posted": _date_value(item.get("publishedAt") or item.get("updatedAt")),
-            "description": html_to_text(item.get("descriptionHtml")) or item.get("description", ""),
+            "description": html_to_text(item.get("descriptionHtml")) or item.get("descriptionPlain") or item.get("description", ""),
             "is_remote": is_remote, "skills": "", "experience_range": "",
-        })
-    return jobs
+        }
+        saw_india = _accept_role(title, location, is_remote, record, jobs, saw_india)
+    return jobs, saw_india
 
 
-def fetch_board_jobs(ats: str, board: str) -> list[dict]:
+def fetch_board_observation(ats: str, board: str) -> tuple[list[dict], bool]:
     if ats == "greenhouse":
         return _greenhouse_jobs(board)
     if ats == "lever":
         return _lever_jobs(board)
     if ats == "ashby":
         return _ashby_jobs(board)
+    from enterprise_boards import ENTERPRISE_ATS, fetch_enterprise_board
+    if ats in ENTERPRISE_ATS:
+        return fetch_enterprise_board(ats, board)
     raise ValueError(f"Unsupported ATS: {ats}")
+
+
+def fetch_board_jobs(ats: str, board: str) -> list[dict]:
+    jobs, _saw_india = fetch_board_observation(ats, board)
+    return jobs
 
 
 def _career_listing_from_url(url: str, domain: str) -> dict | None:
@@ -354,12 +455,14 @@ def _career_listing_from_url(url: str, domain: str) -> dict | None:
         return None
     if not is_target_engineering_title(title):
         return None
+    if not _is_india_or_remote(location, "remote" in location.lower()):
+        return None
     return {
         "id": f"career-{hashlib.sha1(url.encode()).hexdigest()[:16]}",
         "site": f"career:{domain}",
         "title": title,
         "company": company,
-        "location": location or "India / Remote",
+        "location": location,
         "job_url": url,
         "job_url_direct": url,
         "date_posted": posting.get("datePosted", ""),
@@ -378,7 +481,7 @@ def discover_ats_urls() -> list[str]:
         provider = os.getenv("ATS_SEARCH_PROVIDER", "auto")
         print(f"Using dynamic ATS search provider: {provider}")
         for domain in ATS_HOSTS:
-            query = f"site:{domain} ({keyword_query}) India OR remote"
+            query = f"site:{domain} ({keyword_query}) {INDIA_DISCOVERY_LOCATIONS}"
             try:
                 found = search_urls(query, count=15)
                 urls.extend(found)
@@ -397,6 +500,58 @@ def discover_ats_urls() -> list[str]:
     return urls
 
 
+# Search is only how an unknown tenant is learned. These hosts are the ones
+# parse_enterprise_ref can turn into a board. Jobvite and Workable stay out
+# because they have no native client yet.
+ENTERPRISE_DISCOVERY_DOMAINS = (
+    "myworkdayjobs.com",
+    "myworkdaysite.com",
+    "oraclecloud.com",
+    "jobs.smartrecruiters.com",
+    "taleo.net",
+    "successfactors.com",
+    "successfactors.eu",
+    "sapsf.com",
+    "sapsf.eu",
+)
+
+
+def discover_enterprise_boards() -> int:
+    """Register Workday, Oracle, SAP, SmartRecruiters, and Taleo tenants from search.
+
+    The search hit is discarded after the tenant URL is parsed. Job text comes
+    from the platform API on a later scrape of that board.
+    """
+    from enterprise_boards import enterprise_refs_from_urls
+
+    keyword_query = '"Software Engineer" OR "AI Engineer" OR "Machine Learning" OR "Backend Developer" OR "Applied AI" OR "SDE"'
+    added = 0
+    seen = set()
+    try:
+        provider = os.getenv("ATS_SEARCH_PROVIDER", "auto")
+        print(f"Using search to discover enterprise career tenants: {provider}", flush=True)
+        for domain in ENTERPRISE_DISCOVERY_DOMAINS:
+            query = f"site:{domain} ({keyword_query}) {INDIA_DISCOVERY_LOCATIONS}"
+            try:
+                found = search_urls(query, count=15)
+            except SearchRateLimitError as exc:
+                print(f"Warning: enterprise board discovery stopped after provider rate limit: {exc}", file=sys.stderr)
+                break
+            except SearchProviderError as exc:
+                print(f"Warning: enterprise board discovery failed for {domain}: {exc}", file=sys.stderr)
+                continue
+            refs = enterprise_refs_from_urls(found) - seen
+            seen.update(refs)
+            if refs:
+                added += db.add_ats_boards(list(refs), source="search_dork")
+            time.sleep(0.5)
+    except SearchProviderError as exc:
+        print(f"Warning: enterprise board discovery unavailable: {exc}", file=sys.stderr)
+    if added:
+        print(f"Registered {added} enterprise boards from search URLs.", flush=True)
+    return added
+
+
 def discover_career_board_jobs(limit_per_domain: int = 50) -> pd.DataFrame:
     """Discover dynamic Workday/Oracle/other board listings via Google Jobs.
 
@@ -410,7 +565,7 @@ def discover_career_board_jobs(limit_per_domain: int = 50) -> pd.DataFrame:
         provider = os.getenv("ATS_SEARCH_PROVIDER", "auto")
         print(f"Using dynamic career-board search provider: {provider}")
         for domain in CAREER_BOARD_DOMAINS:
-            query = f"site:{domain} ({keyword_query}) India OR remote"
+            query = f"site:{domain} ({keyword_query}) {INDIA_DISCOVERY_LOCATIONS}"
             try:
                 urls = search_urls(query, count=min(limit_per_domain, 10))
                 listings = []
@@ -435,10 +590,48 @@ def discover_career_board_jobs(limit_per_domain: int = 50) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def run_ats_collector(batch_size: int = 200) -> int:
+def _scrape_registered_boards(boards: list[tuple[str, str]]) -> int:
     import concurrent.futures
     from urllib.error import HTTPError
 
+    total = 0
+
+    def _scrape_board(item: tuple[str, str]) -> tuple[str, str, str, list[dict], bool]:
+        ats, board = item
+        try:
+            jobs, saw_india = fetch_board_observation(ats, board)
+            return (ats, board, "ok", jobs, saw_india)
+        except HTTPError as e:
+            outcome = "gone" if e.code in (404, 410) else "error"
+            return (ats, board, outcome, [], False)
+        except Exception:
+            return (ats, board, "error", [], False)
+
+    deactivated = 0
+    errors = 0
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        futures = {executor.submit(_scrape_board, b): b for b in boards}
+        for future in concurrent.futures.as_completed(futures):
+            ats, board, outcome, jobs, saw_india = future.result()
+            added = 0
+            if jobs:
+                added = db.add_jobs(pd.DataFrame(jobs))
+                total += added
+                print(f"✓ ATS {ats}/{board}: {len(jobs)} India jobs ({added} new).", flush=True)
+            job_count, is_active = board_persist_fields(outcome, len(jobs), saw_india, ats)
+            if is_active == 0 and outcome == "ok":
+                deactivated += 1
+            elif outcome == "error":
+                errors += 1
+            db.update_ats_board_scraped(ats, board, job_count=job_count, is_active=is_active)
+    print(
+        f"Board sweep: {len(boards)} checked, {deactivated} deactivated with no India roles, {errors} temporary errors.",
+        flush=True,
+    )
+    return total
+
+
+def run_ats_collector(batch_size: int = 200) -> int:
     db.init_db()
     total = 0
 
@@ -449,51 +642,39 @@ def run_ats_collector(batch_size: int = 200) -> int:
     # 1. Dynamically sync board registries from live engineering feeds (zero hardcoding)
     print("Priority 1: Syncing tech company ATS boards from dynamic community feeds...", flush=True)
     sync_external_board_feeds()
+    from enterprise_boards import ENTERPRISE_ATS, seed_enterprise_boards_from_jobs
+    restored = db.reactivate_enterprise_boards(ENTERPRISE_ATS)
+    if restored:
+        print(f"Restored {restored} enterprise boards that an empty India sweep had turned off.", flush=True)
+    seeded = seed_enterprise_boards_from_jobs()
+    print(f"Registered {seeded} enterprise career boards from stored listings.", flush=True)
+    try:
+        discover_enterprise_boards()
+    except Exception as exc:
+        print(f"Notice: enterprise board search skipped: {exc}", file=sys.stderr)
 
-    # 2. Retrieve registered active boards from persistent cache and scrape concurrently
+    # 2. Scrape enterprise boards on their own rotation so they are not stuck
+    # behind the Greenhouse/Lever/Ashby backlog.
+    enterprise_boards = []
+    for ats_name in ENTERPRISE_ATS:
+        limit = enterprise_daily_limit(db.count_registered_ats_boards(ats_name))
+        if limit:
+            enterprise_boards.extend(db.get_registered_ats_boards(active_only=True, limit=limit, ats=ats_name))
+    if enterprise_boards:
+        print(f"Priority 2: Scraping {len(enterprise_boards)} Workday/SmartRecruiters/Oracle/SAP/Taleo boards...", flush=True)
+        total += _scrape_registered_boards(enterprise_boards)
+
+    # 3. Retrieve registered active boards from persistent cache and scrape concurrently
     active_boards = db.get_registered_ats_boards(active_only=True, limit=batch_size)
-    print(f"Priority 2: Concurrently scraping {len(active_boards)} registered ATS boards...", flush=True)
+    print(f"Priority 3: Concurrently scraping {len(active_boards)} registered ATS boards...", flush=True)
+    total += _scrape_registered_boards(active_boards)
 
-    def _scrape_board(item: tuple[str, str]) -> tuple[str, str, int, list[dict]]:
-        ats, board = item
-        try:
-            jobs = fetch_board_jobs(ats, board)
-            return (ats, board, 1, jobs)
-        except HTTPError as e:
-            is_active = 0 if e.code in (404, 410) else 1
-            return (ats, board, is_active, [])
-        except Exception:
-            return (ats, board, 1, [])
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        futures = {executor.submit(_scrape_board, b): b for b in active_boards}
-        for future in concurrent.futures.as_completed(futures):
-            ats, board, is_active, jobs = future.result()
-            added = 0
-            if jobs:
-                added = db.add_jobs(pd.DataFrame(jobs))
-                total += added
-                print(f"✓ ATS {ats}/{board}: {len(jobs)} India/remote jobs ({added} new).", flush=True)
-            db.update_ats_board_scraped(ats, board, len(jobs), is_active=is_active)
-
-    # 3. Discover new India/Remote boards via live search index (incremental discovery)
-    print("Priority 3: Discovering fresh ATS boards via search index...", flush=True)
+    # 4. Discover new Greenhouse/Lever/Ashby boards via the search index.
+    print("Priority 4: Discovering fresh ATS boards via search index...", flush=True)
     try:
         discover_ats_urls()
     except Exception as exc:
         print(f"Notice: search ATS discovery skipped: {exc}", file=sys.stderr)
-
-    # 4. Discover Workday/Oracle career-board listings
-    print("Priority 4: Discovering Workday/Oracle and enterprise career-board listings...", flush=True)
-    try:
-        career_jobs = discover_career_board_jobs()
-        if not career_jobs.empty:
-            added = db.add_jobs(career_jobs)
-            total += added
-            print(f"Dynamic career boards: {len(career_jobs)} indexed jobs, {added} new.", flush=True)
-    except Exception as exc:
-        print(f"Notice: career board discovery skipped: {exc}", file=sys.stderr)
-
 
     print(f"\n✅ Dynamic ATS collection complete. New direct jobs stored: {total}\n")
     return total

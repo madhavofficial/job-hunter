@@ -415,7 +415,7 @@ def add_ats_boards(boards: list[tuple[str, str]], source: str = "discovered") ->
     for ats, board_slug in boards:
         ats_clean = str(ats or "").strip().lower()
         slug_clean = str(board_slug or "").strip().lower()
-        if not ats_clean or not slug_clean or len(slug_clean) > 80:
+        if not ats_clean or not slug_clean or len(slug_clean) > 160:
             continue
         try:
             cursor.execute("""
@@ -431,7 +431,7 @@ def add_ats_boards(boards: list[tuple[str, str]], source: str = "discovered") ->
     return added
 
 
-def get_registered_ats_boards(active_only: bool = True, limit: int | None = None) -> list[tuple[str, str]]:
+def get_registered_ats_boards(active_only: bool = True, limit: int | None = None, ats: str | None = None) -> list[tuple[str, str]]:
     """Retrieve registered ATS boards dynamically without hardcoding."""
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -449,9 +449,21 @@ def get_registered_ats_boards(active_only: bool = True, limit: int | None = None
     """)
     query = "SELECT ats, board_slug FROM ats_boards"
     params = []
+    filters = []
     if active_only:
-        query += " WHERE is_active = 1"
-    query += " ORDER BY job_count DESC, created_at ASC"
+        filters.append("is_active = 1")
+    if ats:
+        filters.append("ats = ?")
+        params.append(str(ats).lower())
+    if filters:
+        query += " WHERE " + " AND ".join(filters)
+    query += """
+    ORDER BY
+        CASE WHEN last_scraped IS NULL THEN 0 ELSE 1 END,
+        last_scraped ASC,
+        job_count DESC,
+        created_at ASC
+    """
     if limit:
         query += f" LIMIT {int(limit)}"
     cursor.execute(query, params)
@@ -460,17 +472,62 @@ def get_registered_ats_boards(active_only: bool = True, limit: int | None = None
     return [(row["ats"], row["board_slug"]) for row in rows]
 
 
-def update_ats_board_scraped(ats: str, board_slug: str, job_count: int, is_active: int = 1):
-    """Update board scrape statistics and health."""
+def count_registered_ats_boards(ats: str, active_only: bool = True) -> int:
+    conn = get_db_connection()
+    query = "SELECT COUNT(*) FROM ats_boards WHERE ats = ?"
+    if active_only:
+        query += " AND is_active = 1"
+    try:
+        count = conn.execute(query, (str(ats).lower(),)).fetchone()[0]
+    except sqlite3.OperationalError:
+        count = 0
+    conn.close()
+    return int(count or 0)
+
+
+def reactivate_enterprise_boards(ats_names: tuple[str, ...]) -> int:
+    """Put enterprise tenants back in the rotation.
+
+    An empty India sweep used to set is_active = 0. Those rows should be scraped
+    again. A later HTTP 404 still deactivates that one board.
+    """
+    names = tuple(str(name).lower() for name in ats_names if name)
+    if not names:
+        return 0
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("""
-    UPDATE ats_boards
-    SET last_scraped = datetime('now'),
-        job_count = ?,
-        is_active = ?
-    WHERE ats = ? AND board_slug = ?
-    """, (job_count, is_active, str(ats).lower(), str(board_slug).lower()))
+    placeholders = ", ".join("?" for _ in names)
+    cursor.execute(
+        f"UPDATE ats_boards SET is_active = 1 WHERE is_active = 0 AND ats IN ({placeholders})",
+        names,
+    )
+    count = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return count
+
+
+def update_ats_board_scraped(ats: str, board_slug: str, job_count: int | None = None, is_active: int | None = None):
+    """Record a scrape attempt.
+
+    None leaves that column unchanged, so a transport error does not wipe a
+    previous India-role count or deactivate a healthy board.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    assignments = ["last_scraped = datetime('now')"]
+    params: list = []
+    if job_count is not None:
+        assignments.append("job_count = ?")
+        params.append(int(job_count))
+    if is_active is not None:
+        assignments.append("is_active = ?")
+        params.append(int(is_active))
+    params.extend([str(ats).lower(), str(board_slug).lower()])
+    cursor.execute(
+        f"UPDATE ats_boards SET {', '.join(assignments)} WHERE ats = ? AND board_slug = ?",
+        params,
+    )
     conn.commit()
     conn.close()
 
