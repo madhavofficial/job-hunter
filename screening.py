@@ -13,6 +13,73 @@ from typing import Optional
 import company_classifier
 
 
+_INDIA_TEXT = re.compile(
+    r"\b(?:india|indian|bharat|bengaluru|bangalore|hyderabad|pune|mumbai|delhi|new delhi|"
+    r"noida|gurugram|gurgaon|chennai|kolkata|ahmedabad|kochi|kerala|karnataka|tamil nadu|"
+    r"maharashtra|telangana|gujarat|chandigarh|jaipur|indore|bhopal|coimbatore|"
+    r"trivandrum|thiruvananthapuram|ncr)\b",
+    re.I,
+)
+_INDIA_CODES = {"in", "ind"}
+_GLOBAL_TEXT = re.compile(r"\b(?:global|worldwide|anywhere)\b", re.I)
+_NON_INDIA_TEXT = re.compile(
+    r"\b(?:united states|u\.s\.a?\.?|usa|\bus\b|\bgb\b|san francisco|new york|nyc|seattle|austin|"
+    r"california|los angeles|chicago|boston|london|berlin|paris|tokyo|toronto|canada|\buk\b|"
+    r"united kingdom|australia|sydney|singapore|germany|france|amer|emea|latam|apac|"
+    r"belgrade|dubai|abu dhabi|\buae\b|vietnam|malaysia|hong kong|ireland|dublin|"
+    r"netherlands|amsterdam|poland|sweden|brazil|mexico|israel|taiwan|korea|japan|"
+    r"philippines|indonesia|thailand|spain|italy|portugal|romania|europe|"
+    r"north america|south america|united arab|indiana|indianapolis)\b",
+    re.I,
+)
+
+
+def is_open_application_title(title: str) -> bool:
+    """True for talent-pool forms that are not a specific role."""
+    text = str(title or "").lower()
+    return "general application" in text or "don't see a fit" in text or "do not see a fit" in text
+
+
+def is_india_or_worldwide(location: str, is_remote: bool = False) -> bool:
+    """Keep India roles and explicitly worldwide roles.
+
+    Bare "Remote", "Remote US", and "Remote - International" are rejected.
+    The Lever country code is the standalone segment "; IN". The US state
+    abbreviation ", IN" (Indiana) does not count. A remote flag does not
+    override a missing India or worldwide location.
+    """
+    del is_remote
+    loc = (location or "").strip().lower()
+    if not loc:
+        return False
+    if _INDIA_TEXT.search(loc):
+        return True
+    # Check outside-India text before the country code so "Brownsburg, IN; US"
+    # cannot pass on the letters IN.
+    if _NON_INDIA_TEXT.search(loc):
+        return False
+    segments = [part.strip() for part in loc.split(";") if part.strip()]
+    if any(part in _INDIA_CODES for part in segments):
+        return True
+    if _GLOBAL_TEXT.search(loc):
+        return True
+    return False
+
+
+def is_dashboard_listing(job: dict) -> bool:
+    """Shortlist rows are direct employer postings in India or an explicit worldwide role."""
+    from quality import INTENTIONAL_SITES, has_direct_employer_signal
+
+    if is_open_application_title(job.get("title")):
+        return False
+    if not has_direct_employer_signal(job):
+        return False
+    site = str(job.get("site") or "").lower()
+    if site in INTENTIONAL_SITES:
+        return True
+    return is_india_or_worldwide(str(job.get("location") or ""), bool(job.get("is_remote")))
+
+
 def classify_company_tier(company: str, conn: Optional[sqlite3.Connection] = None) -> str:
     category = company_classifier.get_company_category(company, conn=conn, allow_network=False)
     tier_map = {

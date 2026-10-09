@@ -45,6 +45,23 @@ AGGREGATOR_HOSTS = {
     "indeed.com",
     "naukri.com",
     "monster.com",
+    "glassdoor.com",
+    "ziprecruiter.com",
+}
+
+# Tuned Gmail job alerts. The URL is still LinkedIn, but the user chose the alert.
+GMAIL_ALERT_SITE = "gmail"
+
+# LinkedIn listings whose apply button stays on LinkedIn. Other LinkedIn copies stay out.
+LINKEDIN_EASY_APPLY_SITE = "linkedin_easy_apply"
+
+# User-supplied or placement rows stay visible even when the only URL is an aggregator.
+INTENTIONAL_SITES = {
+    "custom",
+    "pdf_upload",
+    "pesu_placement",
+    "notion",
+    "screenloop",
 }
 
 
@@ -77,10 +94,16 @@ def host_for(job: dict) -> str:
 
 
 def has_direct_employer_signal(job: dict) -> bool:
+    """True when the listing comes from an employer board or an intentional ingest.
+
+    LinkedIn, Indeed, and other aggregator copies are discovery-only. They stay
+    out of the shortlist unless the stored URL is the employer's own posting,
+    the row is a tuned Gmail alert, or the row is a LinkedIn Easy Apply job.
+    """
     site = str(job.get("site") or "").lower()
-    host = host_for(job)
-    if site.startswith("ats:"):
+    if site in INTENTIONAL_SITES or site in {GMAIL_ALERT_SITE, LINKEDIN_EASY_APPLY_SITE} or site.startswith("ats:") or site.startswith("career:"):
         return True
+    host = host_for(job)
     if host and not any(host == domain or host.endswith(f".{domain}") for domain in AGGREGATOR_HOSTS):
         return True
     return False
@@ -106,6 +129,12 @@ def assess_listing_quality(job: dict, company_tier: str, now: datetime | None = 
     description_score, description_state, description_reason = description_quality(job)
     company = canonical_company(job.get("company"))
     direct = has_direct_employer_signal(job)
+    site = str(job.get("site") or "").lower()
+    if site in INTENTIONAL_SITES:
+        eligible_market = True
+    else:
+        from screening import is_india_or_worldwide
+        eligible_market = is_india_or_worldwide(str(job.get("location") or ""), bool(job.get("is_remote")))
 
     if company_tier.startswith("Tier 1"):
         company_score = 100
@@ -169,6 +198,7 @@ def assess_listing_quality(job: dict, company_tier: str, now: datetime | None = 
         "irrelevant_title": irrelevant,
         "unknown_company": unknown_company,
         "direct_employer_signal": direct,
+        "eligible_market": eligible_market,
         "canonical_key": canonical_job_key(job),
         "reason": " ".join(reasons),
     }
@@ -228,9 +258,12 @@ def is_recommended_role(quality_passes: bool, company_tier: str, final_score: in
        Tier 3 (Staffing Agency / Unverified) is strictly excluded from Top Matches.
     3. The adjusted weighted match score is >= 80.
     4. The job description evidence is full/comprehensive (description_score >= 80, >= 700 chars).
+    5. The listing is a direct employer posting in India or an explicit worldwide role.
     """
     return bool(
         quality_passes
+        and quality.get("direct_employer_signal")
+        and quality.get("eligible_market")
         and not company_tier.startswith("Tier 3")
         and final_score >= 80
         and quality.get("description_score", 0) >= 80

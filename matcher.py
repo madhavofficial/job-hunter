@@ -5,7 +5,7 @@ import sys
 from groq import Groq
 import db
 import config
-from screening import classify_company_tier, deterministic_hard_filter
+from screening import classify_company_tier, deterministic_hard_filter, is_dashboard_listing
 from quality import assess_listing_quality, is_recommended_role, quality_gate, weighted_match_score
 
 def load_resume():
@@ -109,6 +109,13 @@ def run_matcher(job_ids=None):
     eligible = []
     prefiltered_count = 0
     for job in unprocessed:
+        if not is_dashboard_listing(job):
+            db.update_job_match(
+                job["job_id"], 0, "rejected", "",
+                "REJECTED: Listing is not a direct India or worldwide employer posting.",
+            )
+            prefiltered_count += 1
+            continue
         passes, reason = deterministic_hard_filter(job)
         if passes:
             eligible.append(job)

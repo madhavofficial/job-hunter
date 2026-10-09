@@ -162,6 +162,37 @@ class ListingQualityTests(unittest.TestCase):
         score, _ = weighted_match_score(90, quality)
         self.assertTrue(is_recommended_role(passes, tier2, score, quality))
 
+        # 8. Aggregator copies are not Top Matches, even for a known employer with a full description
+        linkedin_job = self.make_job(
+            company="Google",
+            site="linkedin",
+            job_url="https://www.linkedin.com/jobs/view/1",
+            job_url_direct="https://www.linkedin.com/jobs/view/1",
+        )
+        tier1 = classify_company_tier(linkedin_job["company"])
+        quality = assess_listing_quality(linkedin_job, tier1)
+        passes, _ = quality_gate(linkedin_job, tier1, quality)
+        score, _ = weighted_match_score(95, quality)
+        self.assertFalse(quality["direct_employer_signal"])
+        self.assertFalse(is_recommended_role(passes, tier1, score, quality))
+
+        easy_apply = self.make_job(
+            company="Qualys",
+            site="linkedin_easy_apply",
+            job_url="https://www.linkedin.com/jobs/view/2",
+            job_url_direct="https://www.linkedin.com/jobs/view/2",
+        )
+        quality = assess_listing_quality(easy_apply, classify_company_tier(easy_apply["company"]))
+        self.assertTrue(quality["direct_employer_signal"])
+        self.assertTrue(quality["eligible_market"])
+
+        us_remote = self.make_job(company="GitLab", location="Remote US", is_remote=True)
+        quality = assess_listing_quality(us_remote, classify_company_tier(us_remote["company"]))
+        passes, _ = quality_gate(us_remote, classify_company_tier(us_remote["company"]), quality)
+        score, _ = weighted_match_score(95, quality)
+        self.assertFalse(quality["eligible_market"])
+        self.assertFalse(is_recommended_role(passes, classify_company_tier(us_remote["company"]), score, quality))
+
 
 if __name__ == "__main__":
     unittest.main()

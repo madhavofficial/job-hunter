@@ -13,7 +13,7 @@ import os
 from datetime import datetime, timedelta
 
 import db
-from screening import classify_company_tier, is_job_truly_remote, deduplicate_multi_location_jobs
+from screening import classify_company_tier, deduplicate_multi_location_jobs, is_dashboard_listing, is_job_truly_remote
 from quality import assess_listing_quality, quality_gate, weighted_match_score
 
 
@@ -29,8 +29,8 @@ def generate_dashboard():
     archived_stale = auto_archive_stale_jobs(days=5)
 
     # 2. Retrieve active shortlisted jobs and deduplicate multi-location clones
-    all_shortlisted = deduplicate_multi_location_jobs(db.get_shortlisted_jobs())
-    shortlisted = all_shortlisted
+    direct_jobs = [job for job in db.get_shortlisted_jobs() if is_dashboard_listing(job)]
+    shortlisted = deduplicate_multi_location_jobs(direct_jobs)
     for job in shortlisted:
         tier = classify_company_tier(job["company"])
         job["tier"] = tier

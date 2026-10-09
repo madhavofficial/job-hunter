@@ -27,7 +27,7 @@ import db
 import tailor
 import profiles
 from notion_sync import derive_status_portal_url, map_platform
-from screening import classify_company_tier, is_job_truly_remote, deduplicate_multi_location_jobs
+from screening import classify_company_tier, deduplicate_multi_location_jobs, is_dashboard_listing, is_job_truly_remote
 from quality import assess_listing_quality, quality_gate, weighted_match_score
 
 PORT = 8765
@@ -165,7 +165,8 @@ def get_dashboard_data():
     WHERE status = 'shortlisted'
     ORDER BY score DESC, created_at DESC
     """)
-    all_shortlisted = deduplicate_multi_location_jobs([dict(r) for r in cursor.fetchall()])
+    direct_rows = [row for row in (dict(r) for r in cursor.fetchall()) if is_dashboard_listing(row)]
+    all_shortlisted = deduplicate_multi_location_jobs(direct_rows)
 
     # Query the applied jobs shown in the tracker
     cursor.execute("""
