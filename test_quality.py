@@ -38,14 +38,31 @@ class ListingQualityTests(unittest.TestCase):
         self.assertTrue(classify_company_tier("Coram AI").startswith("Tier 1"))
         self.assertTrue("Big Tech" in classify_company_tier("Teradata"))
 
-    def test_missing_description_enters_review_pool_with_capped_score(self):
-        job = self.make_job(description="")
-        tier = classify_company_tier(job["company"])
-        quality = assess_listing_quality(job, tier)
-        passes, reason = quality_gate(job, tier, quality)
+    def test_title_only_listing_is_not_scored(self):
+        for description in ("", "<p>Software Engineer, Bpm</p>"):
+            job = self.make_job(company="Point72", title="Software Engineer, Bpm", description=description)
+            tier = classify_company_tier(job["company"])
+            passes, reason = quality_gate(job, tier, assess_listing_quality(job, tier))
+            self.assertFalse(passes)
+            self.assertIn("no usable description", reason)
+
+        pasted = self.make_job(site="custom", description="")
+        tier = classify_company_tier(pasted["company"])
+        passes, reason = quality_gate(pasted, tier, assess_listing_quality(pasted, tier))
         self.assertTrue(passes, reason)
-        score, _ = weighted_match_score(95, quality)
-        self.assertLessEqual(score, 79)
+
+    def test_placeholder_intern_title_is_not_scored(self):
+        job = self.make_job(company="Viavi Solutions", title="Intern 8")
+        tier = classify_company_tier(job["company"])
+        passes, reason = quality_gate(job, tier, assess_listing_quality(job, tier))
+        self.assertFalse(passes)
+        self.assertIn("placeholder", reason)
+
+        for title in ("Software Engineer 2", "Software Engineering Intern", "Intern"):
+            job = self.make_job(title=title)
+            tier = classify_company_tier(job["company"])
+            passes, reason = quality_gate(job, tier, assess_listing_quality(job, tier))
+            self.assertTrue(passes, f"{title}: {reason}")
 
     def test_unknown_direct_ats_employer_enters_discovery_but_not_tier_one(self):
         job = self.make_job(company="Mystery Labs")
@@ -71,7 +88,10 @@ class ListingQualityTests(unittest.TestCase):
         self.assertLessEqual(score, 84)
 
     def test_generic_title_with_partial_description_enters_review_pool(self):
-        job = self.make_job(title="Software Engineer", description="Join our team. Freshers welcome.")
+        job = self.make_job(
+            title="Software Engineer",
+            description="Join our team building Python APIs and data services. Freshers welcome. " * 4,
+        )
         tier = classify_company_tier(job["company"])
         quality = assess_listing_quality(job, tier)
         passes, reason = quality_gate(job, tier, quality)

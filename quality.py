@@ -31,6 +31,9 @@ IRRELEVANT_TITLE_MARKERS = (
     "office it administrator",
 )
 
+# Interns have no levels; "Intern 8" is a requisition placeholder on some Workday boards.
+PLACEHOLDER_TITLE = re.compile(r"(?:intern|internship|trainee) \d+")
+
 TRUNCATION_MARKERS = (
     "description was truncated",
     "job description unavailable",
@@ -174,6 +177,8 @@ def assess_listing_quality(job: dict, company_tier: str, now: datetime | None = 
     evidence_score = min(100, role_evidence)
 
     generic_title = title in GENERIC_TITLES
+    placeholder_title = bool(PLACEHOLDER_TITLE.fullmatch(title))
+    thin_description = description_score < 65 and site not in INTENTIONAL_SITES
     from screening import is_open_application_title
     irrelevant = any(marker in title for marker in IRRELEVANT_TITLE_MARKERS) or is_open_application_title(job.get("title"))
     unknown_company = not company or company in {"none", "confidential", "company name", "custom opportunity"}
@@ -196,6 +201,8 @@ def assess_listing_quality(job: dict, company_tier: str, now: datetime | None = 
         "directness_score": directness_score,
         "description_state": description_state,
         "generic_title": generic_title,
+        "placeholder_title": placeholder_title,
+        "thin_description": thin_description,
         "irrelevant_title": irrelevant,
         "unknown_company": unknown_company,
         "direct_employer_signal": direct,
@@ -207,11 +214,14 @@ def assess_listing_quality(job: dict, company_tier: str, now: datetime | None = 
 
 def quality_gate(job: dict, company_tier: str, quality: dict | None = None) -> tuple[bool, str | None]:
     quality = quality or assess_listing_quality(job, company_tier)
-    # Keep plausible roles in the review pool even when evidence is weak.
     if quality["unknown_company"]:
         return False, "Employer identity is missing or anonymous."
     if quality["irrelevant_title"]:
         return False, "Role title is outside the target software/AI scope."
+    if quality.get("placeholder_title"):
+        return False, "Listing title is a placeholder, not a role name."
+    if quality.get("thin_description"):
+        return False, "Listing has no usable description; a title alone cannot be scored."
     if quality["evidence_score"] < 40:
         return False, "Listing does not provide enough explicit role or eligibility evidence."
     return True, None
