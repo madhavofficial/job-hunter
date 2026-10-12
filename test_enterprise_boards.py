@@ -2,7 +2,7 @@ import unittest
 
 from unittest.mock import patch
 
-from enterprise_boards import _workday_jobs, parse_enterprise_ref, sap_jobs_from_xml, workday_india_filter
+from enterprise_boards import _workday_jobs, parse_enterprise_ref, sap_jobs_from_xml, workday_brand, workday_india_filter
 
 
 class EnterpriseBoardTests(unittest.TestCase):
@@ -58,6 +58,25 @@ class EnterpriseBoardTests(unittest.TestCase):
         self.assertEqual([job["title"] for job in jobs], ["Software Engineer"])
         self.assertEqual(jobs[0]["location"], "India")
         self.assertIn("career_job_req_id=10", jobs[0]["job_url"])
+
+    def test_workday_legal_entity_maps_to_brand(self):
+        cases = [
+            ("8147 ASOL - Hyderabad 5 SEZ Company", "accenture.wd103.myworkdayjobs.com/accenturecareers", "Accenture"),
+            ("BR Financial Solutions India Pvt Ltd - hyd", "broadridge.wd5.myworkdayjobs.com/careers", "Broadridge"),
+            ("IN1 Cigna Health Solutions India Private Limited", "cigna.wd5.myworkdayjobs.com/cignacareers", "Cigna"),
+            ("Viavi Solutions India Pvt. Ltd.", "viavisolutions.wd1.myworkdayjobs.com/careers", "Viavi Solutions"),
+            ("630 F5 Networks India Private Limited", "ffive.wd5.myworkdayjobs.com/f5jobs", "F5"),
+            ("I00162 GE India Industrial Pvt Ltd", "geaerospace.wd5.myworkdayjobs.com/ge_externalsite", "GE"),
+            ("8750 Rio Tinto India Private Limited", "wd3.myworkdaysite.com/riotinto/riotinto_careers", "Rio Tinto"),
+            ("7152 Glencore Information Services Pvt Ltd", "glencorecorp.wd3.myworkdayjobs.com/external",
+             "Glencore Information Services Pvt Ltd"),
+            ("Cytiva India Pvt Ltd", "danaher.wd1.myworkdayjobs.com/danaherjobs", "Cytiva India Pvt Ltd"),
+            ("131 Morgan Stanley Advantage Svcs", "ms.wd5.myworkdayjobs.com/external", "Morgan Stanley Advantage Svcs"),
+            ("23andMe, Inc.", "23andme.wd5.myworkdayjobs.com/23", "23andMe"),
+            ("", "maersk.wd3.myworkdayjobs.com/maersk_careers", ""),
+        ]
+        for legal_name, slug, brand in cases:
+            self.assertEqual(workday_brand(legal_name, slug), brand, legal_name)
 
     def test_workday_india_filter_uses_one_location_facet(self):
         country = [

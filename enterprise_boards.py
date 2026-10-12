@@ -235,6 +235,65 @@ def workday_india_filter(facets: list) -> dict | None:
     return {param: [value_id for _count, value_id in matches]}
 
 
+# Workday's hiringOrganization is the local legal entity, often with an internal
+# code: "8147 ASOL - Hyderabad 5 SEZ Company" on accenture.wd103..., "IN1 Cigna
+# Health Solutions India Private Limited", "ESA- Jones Lang LaSalle ...".
+_WORKDAY_ENTITY_CODE = re.compile(r"(?:[A-Za-z]{0,3}\d{2,}\b|[A-Z]{2,4}-)\s*-?\s*")
+_WORKDAY_SITE_WORDS = re.compile(r"(?:external|careers?|jobs?|site|search)+$")
+
+
+def _workday_tenant_and_site(slug: str) -> tuple[str, str]:
+    host, _, rest = slug.partition("/")
+    parts = [part for part in rest.split("/") if part]
+    if host.endswith(".myworkdaysite.com"):
+        return (parts[0] if parts else ""), (parts[1] if len(parts) > 1 else "")
+    return host.split(".")[0], (parts[0] if parts else "")
+
+
+def _workday_site_brand(site: str) -> str:
+    return _WORKDAY_SITE_WORDS.sub("", re.sub(r"[^a-z0-9]", "", site.lower()))
+
+
+def _words_spelling(words: list[str], token: str) -> str:
+    """Consecutive words whose letters spell `token`, e.g. "Viavi Solutions" for viavisolutions."""
+    if len(token) < 2:
+        return ""
+    for start in range(len(words)):
+        joined = ""
+        for end in range(start, len(words)):
+            joined += re.sub(r"[^a-z0-9]", "", words[end].lower())
+            if joined == token:
+                return " ".join(words[start:end + 1]).strip(" ,.-()")
+            if not token.startswith(joined):
+                break
+    return ""
+
+
+def workday_brand(legal_name: str, slug: str) -> str:
+    """Employer brand for a Workday posting, from its legal entity and board slug.
+
+    A subsidiary with its own name, such as Cytiva on Danaher's board, keeps it.
+    A coded or abbreviated entity takes the tenant: "8147 ASOL ..." on accenture
+    becomes Accenture, "BR Financial Solutions ..." on broadridge becomes Broadridge.
+    """
+    legal_name = str(legal_name or "").strip()
+    tenant, site = _workday_tenant_and_site(slug.lower())
+    words = legal_name.split()
+    for token in (tenant, _workday_site_brand(site)):
+        match = _words_spelling(words, token)
+        if match:
+            return match
+    code = _WORKDAY_ENTITY_CODE.match(legal_name)
+    rest = legal_name[code.end():].strip() if code else legal_name
+    lead = rest.split()[0] if rest.split() else ""
+    compact_lead = re.sub(r"[^a-z0-9]", "", lead.lower())
+    abbreviation = bool(re.fullmatch(r"[A-Z]{2,4}", lead)) and tenant.startswith(compact_lead)
+    names_tenant = len(compact_lead) >= 4 and tenant.startswith(compact_lead)
+    if tenant.isalpha() and len(tenant) >= 4 and (abbreviation or (code and not names_tenant)):
+        return tenant.capitalize()
+    return rest or legal_name
+
+
 def _workday_jobs(slug: str) -> tuple[list[dict], bool]:
     endpoint = _workday_endpoint(slug)
     jobs = []
@@ -278,7 +337,7 @@ def _workday_jobs(slug: str) -> tuple[list[dict], bool]:
                 location = _workday_location(info, listed_location)
                 is_remote = "remote" in location.lower()
                 org = detail.get("hiringOrganization") or {}
-                company = org.get("name") if isinstance(org, dict) else ""
+                company = workday_brand(org.get("name") if isinstance(org, dict) else "", slug)
                 url = info.get("externalUrl") or f"https://{slug.split('/')[0]}{path}"
                 description = _text(info.get("jobDescription"))
                 record = _record(
