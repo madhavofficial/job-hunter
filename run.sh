@@ -8,6 +8,27 @@ cd "$DIR"
 echo "========================================="
 echo "        DAILY JOB HUNTER PIPELINE        "
 echo "========================================="
+date
+
+# launchd may start this in a DarkWake with no network, and idle sleep can
+# pause it mid-run. Hold an idle-sleep assertion until this script exits.
+caffeinate -i -w $$ &
+
+network_ready() {
+    curl -s -m 10 -o /dev/null https://boards-api.greenhouse.io
+}
+if ! network_ready; then
+    echo "Waiting up to 10 minutes for internet..."
+    caffeinate -u -t 5
+    for _ in $(seq 1 20); do
+        sleep 30
+        network_ready && break
+    done
+fi
+if ! network_ready; then
+    echo "No internet; skipping this run so the last dashboard stays intact." >&2
+    exit 1
+fi
 
 # Check virtual environment
 if [ ! -d ".venv" ]; then
