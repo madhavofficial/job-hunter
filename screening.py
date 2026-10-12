@@ -80,8 +80,15 @@ def is_dashboard_listing(job: dict) -> bool:
     return is_india_or_worldwide(str(job.get("location") or ""), bool(job.get("is_remote")))
 
 
-def classify_company_tier(company: str, conn: Optional[sqlite3.Connection] = None) -> str:
-    category = company_classifier.get_company_category(company, conn=conn, allow_network=False)
+def classify_company_tier(
+    company: str,
+    conn: Optional[sqlite3.Connection] = None,
+    allow_network: bool = False,
+    job_description: str = "",
+) -> str:
+    category = company_classifier.get_company_category(
+        company, job_description=job_description, conn=conn, allow_network=allow_network,
+    )
     tier_map = {
         "Big Tech & Global MNC": "Tier 1: Big Tech & Global MNC",
         "Unicorn / Tech Giant": "Tier 1: Unicorn / Tech Giant",

@@ -186,6 +186,11 @@ class ListingQualityTests(unittest.TestCase):
         self.assertTrue(quality["direct_employer_signal"])
         self.assertTrue(quality["eligible_market"])
 
+        open_form = self.make_job(company="Coram AI", title="Don't see a fit? Fill out a general application!")
+        quality = assess_listing_quality(open_form, classify_company_tier(open_form["company"]))
+        passes, _ = quality_gate(open_form, classify_company_tier(open_form["company"]), quality)
+        self.assertFalse(passes)
+
         us_remote = self.make_job(company="GitLab", location="Remote US", is_remote=True)
         quality = assess_listing_quality(us_remote, classify_company_tier(us_remote["company"]))
         passes, _ = quality_gate(us_remote, classify_company_tier(us_remote["company"]), quality)

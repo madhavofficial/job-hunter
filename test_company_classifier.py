@@ -78,6 +78,55 @@ class CompanyClassifierTests(unittest.TestCase):
         result = get_company_category("DynamicTechCo", allow_network=False)
         self.assertEqual(result, "AI & Tech Startup")
 
+    def test_failed_model_call_is_not_cached_as_unverified(self):
+        import os
+        import tempfile
+        from unittest.mock import patch
+        from company_classifier import UNVERIFIED_FALLBACK_REASON
+        with tempfile.TemporaryDirectory() as tmp, patch.object(db, "DB_PATH", os.path.join(tmp, "jobs.db")), \
+             patch("company_classifier.web_search_company_context", return_value=""):
+            with patch("company_classifier.classify_with_ai",
+                       return_value=("Staffing Agency / Unverified", UNVERIFIED_FALLBACK_REASON)):
+                self.assertEqual(get_company_category("Maersk GSC (India) P.L."), "Staffing Agency / Unverified")
+            self.assertIsNone(get_cached_classification(normalize_company_key("Maersk GSC (India) P.L.")))
+            with patch("company_classifier.classify_with_ai",
+                       return_value=("Big Tech & Global MNC", "Global shipping and logistics group.")):
+                self.assertEqual(get_company_category("Maersk GSC (India) P.L."), "Big Tech & Global MNC")
+            self.assertEqual(
+                get_company_category("Maersk GSC (India) P.L.", allow_network=False), "Big Tech & Global MNC",
+            )
+
+    def test_shortlisted_unknown_employers_are_classified_and_reranked(self):
+        import os
+        import tempfile
+        from unittest.mock import patch
+        import matcher
+        job = {
+            "job_id": "wd-1", "site": "ats:workday", "title": "AI/ML Engineer",
+            "company": "Maersk GSC (India) P.L.", "location": "India, Bengaluru, 560064; India",
+            "job_url": "https://maersk.wd3.myworkdayjobs.com/maersk_careers/job/1",
+            "job_url_direct": "https://maersk.wd3.myworkdayjobs.com/maersk_careers/job/1",
+            "description": "Build ML services in Python for logistics platforms. " * 40,
+            "status": "shortlisted", "score": 86, "role_fit_score": 92,
+        }
+        with tempfile.TemporaryDirectory() as tmp, patch.object(db, "DB_PATH", os.path.join(tmp, "jobs.db")):
+            db.init_db()
+            conn = db.get_db_connection()
+            cols = ", ".join(job)
+            conn.execute(f"INSERT INTO jobs ({cols}) VALUES ({', '.join('?' for _ in job)})", list(job.values()))
+            conn.commit()
+            conn.close()
+            with patch("company_classifier.web_search_company_context", return_value=""), \
+                 patch("company_classifier.classify_with_ai",
+                       return_value=("Big Tech & Global MNC", "Global shipping and logistics group.")) as model:
+                moved = matcher.classify_shortlisted_employers()
+                again = matcher.classify_shortlisted_employers()
+            conn = db.get_db_connection()
+            row = conn.execute("SELECT recommendation_status FROM jobs WHERE job_id = 'wd-1'").fetchone()
+            conn.close()
+        self.assertEqual((moved, again, model.call_count), (1, 0, 1))
+        self.assertEqual(row["recommendation_status"], "recommended")
+
 
 if __name__ == "__main__":
     unittest.main()

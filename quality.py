@@ -174,7 +174,8 @@ def assess_listing_quality(job: dict, company_tier: str, now: datetime | None = 
     evidence_score = min(100, role_evidence)
 
     generic_title = title in GENERIC_TITLES
-    irrelevant = any(marker in title for marker in IRRELEVANT_TITLE_MARKERS)
+    from screening import is_open_application_title
+    irrelevant = any(marker in title for marker in IRRELEVANT_TITLE_MARKERS) or is_open_application_title(job.get("title"))
     unknown_company = not company or company in {"none", "confidential", "company name", "custom opportunity"}
     # Do not penalize missing direct ATS link; candidate can easily find direct portal
     directness_score = 100

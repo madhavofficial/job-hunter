@@ -41,6 +41,8 @@ AGENCY_MARKERS = (
     "placement consultancy",
 )
 
+UNVERIFIED_FALLBACK_REASON = "Could not verify company identity; marked as unverified."
+
 PLACEHOLDER_NAMES = {
     "none", "confidential", "private limited", "company name", "unknown",
     "mystery labs", "various", "client of", "stealth",
@@ -260,7 +262,7 @@ Return ONLY a JSON object with this exact schema:
             print(f"Notice: OpenRouter company classification fallback failed: {e}", file=sys.stderr)
 
     # Deterministic default fallback: unverified rather than false promotion to Tier 1
-    return "Staffing Agency / Unverified", "Could not verify company identity; marked as unverified."
+    return "Staffing Agency / Unverified", UNVERIFIED_FALLBACK_REASON
 
 
 def get_company_category(
@@ -304,5 +306,8 @@ def get_company_category(
         web_context = web_search_company_context(raw_name, domain, location)
 
     category, reasoning = classify_with_ai(raw_name, job_description, web_context)
-    save_classification(norm, raw_name, category, "high", "ai_search", reasoning, conn)
+    # A failed model call is not a verdict. Caching it would pin the employer
+    # to Tier 3 forever; leave it uncached so the next run retries.
+    if reasoning != UNVERIFIED_FALLBACK_REASON:
+        save_classification(norm, raw_name, category, "high", "ai_search", reasoning, conn)
     return category

@@ -371,5 +371,53 @@ Description:
             
     print(f"\nMatching complete. Processed {processed_count} jobs. Shortlisted {shortlisted_count} jobs.")
 
+def classify_shortlisted_employers(limit: int = 60) -> int:
+    """Classify shortlisted employers the cache has never seen, then re-rank.
+
+    Ranking reads the cache offline, so an employer missing from it is treated
+    as unverified and can never be a Top Match. This runs the model and web
+    lookup once per new employer on the dashboard and stores the verdict.
+    """
+    import company_classifier
+
+    conn = db.get_db_connection()
+    company_classifier.init_classification_table(conn)
+    rows = [dict(r) for r in conn.execute(
+        "SELECT * FROM jobs WHERE status = 'shortlisted' ORDER BY score DESC"
+    ).fetchall()]
+    pending: dict[str, dict] = {}
+    for job in rows:
+        if not is_dashboard_listing(job):
+            continue
+        company = str(job.get("company") or "").strip()
+        norm = company_classifier.normalize_company_key(company)
+        if not norm or norm in pending or norm in company_classifier.PLACEHOLDER_NAMES:
+            continue
+        if any(marker in norm for marker in company_classifier.AGENCY_MARKERS):
+            continue
+        if company_classifier.get_cached_classification(norm, conn):
+            continue
+        pending[norm] = job
+        if len(pending) >= limit:
+            break
+    conn.close()
+
+    if not pending:
+        return 0
+    print(f"Classifying {len(pending)} new shortlisted employers...", flush=True)
+    classified = 0
+    for job in pending.values():
+        tier = classify_company_tier(
+            job["company"], allow_network=True, job_description=str(job.get("description") or "")[:400],
+        )
+        print(f"-> {job['company']}: {tier}", flush=True)
+        if not tier.startswith("Tier 3"):
+            classified += 1
+    updated = db.sync_shortlisted_rankings()
+    print(f"Employer tiers updated; {classified} moved out of Tier 3, {updated} shortlisted rows re-ranked.", flush=True)
+    return classified
+
+
 if __name__ == "__main__":
     run_matcher()
+    classify_shortlisted_employers()
