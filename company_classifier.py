@@ -188,8 +188,8 @@ def classify_with_ai(company: str, description_snippet: str = "", web_context: s
 Classify the company "{company}" into EXACTLY ONE of these 5 categories:
 
 1. "Big Tech & Global MNC"
-   - Global Fortune 500, legacy tech conglomerates, major multinational banks, global capability centers.
-   - Examples: Google, Microsoft, Amazon, Apple, Nvidia, HPE, Qualcomm, Cisco, Intel, Goldman Sachs, JPMorgan, NatWest, Honeywell, Siemens, Edwards Lifesciences.
+   - A technology company, or any large multinational whose own technology organization hires software engineers. The parent can sell drugs, payments, insurance, logistics, industrial equipment, or telecom. Banks, pharma, healthcare, and industrial firms belong here when the employer is their engineering center or global capability center. Novartis and American Express are examples of that rule, not exceptions.
+   - Examples: Google, Microsoft, Amazon, Apple, Nvidia, Qualcomm, JPMorgan, Goldman Sachs, NatWest, Novartis, American Express, Honeywell, Siemens, Maersk.
 
 2. "Unicorn / Tech Giant"
    - Product companies with a publicly reported valuation of at least $1B.
