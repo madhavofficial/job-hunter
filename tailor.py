@@ -766,7 +766,7 @@ def ensure_career_objective_target(markdown: str, company: str = "", title: str 
 
     valid_sentences = []
     for idx in range(objective_index + 1, next_boundary):
-        line = lines[idx].strip()
+        line = re.sub(r"[\u2010\u2011\u2012\u2013\u2014\u2015\u2212\u00ad]", "-", lines[idx].strip())
         if not line or re.match(r"^[-*_]{2,}\s*$", line):
             continue
         # Split line into individual sentences to cleanly drop targeting clauses without losing base attributes

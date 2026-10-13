@@ -157,6 +157,31 @@ PES University
         self.assertNotIn("position at", result)
         self.assertIn("resilient, production-grade software", result)
 
+    def test_unicode_hyphen_does_not_duplicate_employment_ready(self):
+        markdown = (
+            "## Career Objective\n"
+            "Employment\u2011ready Computer Science engineer specializing in backend systems "
+            "and autonomous AI workflows. Seeking Software Engineering roles to build "
+            "resilient, production-grade software and distributed solutions.\n\n"
+            "## Education\n"
+        )
+        result = ensure_career_objective_target(markdown, "Marvell", "AI Intern")
+        objective = next(line for line in result.splitlines() if "employment" in line.lower())
+        self.assertEqual(objective.lower().count("employment-ready"), 1)
+        self.assertNotIn("Employment-ready Computer Science engineer. Employment-ready", result)
+
+    def test_duplicated_ascii_employment_ready_is_collapsed(self):
+        markdown = (
+            "## Career Objective\n"
+            "Employment-ready Computer Science engineer. Employment-ready Computer Science engineer "
+            "specializing in backend systems and autonomous AI workflows. Seeking Software Engineering "
+            "roles to build resilient, production-grade software and distributed solutions.\n\n"
+            "## Education\n"
+        )
+        result = ensure_career_objective_target(markdown, "Marvell", "AI Intern")
+        objective = next(line for line in result.splitlines() if "employment" in line.lower())
+        self.assertEqual(objective.lower().count("employment-ready"), 1)
+
 
     def test_enforce_one_page_budget_returns_valid_string(self):
         from tailor import enforce_one_page_budget
