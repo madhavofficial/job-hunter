@@ -6,6 +6,7 @@ from company_classifier import (
     save_classification,
     normalize_company_key,
     init_classification_table,
+    seed_names_this_company,
     CANONICAL_CATEGORIES,
 )
 import db
@@ -70,6 +71,32 @@ class CompanyClassifierTests(unittest.TestCase):
         self.assertEqual(get_company_category("Johnson & Johnson", allow_network=False), "Big Tech & Global MNC")
         self.assertEqual(get_company_category("L&T Technology Services", allow_network=False), "IT Services & Consultancies")
         self.assertEqual(get_company_category("AtkinsRéalis", allow_network=False), "Big Tech & Global MNC")
+
+    def test_word_list_match_does_not_cover_a_different_company(self):
+        norm = normalize_company_key("Hitachi Solutions India Pvt Ltd")
+        self.assertFalse(seed_names_this_company(norm, {
+            "source": "seed", "reasoning": "Matched global enterprise anchor: hitachi",
+        }))
+        self.assertTrue(seed_names_this_company("google", {
+            "source": "seed", "reasoning": "Matched global enterprise anchor: google",
+        }))
+        self.assertTrue(seed_names_this_company("hitachi solutions india", {
+            "source": "ai_search", "reasoning": "Hitachi Solutions is an IT services firm.",
+        }))
+
+        import os
+        import tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp, patch.object(db, "DB_PATH", os.path.join(tmp, "jobs.db")):
+            db.init_db()
+            save_classification(
+                norm, "Hitachi Solutions India Pvt Ltd", "Big Tech & Global MNC", "high", "seed",
+                "Matched global enterprise anchor: hitachi",
+            )
+            self.assertEqual(
+                get_company_category("Hitachi Solutions India Pvt Ltd", allow_network=False),
+                "Staffing Agency / Unverified",
+            )
 
     def test_dynamic_classification_caching(self):
         # Verify that dynamic classifications persist and are retrieved from cache

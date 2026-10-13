@@ -79,6 +79,24 @@ def init_classification_table(conn: sqlite3.Connection):
     conn.commit()
 
 
+_SEED_ANCHOR = re.compile(r"Matched .+ anchor: (.+)$")
+
+
+def seed_names_this_company(company_norm: str, cached: Dict[str, str]) -> bool:
+    """A saved word-list match counts only when it names this company.
+
+    The old lists matched on a word, then saved the result forever. "hitachi"
+    therefore classified Hitachi Solutions, and "apple" classified Apple
+    Holidays. Exact names such as "google" still count.
+    """
+    if cached.get("source") != "seed":
+        return True
+    match = _SEED_ANCHOR.search(cached.get("reasoning") or "")
+    if not match:
+        return False
+    return match.group(1).strip().lower() == company_norm
+
+
 def get_cached_classification(company_norm: str, conn: Optional[sqlite3.Connection] = None) -> Optional[Dict[str, str]]:
     """Retrieve cached classification in < 0.1ms."""
     close_conn = False
@@ -174,20 +192,25 @@ Classify the company "{company}" into EXACTLY ONE of these 5 categories:
    - Examples: Google, Microsoft, Amazon, Apple, Nvidia, HPE, Qualcomm, Cisco, Intel, Goldman Sachs, JPMorgan, NatWest, Honeywell, Siemens, Edwards Lifesciences.
 
 2. "Unicorn / Tech Giant"
-   - Established multi-billion dollar product leaders, decacorns, top-tier consumer/B2B platforms.
+   - Product companies with a publicly reported valuation of at least $1B.
    - Examples: OpenAI, Anthropic, Stripe, Swiggy, Zomato, Razorpay, Zerodha, Postman, GitLab, Uber, Airbnb, Canva, Figma, Notion, Databricks, Snowflake.
+   - "Established", "industry-leading", or "two decades old" is not a valuation. If you do not know one, choose "AI & Tech Startup". Do not invent one.
 
 3. "AI & Tech Startup"
-   - Seed, Series A/B/C, YC-backed, stealth ventures, boutique AI labs, agile engineering product teams.
+   - Seed, Series A/B/C, YC-backed, stealth ventures, boutique AI labs, agile engineering product teams, and any product company whose valuation you do not know.
    - Examples: Coram AI, Weekday AI, DeskBuddy, EngRadar, Zenup Health, Hasamex, CodeRound AI, revolte.ai, StartX Med, Peryx.ai, Refold AI.
 
 4. "IT Services & Consultancies"
    - Enterprise IT services, outsourcing firms, system integrators, staffing consultancies.
    - Examples: TCS, Infosys, Wipro, Cognizant, Accenture, Capgemini, LTIMindtree, Tech Mahindra, Genpact, UST, Indium, Persistent Systems.
+   - A services arm stays here even when the parent brand is famous. Hitachi Solutions, Hitachi Digital Services, and HTC Global Services are IT services, not Hitachi or HTC the product companies.
+   - A consultancy, system integrator, or outsourcing firm is this category even when it is small.
 
 5. "Staffing Agency / Unverified"
    - Third-party recruiting agencies, temp staffing, headhunters, body-shops, or anonymous employers.
    - Examples: Zepcruit, Hiringhood, Zenithbyte, Uplers.
+
+Classify the employer, not the advertisement. A posting that calls a hardware-maintenance firm a "boutique product company" does not make it a startup.
 
 Context from Job / Listing:
 {description_snippet[:400] if description_snippet else "None available"}
@@ -276,10 +299,10 @@ def get_company_category(
     """Classify an employer into one of the 5 canonical categories.
     
     1. Checks obvious agency markers / placeholders.
-    2. Checks curated anchors (Google, Swiggy, TCS, AT&T) BEFORE cache.
-    3. Checks persistent SQLite cache (< 0.1ms).
-    4. If unknown and allow_network=False: returns "Staffing Agency / Unverified".
-    5. If unknown and allow_network=True: AI + Web search resolution.
+    2. Uses a saved verdict. A word-list match is used only when the matched
+       word is the whole company name.
+    3. If unknown and allow_network=False: returns "Staffing Agency / Unverified".
+    4. If unknown and allow_network=True: AI + Web search resolution.
     """
     raw_name = (company or "").strip()
     norm = normalize_company_key(raw_name)
@@ -292,7 +315,7 @@ def get_company_category(
 
     # Check cache for previously verified AI/search classifications
     cached = get_cached_classification(norm, conn)
-    if cached and cached.get("category") in CANONICAL_CATEGORIES:
+    if cached and cached.get("category") in CANONICAL_CATEGORIES and seed_names_this_company(norm, cached):
         return cached["category"]
 
     # Unknown companies offline must be unverified/discovery-only, not falsely promoted to Tier 1
